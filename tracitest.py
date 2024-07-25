@@ -8,7 +8,6 @@ from sumolib import checkBinary
 sumoBinary = checkBinary('sumo-gui')
 # sumoBinary = r"C:\Program Files (x86)\Eclipse\Sumo\bin\sumo-gui.exe"
 
-# start sumo with config-file -c, delay between each sim step 200ms, start simulation immediately, all vehicles have a battery and are therefore EVs
 sumoCmd = [
     sumoBinary, 
     "-c", r"C:\Users\SPJ1WI\projects\rl_toy_usecase\helloWorld.sumocfg", # start sumo with supplied config-file
@@ -20,18 +19,25 @@ sumoCmd = [
 traci.start(sumoCmd)
 
 traci.route.add("trip", ["E0", "E3"])
-traci.vehicle.add("newVeh", "trip", typeID="DEFAULT_VEHTYPE")
+traci.vehicle.add("myVehicle", "trip", typeID="DEFAULT_VEHTYPE")
 
 
 step = 0
 while step < 100:
     traci.simulationStep()
+    try:
+        battery_soc = traci.vehicle.getParameter("myVehicle", "device.battery.actualBatteryCapacity")
+        print("battery capacity: ", battery_soc)
+    except traci.TraCIException as e:
+        print(e)
     step += 1
 
 """
-TODO: Car has battery which is drained
 TODO: Charging Station available
-TODO: If battery falls under certain value, Car stops at charging station and charges battery
+TODO: Tell car to reroute to a certain position
+TODO: Tell car to charge at said position
+TODO: Tell car to reroute to destination
+TODO: Use network file from eAlloc
 
 
 """
