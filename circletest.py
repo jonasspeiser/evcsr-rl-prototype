@@ -35,6 +35,8 @@ def run_simulation():
             battery_soc = traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity")
             print("battery capacity: ", battery_soc)
             if float(battery_soc) < 17450:
+                RED = [255, 0, 0]
+                traci.vehicle.setColor(vehicle_id, RED)
                 print("Battery low, rerouting to charge")
                 cs_id = "cs_1"
                 reroute_for_charging(vehicle_id, cs_id)
@@ -45,15 +47,12 @@ def run_simulation():
     traci.close()
 
 
-    """
-    TODO: Use network file from eAlloc
-    """
-
 if __name__ == "__main__":
     sumoBinary = checkBinary('sumo-gui')
+    config_file = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
     sumoCmd = [
         sumoBinary, 
-        "-c", r"C:\Users\SPJ1WI\projects\rl_toy_usecase\helloWorld.sumocfg", # start sumo with supplied config-file
+        "-c", config_file, # start sumo with supplied config-file
         '--delay', '200', # delay between each sim step 200ms
         '--start', # start simulation immediately
         '--device.battery.probability', '1' # sets all vehicles to be EVs instead of combustion engine
