@@ -7,7 +7,7 @@ import traci
 from sumolib import checkBinary
 
 def add_vehicles():
-    traci.route.add("trip", ["E0", "E3"])
+    traci.route.add("trip", ["E0", "E10"])
     traci.vehicle.add("myVehicle", "trip", typeID="DEFAULT_VEHTYPE")
 
 def reroute_for_charging(vehicle_id, cs_id):
@@ -38,7 +38,7 @@ def run_simulation():
                 RED = [255, 0, 0]
                 traci.vehicle.setColor(vehicle_id, RED)
                 print("Battery low, rerouting to charge")
-                cs_id = "cs_1"
+                cs_id = "cs_0"
                 reroute_for_charging(vehicle_id, cs_id)
         except traci.TraCIException as e:
             print(e)
