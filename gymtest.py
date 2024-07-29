@@ -32,7 +32,20 @@ class CircleEnv(gym.Env):
         """
         Returns: The next observation, the reward, done and optionally additional info
         """
-        raise NotImplementedError
+        if action == 1:
+            # TODO: simulation.sendCharging()
+            simulation.sendCharging()
+        # TODO: simulation.getCurrentState()
+        self.state = simulation.getCurrentState()
+        observation = {"battery": self.state.battery_soc, "distance": self.state.distance_to_next_cs} 
+        destination_is_reached = (self.state.vehicle_destination == self.state.vehicle_position)
+        battery_is_empty = (self.state.battery_soc <= 0)
+        reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
+        terminated = (destination_is_reached or battery_is_empty)
+        truncated = False
+        info = None
+
+        return observation, reward, terminated, truncated, info
 
     
     def render(self, mode='human'):
