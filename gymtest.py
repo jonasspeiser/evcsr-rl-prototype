@@ -1,5 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
+from circletest import Simulation
 
 class CircleEnv(gym.Env):
     def __init__(self):
@@ -19,7 +20,8 @@ class CircleEnv(gym.Env):
         # We have 2 actions: do nothing (0) and send charging (1)
         self.action_space = spaces.Discrete(2)
 
-        pass
+        self.simulation = Simulation()
+        
 
     def reset(self):
         """
@@ -33,17 +35,17 @@ class CircleEnv(gym.Env):
         Returns: The next observation, the reward, done and optionally additional info
         """
         if action == 1:
-            # TODO: simulation.sendCharging()
-            simulation.sendCharging()
-        # TODO: simulation.getCurrentState()
-        self.state = simulation.getCurrentState()
+            self.simulation.reroute_for_charging("myVehicle", "cs_0")
+        self.state = self.simulation.get_state()
         observation = {"battery": self.state.battery_soc, "distance": self.state.distance_to_next_cs} 
         destination_is_reached = (self.state.vehicle_destination == self.state.vehicle_position)
         battery_is_empty = (self.state.battery_soc <= 0)
         reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
         terminated = (destination_is_reached or battery_is_empty)
-        truncated = False
+        truncated = not self.simulation.active_vehicles_exist()
         info = None
+
+        self.simulation.step()
 
         return observation, reward, terminated, truncated, info
 
