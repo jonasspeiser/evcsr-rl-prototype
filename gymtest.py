@@ -21,6 +21,7 @@ class CircleEnv(gym.Env):
         self.action_space = spaces.Discrete(2)
 
         self.simulation = Simulation()
+        self.simulation.add_vehicles()
         
 
     def reset(self):
@@ -28,7 +29,11 @@ class CircleEnv(gym.Env):
         Returns: The observation of the initial state
         Reset the environment to initial state so that a new episode (independent of previous ones) may start
         """
-        raise NotImplementedError
+        self.simulation.reset()
+        self.simulation.add_vehicles()
+        self.state = self.simulation.get_state()
+        observation = {"battery": self.state["battery_soc"], "distance": self.state["distance_to_next_cs"]}
+        return observation
 
     def step(self, action):
         """
@@ -37,9 +42,9 @@ class CircleEnv(gym.Env):
         if action == 1:
             self.simulation.reroute_for_charging("myVehicle", "cs_0")
         self.state = self.simulation.get_state()
-        observation = {"battery": self.state.battery_soc, "distance": self.state.distance_to_next_cs} 
-        destination_is_reached = (self.state.vehicle_destination == self.state.vehicle_position)
-        battery_is_empty = (self.state.battery_soc <= 0)
+        observation = {"battery": self.state["battery_soc"], "distance": self.state["distance_to_next_cs"]} 
+        destination_is_reached = (self.state["vehicle_destination"] == self.state["vehicle_position"])
+        battery_is_empty = (self.state["battery_soc"] <= 0)
         reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
         terminated = (destination_is_reached or battery_is_empty)
         truncated = not self.simulation.active_vehicles_exist()

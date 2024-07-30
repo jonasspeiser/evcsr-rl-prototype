@@ -21,6 +21,7 @@ class Simulation():
             ]
 
         traci.start(sumoCmd)
+        traci.simulation.saveState("initial_state") # needed for reset
 
 
     def add_vehicles(self):
@@ -29,14 +30,14 @@ class Simulation():
         traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
         traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
 
-    def get_vehicle_edge(self, vehicle_id):
+    def __get_vehicle_edge(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         if str(vehicle_lane) is "":
             raise ValueError("Vehicle is not on a lane")
         vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         return vehicle_edge
 
-    def get_cs_edge(self, cs_id):
+    def __get_cs_edge(self, cs_id):
         cs_lane = traci.chargingstation.getLaneID(cs_id)
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
@@ -51,7 +52,7 @@ class Simulation():
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         destination = traci.vehicle.getRoute(vehicle_id)[-1]
-        cs_edge = self.get_cs_edge(cs_id)
+        cs_edge = self.__get_cs_edge(cs_id)
         # find route to charging station and from charging station to destination
         route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
         route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
@@ -68,21 +69,37 @@ class Simulation():
     def close(self):
         traci.close()
 
-    def calculate_distance(self, edgeID1, edgeID2):
+    def reset(self):
+        traci.simulation.loadState("initial_state")
+
+    def __calculate_distance(self, edgeID1, edgeID2):
         return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
 
-    def get_distance_to_next_cs(self, vehicle_position):
+    def __get_distance_to_next_cs(self, vehicle_position):
         next_charging_station = "cs_0"
-        next_charging_station_position = self.get_cs_edge(next_charging_station)
-        return self.calculate_distance(vehicle_position, next_charging_station_position)
+        next_charging_station_position = self.__get_cs_edge(next_charging_station)
+        return self.__calculate_distance(vehicle_position, next_charging_station_position)
 
 
     def get_state(self, vehicle_id): 
+        """
+        Retrieves the state of a vehicle.
+
+        Parameters:
+        - vehicle_id (str): The ID of the vehicle.
+
+        Returns:
+        - dict: A dictionary containing the following information:
+            - battery_soc (float): The actual battery capacity of the vehicle.
+            - distance_to_next_cs (float): The distance to the next charging station.
+            - vehicle_position (str): The current position of the vehicle.
+            - vehicle_destination (str): The destination of the vehicle.
+        """
         battery_soc = traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity")
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
         try:
-            vehicle_edge = self.get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
-            distance_to_next_cs = self.get_distance_to_next_cs(vehicle_edge)
+            vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
+            distance_to_next_cs = self.__get_distance_to_next_cs(vehicle_edge)
         except ValueError:
             vehicle_edge = None
             distance_to_next_cs = None
