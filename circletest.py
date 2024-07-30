@@ -9,7 +9,8 @@ from sumolib import checkBinary
 class Simulation():
 
     def __init__(self):
-        sumoBinary = checkBinary('sumo-gui')
+        #sumoBinary = checkBinary('sumo-gui')
+        sumoBinary = checkBinary('sumo')
         config_file = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
         sumoCmd = [
             sumoBinary, 
@@ -23,10 +24,19 @@ class Simulation():
 
 
     def add_vehicles(self):
+        vehID = "myVehicle"
         traci.route.add("trip", ["E0", "E10"])
-        traci.vehicle.add("myVehicle", "trip", typeID="DEFAULT_VEHTYPE")
+        traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
+        traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
 
-    def get_cs_position(self, cs_id):
+    def get_vehicle_edge(self, vehicle_id):
+        vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
+        if str(vehicle_lane) is "":
+            raise ValueError("Vehicle is not on a lane")
+        vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        return vehicle_edge
+
+    def get_cs_edge(self, cs_id):
         cs_lane = traci.chargingstation.getLaneID(cs_id)
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
@@ -41,7 +51,7 @@ class Simulation():
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         destination = traci.vehicle.getRoute(vehicle_id)[-1]
-        cs_edge = self.get_cs_position(cs_id)
+        cs_edge = self.get_cs_edge(cs_id)
         # find route to charging station and from charging station to destination
         route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
         route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
@@ -58,26 +68,29 @@ class Simulation():
     def close(self):
         traci.close()
 
-    def calculate_distance(self, pos1, pos2):
-        # TODO: implement this
-        pass
+    def calculate_distance(self, edgeID1, edgeID2):
+        return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
 
     def get_distance_to_next_cs(self, vehicle_position):
         next_charging_station = "cs_0"
-        next_charging_station_position = self.get_cs_position(next_charging_station)
+        next_charging_station_position = self.get_cs_edge(next_charging_station)
         return self.calculate_distance(vehicle_position, next_charging_station_position)
 
 
     def get_state(self, vehicle_id): 
         battery_soc = traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity")
-        vehicle_position = traci.vehicle.getPosition(vehicle_id)
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
-        distance_to_next_cs = self.get_distance_to_next_cs(vehicle_position)
-        return {"battery_soc": battery_soc, "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_position, "vehicle_destination": vehicle_destination}
+        try:
+            vehicle_edge = self.get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
+            distance_to_next_cs = self.get_distance_to_next_cs(vehicle_edge)
+        except ValueError:
+            vehicle_edge = None
+            distance_to_next_cs = None
+        return {"battery_soc": battery_soc, "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
 
 
 if __name__ == "__main__":
-    
+
     vehicle_id = "myVehicle"
     cs_id = "cs_0"
 
@@ -89,7 +102,7 @@ if __name__ == "__main__":
         state = simulation.get_state(vehicle_id)
         print(state)
         battery_soc = state["battery_soc"]
-        if float(battery_soc) < 17450:
+        if float(battery_soc) < 100:
             print("Battery low, rerouting to charge")
             simulation.reroute_for_charging(vehicle_id, cs_id)
         simulation.step()
