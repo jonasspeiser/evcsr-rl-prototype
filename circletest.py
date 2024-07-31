@@ -8,9 +8,11 @@ from sumolib import checkBinary
 
 class Simulation():
 
-    def __init__(self):
-        #sumoBinary = checkBinary('sumo-gui')
-        sumoBinary = checkBinary('sumo')
+    def __init__(self, gui=False):
+        if gui:
+            sumoBinary = checkBinary('sumo-gui')
+        else:
+            sumoBinary = checkBinary('sumo')
         config_file = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
         sumoCmd = [
             sumoBinary, 
@@ -32,7 +34,7 @@ class Simulation():
 
     def __get_vehicle_edge(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
-        if str(vehicle_lane) is "":
+        if str(vehicle_lane) == "":
             raise ValueError("Vehicle is not on a lane")
         vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         return vehicle_edge
@@ -95,15 +97,15 @@ class Simulation():
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
-        battery_soc = traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity")
+        battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
         try:
             vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
-            distance_to_next_cs = self.__get_distance_to_next_cs(vehicle_edge)
+            distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
         except ValueError:
             vehicle_edge = None
             distance_to_next_cs = None
-        return {"battery_soc": battery_soc, "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+        return {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": int(round(distance_to_next_cs)), "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
 
 
 if __name__ == "__main__":
