@@ -102,10 +102,12 @@ class Simulation():
         try:
             vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
             distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
+            state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": int(round(distance_to_next_cs)), "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         except ValueError:
             vehicle_edge = None
             distance_to_next_cs = None
-        return {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": int(round(distance_to_next_cs)), "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+            state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+        return state
 
 
 if __name__ == "__main__":
