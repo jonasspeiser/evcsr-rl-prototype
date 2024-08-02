@@ -17,7 +17,7 @@ class Simulation():
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
-            '--delay', '200', # delay between each sim step 200ms
+            '--delay', '100', # delay between each sim step 100ms
             '--start', # start simulation immediately
             '--device.battery.probability', '1' # sets all vehicles to be EVs instead of combustion engine
             ]
@@ -26,11 +26,12 @@ class Simulation():
         traci.simulation.saveState("initial_state") # needed for reset
 
 
-    def add_vehicles(self):
-        vehID = "myVehicle"
+    def add_vehicles(self, amount = 1):
         traci.route.add("trip", ["E0", "E10"])
-        traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
-        traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
+        for i in range(amount):
+            vehID = "myVehicle" + str(i)
+            traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
+            traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
 
     def __get_vehicle_edge(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
@@ -45,7 +46,16 @@ class Simulation():
         return cs_edge
 
     def reroute_for_charging(self, vehicle_id, cs_id):
-        """reroute vehicle via charging station"""
+        """
+        Reroutes the vehicle via a charging station.
+
+        Args:
+            vehicle_id (str): The ID of the vehicle to be rerouted.
+            cs_id (str): The ID of the charging station.
+
+        Returns:
+            None
+        """
         # set vehicle color to red
         RED = [255, 0, 0]
         traci.vehicle.setColor(vehicle_id, RED)
@@ -82,7 +92,9 @@ class Simulation():
         next_charging_station_position = self.__get_cs_edge(next_charging_station)
         return self.__calculate_distance(vehicle_position, next_charging_station_position)
 
-
+    def get_all_vehicles(self):
+        return traci.vehicle.getIDList()
+        
     def get_state(self, vehicle_id): 
         """
         Retrieves the state of a vehicle.
@@ -112,20 +124,22 @@ class Simulation():
 
 if __name__ == "__main__":
 
-    vehicle_id = "myVehicle"
     cs_id = "cs_0"
 
-    simulation = Simulation(gui=False)
+    simulation = Simulation(gui=True)
 
-    simulation.add_vehicles()
+    simulation.add_vehicles(50)
 
     while simulation.active_vehicles_exist():
-        state = simulation.get_state(vehicle_id)
-        print(state)
-        battery_soc = state["battery_soc"]
-        if float(battery_soc) < 100:
-            print("Battery low, rerouting to charge")
-            simulation.reroute_for_charging(vehicle_id, cs_id)
+
+        for vehicle_id in simulation.get_all_vehicles():
+            state = simulation.get_state(vehicle_id)
+            print(state)
+            battery_soc = state["battery_soc"]
+            if float(battery_soc) < 100:
+                print("Battery low, rerouting to charge")
+                simulation.reroute_for_charging(vehicle_id, cs_id)
+
         simulation.step()
 
     simulation.close()
