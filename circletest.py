@@ -62,9 +62,6 @@ class Simulation():
         Returns:
             None
         """
-        if self.gui:
-            # set vehicle color to blue
-            traci.vehicle.setColor(vehicle_id, BLUE)
         # get vehicle type, lane, edge, and destination
         v_type = traci.vehicle.getTypeID(vehicle_id)
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
@@ -102,7 +99,27 @@ class Simulation():
         return traci.vehicle.getIDList()
 
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
-        traci.vehicle.setColor(vehicle_id, YELLOW) if battery_soc > 100 else traci.vehicle.setColor(vehicle_id, RED)
+        """
+        The vehicles color in the GUI is changed based on its battery SOC. 
+        Furthermore, it turns blue when a charging stop is planned.
+
+        Args:
+            vehicle_id (str): The ID of the vehicle.
+            battery_soc (float): The state of charge (SOC) of the vehicle's battery.
+
+        Returns:
+            None
+        """
+        stops = traci.vehicle.getNextStops(vehicle_id)
+        if stops:
+            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
+                traci.vehicle.setColor(vehicle_id, BLUE)
+        elif battery_soc > 200:
+            traci.vehicle.setColor(vehicle_id, GREEN)
+        else:
+            traci.vehicle.setColor(vehicle_id, YELLOW)
+        if battery_soc < 50:
+            traci.vehicle.setColor(vehicle_id, RED)
 
     def get_state(self, vehicle_id): 
         """
@@ -139,7 +156,7 @@ if __name__ == "__main__":
 
     simulation = Simulation(gui=True)
 
-    simulation.add_vehicles(100)
+    simulation.add_vehicles(1)
 
     while simulation.active_vehicles_exist():
 
