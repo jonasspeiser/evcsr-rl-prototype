@@ -25,7 +25,8 @@ class Simulation():
             "-c", config_file, # start sumo with supplied config-file
             '--delay', '100', # delay between each sim step 100ms
             '--start', # start simulation immediately
-            '--device.battery.probability', '1' # sets all vehicles to be EVs instead of combustion engine
+            '--device.battery.probability', '1', # sets all vehicles to be EVs instead of combustion engine
+            # '--device.stationfinder.probability', '1' # remove vehicle if it runs out of battery
             ]
 
         traci.start(sumoCmd)
@@ -163,10 +164,21 @@ if __name__ == "__main__":
         for vehicle_id in simulation.get_all_vehicles():
             state = simulation.get_state(vehicle_id)
             print(state)
-            battery_soc = state["battery_soc"]
-            if float(battery_soc) < 100:
-                print("Battery low, rerouting to charge")
-                simulation.reroute_for_charging(vehicle_id, cs_id)
+            start = "E0"
+            end = "E10"
+            position = state["vehicle_position"]
+            destination = state["vehicle_destination"]
+            if position == destination:
+                traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)
+            if state["battery_soc"] <= 0:
+                print("Battery empty, vehicle will dissapear shortly")
+                traci.vehicle.slowDown(vehicle_id, 0.1, 0.1)
+                # traci.vehicle.remove(vehicle_id)
+
+            # battery_soc = state["battery_soc"]
+            # if float(battery_soc) < 100:
+            #     print("Battery low, rerouting to charge")
+            #     simulation.reroute_for_charging(vehicle_id, cs_id)
 
         simulation.step()
 
