@@ -115,7 +115,7 @@ if __name__ == "__main__":
     vehicle_id = "myVehicle"
     cs_id = "cs_0"
 
-    simulation = Simulation()
+    simulation = Simulation(gui=False)
 
     simulation.add_vehicles()
 
