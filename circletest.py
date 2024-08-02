@@ -6,10 +6,16 @@ import traci
 
 from sumolib import checkBinary
 
+BLUE = [153, 255, 255]
+GREEN = [0, 255, 0]
+YELLOW = [255, 255, 0]
+RED = [255, 0, 0]
+
 class Simulation():
 
     def __init__(self, gui=False):
-        if gui:
+        self.gui = gui
+        if self.gui:
             sumoBinary = checkBinary('sumo-gui')
         else:
             sumoBinary = checkBinary('sumo')
@@ -56,9 +62,9 @@ class Simulation():
         Returns:
             None
         """
-        # set vehicle color to red
-        RED = [255, 0, 0]
-        traci.vehicle.setColor(vehicle_id, RED)
+        if self.gui:
+            # set vehicle color to blue
+            traci.vehicle.setColor(vehicle_id, BLUE)
         # get vehicle type, lane, edge, and destination
         v_type = traci.vehicle.getTypeID(vehicle_id)
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
@@ -94,7 +100,10 @@ class Simulation():
 
     def get_all_vehicles(self):
         return traci.vehicle.getIDList()
-        
+
+    def __adapt_vehicle_color(self, vehicle_id, battery_soc):
+        traci.vehicle.setColor(vehicle_id, YELLOW) if battery_soc > 100 else traci.vehicle.setColor(vehicle_id, RED)
+
     def get_state(self, vehicle_id): 
         """
         Retrieves the state of a vehicle.
@@ -111,6 +120,8 @@ class Simulation():
         """
         battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
+        if self.gui:
+            self.__adapt_vehicle_color(vehicle_id, battery_soc)
         try:
             vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
             distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
@@ -128,7 +139,7 @@ if __name__ == "__main__":
 
     simulation = Simulation(gui=True)
 
-    simulation.add_vehicles(50)
+    simulation.add_vehicles(100)
 
     while simulation.active_vehicles_exist():
 
