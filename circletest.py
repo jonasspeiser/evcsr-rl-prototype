@@ -145,7 +145,7 @@ class Simulation():
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
-    def get_state(self, vehicle_id): 
+    def get_vehicle_state(self, vehicle_id): 
         """
         Retrieves the state of a vehicle.
 
@@ -178,6 +178,11 @@ class Simulation():
             state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
+    def get_state():
+        state = {}
+        for vehicle_id in self.get_all_vehicles():
+            state[vehicle_id] = simulation.get_vehicle_state(vehicle_id)
+        return state
 
 if __name__ == "__main__":
 
@@ -190,7 +195,7 @@ if __name__ == "__main__":
     while simulation.active_vehicles_exist():
 
         for vehicle_id in simulation.get_all_vehicles():
-            state = simulation.get_state(vehicle_id)
+            state = simulation.get_vehicle_state(vehicle_id)
             print(state)
             
             if float(state["battery_soc"]) < 100:

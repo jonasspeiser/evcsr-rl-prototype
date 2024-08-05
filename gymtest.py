@@ -63,16 +63,19 @@ class CircleEnv(gym.Env):
         Returns: The next observation, the reward, done and optionally additional info
         """
         print("step")
-        vehicle_id = "myVehicle"
         cs_id = "cs_0"
-        if action == 1:
-            self.simulation.reroute_for_charging(vehicle_id, cs_id)
-            print("REROUTED")
-        self.state = self.simulation.get_state(vehicle_id)
+
+        self.state = self.simulation.get_state()
         observation = self.__get_observation()
-        destination_is_reached = (self.state["vehicle_destination"] == self.state["vehicle_position"])
-        battery_is_empty = (self.state["battery_soc"] <= 0)
-        reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
+
+        for vehicle_id in observation.keys():
+            if action == 1:
+                self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                print("REROUTED")
+            vehicle_state = self.state[vehicle_id]
+            destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
+            battery_is_empty = (vehicle_state["battery_soc"] <= 0)
+            reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
         terminated = (destination_is_reached or battery_is_empty)
         truncated = not self.simulation.active_vehicles_exist()
         info = self.__get_info()
