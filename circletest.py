@@ -111,16 +111,23 @@ class Simulation():
         Returns:
             None
         """
-        stops = traci.vehicle.getNextStops(vehicle_id)
-        if stops:
-            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
-                traci.vehicle.setColor(vehicle_id, BLUE)
-        elif battery_soc > 200:
-            traci.vehicle.setColor(vehicle_id, GREEN)
-        else:
-            traci.vehicle.setColor(vehicle_id, YELLOW)
         if battery_soc < 50:
-            traci.vehicle.setColor(vehicle_id, RED)
+            color = RED
+        else:
+            stops = traci.vehicle.getNextStops(vehicle_id)
+            if stops:
+                if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
+                    color = BLUE
+            elif battery_soc > 200:
+                color = GREEN
+            else:
+                color = YELLOW
+        traci.vehicle.setColor(vehicle_id, color)
+        
+
+    def simulate_empty_battery(self, vehicle_id):
+        traci.vehicle.setSpeed(vehicle_id, 0)
+        # traci.vehicle.remove(vehicle_id)
 
     def get_state(self, vehicle_id): 
         """
@@ -157,13 +164,14 @@ if __name__ == "__main__":
 
     simulation = Simulation(gui=True)
 
-    simulation.add_vehicles(1)
+    simulation.add_vehicles(50)
 
     while simulation.active_vehicles_exist():
 
         for vehicle_id in simulation.get_all_vehicles():
             state = simulation.get_state(vehicle_id)
             print(state)
+            print("SPEED: ", traci.vehicle.getSpeed(vehicle_id))
             start = "E0"
             end = "E10"
             position = state["vehicle_position"]
@@ -172,13 +180,10 @@ if __name__ == "__main__":
                 traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)
             if state["battery_soc"] <= 0:
                 print("Battery empty, vehicle will dissapear shortly")
-                traci.vehicle.slowDown(vehicle_id, 0.1, 0.1)
-                # traci.vehicle.remove(vehicle_id)
-
-            # battery_soc = state["battery_soc"]
-            # if float(battery_soc) < 100:
-            #     print("Battery low, rerouting to charge")
-            #     simulation.reroute_for_charging(vehicle_id, cs_id)
+                simulation.simulate_empty_battery(vehicle_id)
+            elif float(state["battery_soc"]) < 100:
+                print("Battery low, rerouting to charge")
+                simulation.reroute_for_charging(vehicle_id, cs_id)
 
         simulation.step()
 
