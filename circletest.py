@@ -99,6 +99,13 @@ class Simulation():
     def get_all_vehicles(self):
         return traci.vehicle.getIDList()
 
+    def vehicle_is_rerouted(self, vehicle_id):
+        stops = traci.vehicle.getNextStops(vehicle_id)
+        if stops:
+            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
+                return True
+        return False
+
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
         The vehicles color in the GUI is changed based on its battery SOC. 
@@ -111,17 +118,17 @@ class Simulation():
         Returns:
             None
         """
-        if battery_soc < 50:
+        battery_is_very_low = battery_soc < 50
+        battery_is_quite_full = battery_soc > 200
+
+        if battery_is_very_low:
             color = RED
+        elif self.vehicle_is_rerouted(vehicle_id):
+            color = BLUE
+        elif battery_is_quite_full:
+            color = GREEN
         else:
-            stops = traci.vehicle.getNextStops(vehicle_id)
-            if stops:
-                if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
-                    color = BLUE
-            elif battery_soc > 200:
-                color = GREEN
-            else:
-                color = YELLOW
+            color = YELLOW
         traci.vehicle.setColor(vehicle_id, color)
         
 
