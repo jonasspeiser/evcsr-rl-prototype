@@ -167,11 +167,14 @@ class Simulation():
             state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
-    def get_state():
+    def get_state(self):
         state = {}
         for vehicle_id in self.get_all_vehicles():
-            state[vehicle_id] = simulation.get_vehicle_state(vehicle_id)
+            state[vehicle_id] = self.get_vehicle_state(vehicle_id)
         return state
+
+    def get_all_vehicle_ids(self):
+        return traci.vehicle.getIDList()
 
 if __name__ == "__main__":
 

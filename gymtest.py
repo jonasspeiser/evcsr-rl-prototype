@@ -11,33 +11,44 @@ class CircleEnv(gym.Env):
         Define self.observation_space and self.action_space
         """
         print("init")
-        # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
-        # battery soc is in between 0 and 5000 Wh
-        battery_space = spaces.Discrete(5000)
-        # distance to the next charging station is in between 0 and 2000 meters
-        distance_space = spaces.Discrete(2000)
-        self.observation_space = spaces.Dict({
-            "battery": battery_space,
-            "distance": distance_space
-        })
-
-        # We have 2 actions: do nothing (0) and send charging (1)
-        self.action_space = spaces.Discrete(2)
-        
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
         if self.render_mode == "human":
+            print("gui")
             self.simulation = Simulation(gui=True)
         else:
-            self.simulation = Simulation()
+            print("no gui")
+            self.simulation = Simulation(5)
         self.simulation.add_vehicles()
         self.simulation.step() # to spawn vehicles
-        
+
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  # This method needs to be implemented in the Simulation class
+        print("vehicle_ids: ", self.vehicle_ids)
+        # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
+        vehicle_action_space = spaces.Discrete(2)
+
+        # Dynamically create the action space for each vehicle
+        self.action_space = spaces.Dict({
+            vehicle_id: vehicle_action_space for vehicle_id in self.vehicle_ids
+        })
+
+        # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
+        single_vehicle_observation_space = spaces.Dict({
+            "battery": spaces.Discrete(5000), # battery soc is in between 0 and 5000 Wh
+            "distance": spaces.Discrete(2000) # distance to the next charging station is in between 0 and 2000 meters
+        })
+        self.observation_space = spaces.Dict({
+            str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
+        })
 
     def __get_observation(self):
-        return {"battery": self.state["battery_soc"], "distance": self.state["distance_to_next_cs"]}
-
+        observation = dict()
+        for vehicle_id in self.vehicle_ids:
+            vehicle_state = self.state[vehicle_id]
+            observation[vehicle_id] = {"battery": vehicle_state["battery_soc"], "distance": vehicle_state["distance_to_next_cs"]}
+        return observation
+    
     def __get_info(self):
         return dict()
 
@@ -47,12 +58,11 @@ class CircleEnv(gym.Env):
         Reset the environment to initial state so that a new episode (independent of previous ones) may start
         """
         print("reset")
-        vehicle_id = "myVehicle"
         super().reset(seed=seed) # needed for api compliance
         self.simulation.reset()
         self.simulation.add_vehicles()
         self.simulation.step() # to spawn vehicles
-        self.state = self.simulation.get_state(vehicle_id)
+        self.state = self.simulation.get_state()
         observation = self.__get_observation()
         info = self.__get_info()
         print("reset observation: ", observation)
@@ -67,15 +77,18 @@ class CircleEnv(gym.Env):
 
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
+        reward = 0
 
         for vehicle_id in observation.keys():
-            if action == 1:
+            if action[vehicle_id] == 1:
                 self.simulation.reroute_for_charging(vehicle_id, cs_id)
                 print("REROUTED")
             vehicle_state = self.state[vehicle_id]
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
             battery_is_empty = (vehicle_state["battery_soc"] <= 0)
-            reward = -1 if battery_is_empty else 1 if destination_is_reached else 0
+            reward_per_vehicle = -10 if battery_is_empty else 1 if destination_is_reached else 0
+            reward += reward_per_vehicle
+
         terminated = (destination_is_reached or battery_is_empty)
         truncated = not self.simulation.active_vehicles_exist()
         info = self.__get_info()
