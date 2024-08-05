@@ -129,16 +129,7 @@ class Simulation():
             color = GREEN
         else:
             color = YELLOW
-        traci.vehicle.setColor(vehicle_id, color)
-
-    def __adapt_destination(self, vehicle_id):
-        """Routes the vehicles in circles"""
-        start = "E0"
-        end = "E10"
-        position = state["vehicle_position"]
-        destination = state["vehicle_destination"]
-        if position == destination:
-            traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)    
+        traci.vehicle.setColor(vehicle_id, color)  
 
     def __simulate_empty_battery(self, vehicle_id):
         print("Battery empty, vehicle will dissapear shortly")
@@ -163,8 +154,6 @@ class Simulation():
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
         if self.gui:
             self.__adapt_vehicle_color(vehicle_id, battery_soc)
-        # send the vehicle driving in circles
-        self.__adapt_destination(vehicle_id)
         # stop vehicle if battery is empty
         if battery_soc <= 0:
             self.__simulate_empty_battery(vehicle_id)
@@ -186,6 +175,15 @@ class Simulation():
 
 if __name__ == "__main__":
 
+    def adapt_destination(vehicle_id):
+        """Routes the vehicles in circles"""
+        start = "E0"
+        end = "E10"
+        position = state["vehicle_position"]
+        destination = state["vehicle_destination"]
+        if position == destination:
+            traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)  
+
     cs_id = "cs_0"
 
     simulation = Simulation(gui=True)
@@ -197,7 +195,9 @@ if __name__ == "__main__":
         for vehicle_id in simulation.get_all_vehicles():
             state = simulation.get_vehicle_state(vehicle_id)
             print(state)
-            
+            # send the vehicle driving in circles
+            adapt_destination(vehicle_id)
+            # reroute to charging station if battery is low
             if float(state["battery_soc"]) < 100:
                 print("Battery low, rerouting to charge")
                 simulation.reroute_for_charging(vehicle_id, cs_id)
