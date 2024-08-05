@@ -140,7 +140,8 @@ class Simulation():
         if position == destination:
             traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)    
 
-    def simulate_empty_battery(self, vehicle_id):
+    def __simulate_empty_battery(self, vehicle_id):
+        print("Battery empty, vehicle will dissapear shortly")
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
@@ -164,6 +165,9 @@ class Simulation():
             self.__adapt_vehicle_color(vehicle_id, battery_soc)
         # send the vehicle driving in circles
         self.__adapt_destination(vehicle_id)
+        # stop vehicle if battery is empty
+        if battery_soc <= 0:
+            self.__simulate_empty_battery(vehicle_id)
         try:
             vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
             distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
@@ -183,25 +187,13 @@ if __name__ == "__main__":
 
     simulation.add_vehicles(50)
 
-    def adapt_destination(vehicle_id):
-        start = "E0"
-        end = "E10"
-        position = state["vehicle_position"]
-        destination = state["vehicle_destination"]
-        if position == destination:
-            traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)
-
     while simulation.active_vehicles_exist():
 
         for vehicle_id in simulation.get_all_vehicles():
             state = simulation.get_state(vehicle_id)
             print(state)
-            print("SPEED: ", traci.vehicle.getSpeed(vehicle_id))
-            adapt_destination(vehicle_id)
-            if state["battery_soc"] <= 0:
-                print("Battery empty, vehicle will dissapear shortly")
-                simulation.simulate_empty_battery(vehicle_id)
-            elif float(state["battery_soc"]) < 100:
+            
+            if float(state["battery_soc"]) < 100:
                 print("Battery low, rerouting to charge")
                 simulation.reroute_for_charging(vehicle_id, cs_id)
 
