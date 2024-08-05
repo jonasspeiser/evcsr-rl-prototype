@@ -130,7 +130,15 @@ class Simulation():
         else:
             color = YELLOW
         traci.vehicle.setColor(vehicle_id, color)
-        
+
+    def __adapt_destination(self, vehicle_id):
+        """Routes the vehicles in circles"""
+        start = "E0"
+        end = "E10"
+        position = state["vehicle_position"]
+        destination = state["vehicle_destination"]
+        if position == destination:
+            traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)    
 
     def simulate_empty_battery(self, vehicle_id):
         traci.vehicle.setSpeed(vehicle_id, 0)
@@ -154,6 +162,8 @@ class Simulation():
         vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
         if self.gui:
             self.__adapt_vehicle_color(vehicle_id, battery_soc)
+        # send the vehicle driving in circles
+        self.__adapt_destination(vehicle_id)
         try:
             vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
             distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
@@ -173,18 +183,21 @@ if __name__ == "__main__":
 
     simulation.add_vehicles(50)
 
+    def adapt_destination(vehicle_id):
+        start = "E0"
+        end = "E10"
+        position = state["vehicle_position"]
+        destination = state["vehicle_destination"]
+        if position == destination:
+            traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)
+
     while simulation.active_vehicles_exist():
 
         for vehicle_id in simulation.get_all_vehicles():
             state = simulation.get_state(vehicle_id)
             print(state)
             print("SPEED: ", traci.vehicle.getSpeed(vehicle_id))
-            start = "E0"
-            end = "E10"
-            position = state["vehicle_position"]
-            destination = state["vehicle_destination"]
-            if position == destination:
-                traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)
+            adapt_destination(vehicle_id)
             if state["battery_soc"] <= 0:
                 print("Battery empty, vehicle will dissapear shortly")
                 simulation.simulate_empty_battery(vehicle_id)
