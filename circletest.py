@@ -36,7 +36,7 @@ class Simulation():
 
 
     def add_vehicles(self, amount = 1):
-        traci.route.add("trip", ["E0", "E10"])
+        traci.route.add("trip", ["E0", "E19"])
         for i in range(amount):
             vehID = "myVehicle" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
@@ -75,8 +75,11 @@ class Simulation():
         route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
         route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
         new_route = route_to_cs.edges + route_from_cs.edges[1:]
-        traci.vehicle.setRoute(vehicle_id, new_route)
-        traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=100)
+        try:
+            traci.vehicle.setRoute(vehicle_id, new_route)
+            traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=1)
+        except traci.exceptions.TraCIException:
+            raise ValueError("Vehicle is past the charging station, rerouting not possible")
 
     def step(self):
         traci.simulationStep()

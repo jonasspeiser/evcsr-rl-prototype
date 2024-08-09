@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from circletest import Simulation
 
+
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -20,7 +21,7 @@ class CircleEnv(gym.Env):
         else:
             gui = False
         self.simulation = Simulation(gui=gui)
-        self.vehicles_to_spawn = 5
+        self.vehicles_to_spawn = 1
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
 
@@ -39,7 +40,7 @@ class CircleEnv(gym.Env):
 
         # --- Define observation space ---
         # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
-        single_vehicle_observation_space = spaces.MultiDiscrete([5000, 2000]) # battery soc is in between 0 and 5000 Wh, distance to the next charging station is in between 0 and 2000 meters
+        single_vehicle_observation_space = spaces.MultiDiscrete([100000, 2000]) # battery soc is in between 0 and 100000 Wh, distance to the next charging station is in between 0 and 2000 meters
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -48,7 +49,6 @@ class CircleEnv(gym.Env):
         observation = dict()
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
-            print("vehicle_state: ", vehicle_state)
             observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
         return observation
     
@@ -78,7 +78,6 @@ class CircleEnv(gym.Env):
         """
         Returns: The next observation, the reward, done and optionally additional info
         """
-        print("step")
         cs_id = "cs_0"
 
         self.state = self.simulation.get_state()
@@ -87,7 +86,11 @@ class CircleEnv(gym.Env):
 
         for index, vehicle_id in enumerate(observation):
             if action[index] == 1:
-                self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                try:
+                    self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
+                    reward -= 1
+
                 print("REROUTED")
             vehicle_state = self.state[vehicle_id]
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
@@ -100,7 +103,16 @@ class CircleEnv(gym.Env):
         info = self.__get_info()
 
         self.simulation.step()
-        print("step observation: ", observation)
+        print("step observation: ", observation, "step reward: ", reward)
+        if terminated:
+            print("step terminated")
+            print("state: ", self.state)
+            if destination_is_reached:
+                print("destination is reached")
+            if battery_is_empty:
+                print("battery is empty")
+        if truncated:
+            print("step truncated")
 
         return observation, reward, terminated, truncated, info
 
@@ -137,5 +149,7 @@ if __name__ == "__main__":
     # Instantiate the env
     # vec_env = make_vec_env(CircleEnv, n_envs=1, env_kwargs=dict())
     # Train the agent
-    env = CircleEnv("human")
-    model = A2C("MultiInputPolicy", env, verbose=1).learn(5000)   
+    env = CircleEnv(render_mode=None)
+    model = A2C("MultiInputPolicy", env, verbose=1).learn(1000)   
+    env.close()
+    print(model)
