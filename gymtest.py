@@ -49,9 +49,6 @@ class CircleEnv(gym.Env):
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
             print("vehicle_state: ", vehicle_state)
-            # battery_soc = np.array([vehicle_state["battery_soc"]], dtype=int)
-            # distance_to_next_cs = np.array([vehicle_state["distance_to_next_cs"]], dtype=int)
-            # observation[vehicle_id] = [battery_soc, distance_to_next_cs]
             observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
         return observation
     
