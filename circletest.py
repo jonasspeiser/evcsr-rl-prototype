@@ -13,7 +13,9 @@ RED = [255, 0, 0]
 
 class Simulation():
 
-    def __init__(self, gui=False):
+    def __init__(self, gui:bool=False):
+        if type(gui) is not bool:
+            raise ValueError("gui must be a boolean")
         self.gui = gui
         if self.gui:
             sumoBinary = checkBinary('sumo-gui')
@@ -97,7 +99,16 @@ class Simulation():
         return self.__calculate_distance(vehicle_position, next_charging_station_position)
 
     def get_all_vehicles(self):
+        """Returns a list of ids of all vehicles currently running within the scenario"""
         return traci.vehicle.getIDList()
+
+    def get_loaded_vehicles(self):
+        """
+        Returns a list of all loaded vehicle ids that have not yet arrived. This includes vehicles that are meant to depart in the future.
+        Remark: Sumo does not load all vehicle definitions in advance but only when they are needed. 
+        If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define inidvidual vehicles not with flows. 
+        """
+        return traci.simulation.getLoadedIDList()
 
     def vehicle_is_rerouted(self, vehicle_id):
         stops = traci.vehicle.getNextStops(vehicle_id)
