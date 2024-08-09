@@ -26,21 +26,20 @@ class CircleEnv(gym.Env):
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
         print("vehicle_ids: ", self.vehicle_ids)
-        # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
-        vehicle_action_space = spaces.Discrete(2)
-        # TODO: flatten action space to multi discrete space
-        # -> spaces.MultiDiscrete([2,2,2]) for 3 vehicles
-        # -> make it dynamically larger through list comprehension
-        # Dynamically create the action space for each vehicle
-        self.action_space = spaces.Dict({
-            vehicle_id: vehicle_action_space for vehicle_id in self.vehicle_ids
-        })
 
+        # --- Define action space ---        
+        # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
+        actions_per_vehicle = 2 
+        # Dynamically create the action space for each vehicle
+        # e.g. spaces.MultiDiscrete([2,2,2]) for 3 vehicles
+        action_space_list = [actions_per_vehicle for vehicle in self.vehicle_ids]
+        # MultiDiscrete action space because Stable Baselines doesn't support dict action spaces
+        self.action_space = spaces.MultiDiscrete(action_space_list)
+
+
+        # --- Define observation space ---
         # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
-        single_vehicle_observation_space = spaces.Dict({
-            "battery": spaces.Discrete(5000), # battery soc is in between 0 and 5000 Wh
-            "distance": spaces.Discrete(2000) # distance to the next charging station is in between 0 and 2000 meters
-        })
+        single_vehicle_observation_space = spaces.MultiDiscrete([5000, 2000]) # battery soc is in between 0 and 5000 Wh, distance to the next charging station is in between 0 and 2000 meters
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -50,7 +49,10 @@ class CircleEnv(gym.Env):
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
             print("vehicle_state: ", vehicle_state)
-            observation[vehicle_id] = {"battery": vehicle_state["battery_soc"], "distance": vehicle_state["distance_to_next_cs"]}
+            # battery_soc = np.array([vehicle_state["battery_soc"]], dtype=int)
+            # distance_to_next_cs = np.array([vehicle_state["distance_to_next_cs"]], dtype=int)
+            # observation[vehicle_id] = [battery_soc, distance_to_next_cs]
+            observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
         return observation
     
     def __get_info(self):
@@ -86,8 +88,8 @@ class CircleEnv(gym.Env):
         observation = self.__get_observation()
         reward = 0
 
-        for vehicle_id in observation.keys():
-            if action[vehicle_id] == 1:
+        for index, vehicle_id in enumerate(observation):
+            if action[index] == 1:
                 self.simulation.reroute_for_charging(vehicle_id, cs_id)
                 print("REROUTED")
             vehicle_state = self.state[vehicle_id]
