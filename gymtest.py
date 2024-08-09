@@ -6,6 +6,7 @@ from circletest import Simulation
 class CircleEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
+
     def __init__(self, render_mode=None):
         """
         Define self.observation_space and self.action_space
@@ -15,19 +16,21 @@ class CircleEnv(gym.Env):
         self.render_mode = render_mode
 
         if self.render_mode == "human":
-            print("gui")
-            self.simulation = Simulation(gui=True)
+            gui = True
         else:
-            print("no gui")
-            self.simulation = Simulation(5)
-        self.simulation.add_vehicles()
+            gui = False
+        self.simulation = Simulation(gui=gui)
+        self.vehicles_to_spawn = 5
+        self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
 
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  # This method needs to be implemented in the Simulation class
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
         print("vehicle_ids: ", self.vehicle_ids)
         # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
         vehicle_action_space = spaces.Discrete(2)
-
+        # TODO: flatten action space to multi discrete space
+        # -> spaces.MultiDiscrete([2,2,2]) for 3 vehicles
+        # -> make it dynamically larger through list comprehension
         # Dynamically create the action space for each vehicle
         self.action_space = spaces.Dict({
             vehicle_id: vehicle_action_space for vehicle_id in self.vehicle_ids
@@ -46,6 +49,7 @@ class CircleEnv(gym.Env):
         observation = dict()
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
+            print("vehicle_state: ", vehicle_state)
             observation[vehicle_id] = {"battery": vehicle_state["battery_soc"], "distance": vehicle_state["distance_to_next_cs"]}
         return observation
     
@@ -60,8 +64,11 @@ class CircleEnv(gym.Env):
         print("reset")
         super().reset(seed=seed) # needed for api compliance
         self.simulation.reset()
-        self.simulation.add_vehicles()
+        self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
+        self.simulation.step()
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
+        print("vehicle_ids: ", self.vehicle_ids)
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
         info = self.__get_info()
@@ -118,8 +125,10 @@ class CircleEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    from gymnasium.utils.env_checker import check_env
+    # from gymnasium.utils.env_checker import check_env
+    from stable_baselines3.common.env_checker import check_env
     env = CircleEnv()
+    # env.reset()
     check_env(env, skip_render_check=True)
     print("CHECKS PASSED")
     env.close()
