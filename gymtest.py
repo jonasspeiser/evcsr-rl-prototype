@@ -127,10 +127,18 @@ class CircleEnv(gym.Env):
 
 
 if __name__ == "__main__":
-    # from gymnasium.utils.env_checker import check_env
-    from stable_baselines3.common.env_checker import check_env
+    def test_env():
+        from stable_baselines3.common.env_checker import check_env
+        env = CircleEnv()
+        check_env(env, skip_render_check=True)
+        print("CHECKS PASSED")
+        env.close()
+    
+    from stable_baselines3 import PPO, A2C, DQN
+    from stable_baselines3.common.env_util import make_vec_env
+
+    # Instantiate the env
+    vec_env = make_vec_env(CircleEnv, n_envs=1, env_kwargs=dict())
+    # Train the agent
     env = CircleEnv()
-    # env.reset()
-    check_env(env, skip_render_check=True)
-    print("CHECKS PASSED")
-    env.close()
+    model = A2C("MlpPolicy", env, verbose=1).learn(5000)   
