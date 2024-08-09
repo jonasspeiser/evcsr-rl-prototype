@@ -4,7 +4,7 @@ import numpy as np
 from circletest import Simulation
 
 class CircleEnv(gym.Env):
-    metadata = {'render.modes': ['human']}
+    metadata = {'render_modes': ['human']}
 
 
     def __init__(self, render_mode=None):
@@ -138,7 +138,7 @@ if __name__ == "__main__":
     from stable_baselines3.common.env_util import make_vec_env
 
     # Instantiate the env
-    vec_env = make_vec_env(CircleEnv, n_envs=1, env_kwargs=dict())
+    # vec_env = make_vec_env(CircleEnv, n_envs=1, env_kwargs=dict())
     # Train the agent
-    env = CircleEnv()
-    model = A2C("MlpPolicy", env, verbose=1).learn(5000)   
+    env = CircleEnv("human")
+    model = A2C("MultiInputPolicy", env, verbose=1).learn(5000)   
