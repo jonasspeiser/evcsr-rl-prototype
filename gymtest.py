@@ -94,7 +94,7 @@ class CircleEnv(gym.Env):
         log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
         logging.getLogger().setLevel(log_level)
 
-    def __log_step_details(self, observation, reward, terminated, truncated):
+    def __log_step_details(self, observation, reward, terminated, truncated, destination_is_reached, battery_is_empty):
         logging.debug(f"state: {self.state}, step reward: {reward}")
         if terminated:
             logging.debug("episode terminated")
@@ -146,7 +146,7 @@ class CircleEnv(gym.Env):
         info = self.__get_info()
 
         self.simulation.step()
-        self.__log_step_details(observation, reward, terminated, truncated)
+        self.__log_step_details(observation, reward, terminated, truncated, destination_is_reached, battery_is_empty)
         
         if log_level is not None:
             # Reset the logging level to its original state
