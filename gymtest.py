@@ -3,17 +3,20 @@ from gymnasium import spaces
 import numpy as np
 from circletest import Simulation
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+cs_id = "cs_0" # hardcoded for the toy use case. Will be part of the action in later versions.
 
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-    def __init__(self, render_mode=None):
+
+    def __init__(self, render_mode=None, log_level="info"):
         """
         Define self.observation_space and self.action_space
         """
+        self.__set_logging_level(log_level)
         logging.debug("init")
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -91,41 +94,7 @@ class CircleEnv(gym.Env):
         log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
         logging.getLogger().setLevel(log_level)
 
-    def step(self, action, log_level="info"):
-        """
-        Returns: The next observation, the reward, done and optionally additional info
-        """
-        cs_id = "cs_0"
-
-        # Save the current logging level
-        original_log_level = logging.getLogger().level
-        # Set logging level dynamically
-        self.__set_logging_level(log_level)
-
-        self.state = self.simulation.get_state()
-        observation = self.__get_observation()
-        reward = 0
-
-        for index, vehicle_id in enumerate(observation):
-            if self.__action_is_charge(action[index]):
-                try:
-                    self.simulation.reroute_for_charging(vehicle_id, cs_id)
-                    logging.debug("REROUTED")
-                except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
-                    reward -= 1
-
-                
-            vehicle_state = self.state[vehicle_id]
-            destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
-            battery_is_empty = (vehicle_state["battery_soc"] <= 0)
-            reward_per_vehicle = -10 if battery_is_empty else 1 if destination_is_reached else 0
-            reward += reward_per_vehicle
-
-        terminated = (destination_is_reached or battery_is_empty)
-        truncated = not self.simulation.active_vehicles_exist()
-        info = self.__get_info()
-
-        self.simulation.step()
+    def __log_step_details(self, observation, reward, terminated, truncated):
         logging.debug(f"step observation: {observation}, step reward: {reward}")
         if terminated:
             logging.debug("step terminated")
@@ -136,9 +105,53 @@ class CircleEnv(gym.Env):
                 logging.info("battery is empty")
         if truncated:
             logging.info("step truncated")
+    
+    def __process_vehicles(self, action, observation):
+        reward = 0
 
-        # Reset the logging level to its original state
-        logging.getLogger().setLevel(original_log_level)
+        for index, vehicle_id in enumerate(observation):
+
+            if self.__action_is_charge(action[index]):
+                try:
+                    self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                    logging.debug("REROUTED")
+                except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
+                    logging.debug("Rerouting failed")
+                    reward -= 1
+
+            vehicle_state = self.state[vehicle_id]
+            destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
+            battery_is_empty = (vehicle_state["battery_soc"] <= 0)
+            reward_per_vehicle = -10 if battery_is_empty else 1 if destination_is_reached else 0
+            reward += reward_per_vehicle
+
+        return reward, destination_is_reached, battery_is_empty
+
+    def step(self, action, log_level=None):
+        """
+        Returns: The next observation, the reward, done and optionally additional info
+        """
+
+        if log_level is not None:
+            # Save the current logging level
+            original_log_level = logging.getLogger().level
+            # Set logging level dynamically
+            self.__set_logging_level(log_level)
+
+        self.state = self.simulation.get_state()
+        observation = self.__get_observation()
+        reward, destination_is_reached, battery_is_empty = self.__process_vehicles(action, observation)
+
+        terminated = (destination_is_reached or battery_is_empty)
+        truncated = not self.simulation.active_vehicles_exist()
+        info = self.__get_info()
+
+        self.simulation.step()
+        self.__log_step_details(observation, reward, terminated, truncated)
+        
+        if log_level is not None:
+            # Reset the logging level to its original state
+            logging.getLogger().setLevel(original_log_level)
         
         return observation, reward, terminated, truncated, info
 
@@ -169,13 +182,4 @@ if __name__ == "__main__":
         print("CHECKS PASSED")
         env.close()
     
-    from stable_baselines3 import PPO, A2C, DQN
-    from stable_baselines3.common.env_util import make_vec_env
-
-    # Instantiate the env
-    # vec_env = make_vec_env(CircleEnv, n_envs=1, env_kwargs=dict())
-    # Train the agent
-    env = CircleEnv(render_mode=None)
-    model = A2C("MultiInputPolicy", env, verbose=1).learn(1000)   
-    env.close()
-    print(model)
+    test_env()
