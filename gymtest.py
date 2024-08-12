@@ -2,6 +2,8 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from circletest import Simulation
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class CircleEnv(gym.Env):
@@ -12,7 +14,7 @@ class CircleEnv(gym.Env):
         """
         Define self.observation_space and self.action_space
         """
-        print("init")
+        logging.debug("init")
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
@@ -26,7 +28,7 @@ class CircleEnv(gym.Env):
         self.simulation.step() # to spawn vehicles
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
-        print("vehicle_ids: ", self.vehicle_ids)
+        logging.debug(f"vehicle_ids: {self.vehicle_ids}")
 
         # --- Define action space ---        
         # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
@@ -60,38 +62,59 @@ class CircleEnv(gym.Env):
         Returns: The observation of the initial state
         Reset the environment to initial state so that a new episode (independent of previous ones) may start
         """
-        print("reset")
+        logging.debug("reset")
         super().reset(seed=seed) # needed for api compliance
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
         self.simulation.step()
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
-        print("vehicle_ids: ", self.vehicle_ids)
+        logging.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
         info = self.__get_info()
-        print("reset observation: ", observation)
+        logging.debug(f"reset observation: {observation}")
         return (observation, info)
 
-    def step(self, action):
+    def __action_is_charge(self, vehicle_action):
+        return vehicle_action == 1
+
+    def __set_logging_level(self, log_level_str):
+        # Map string to logging level
+        log_levels = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL
+        }
+        log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
+        logging.getLogger().setLevel(log_level)
+
+    def step(self, action, log_level="info"):
         """
         Returns: The next observation, the reward, done and optionally additional info
         """
         cs_id = "cs_0"
+
+        # Save the current logging level
+        original_log_level = logging.getLogger().level
+        # Set logging level dynamically
+        self.__set_logging_level(log_level)
 
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
         reward = 0
 
         for index, vehicle_id in enumerate(observation):
-            if action[index] == 1:
+            if self.__action_is_charge(action[index]):
                 try:
                     self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                    logging.debug("REROUTED")
                 except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
                     reward -= 1
 
-                print("REROUTED")
+                
             vehicle_state = self.state[vehicle_id]
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
             battery_is_empty = (vehicle_state["battery_soc"] <= 0)
@@ -103,17 +126,20 @@ class CircleEnv(gym.Env):
         info = self.__get_info()
 
         self.simulation.step()
-        print("step observation: ", observation, "step reward: ", reward)
+        logging.debug(f"step observation: {observation}, step reward: {reward}")
         if terminated:
-            print("step terminated")
-            print("state: ", self.state)
+            logging.debug("step terminated")
+            logging.debug(f"state: {self.state}")
             if destination_is_reached:
-                print("destination is reached")
+                logging.info("destination is reached")
             if battery_is_empty:
-                print("battery is empty")
+                logging.info("battery is empty")
         if truncated:
-            print("step truncated")
+            logging.info("step truncated")
 
+        # Reset the logging level to its original state
+        logging.getLogger().setLevel(original_log_level)
+        
         return observation, reward, terminated, truncated, info
 
     
@@ -123,7 +149,7 @@ class CircleEnv(gym.Env):
         Show the current environment state e.g. the graphical window in 'CartPole-v1'
         This method must be implemented, but it is OK to have an empty implementation if rendering is not important
         """
-        print("render")
+        logging.debug("render")
         pass
 
     def close(self):
@@ -131,7 +157,7 @@ class CircleEnv(gym.Env):
         Returns: None
         This is optional. Used to cleanup all resources (threads, graphical windows, etc)
         """
-        print("close")
+        logging.debug("close")
         self.simulation.close()
 
 

@@ -3,6 +3,9 @@ import sys
 if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
 import traci
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 from sumolib import checkBinary
 
@@ -10,6 +13,8 @@ BLUE = [153, 255, 255]
 GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
+
+CHARGING_DURATION = 5 # charging duration in seconds
 
 class Simulation():
 
@@ -71,13 +76,14 @@ class Simulation():
         current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         destination = traci.vehicle.getRoute(vehicle_id)[-1]
         cs_edge = self.__get_cs_edge(cs_id)
-        # find route to charging station and from charging station to destination
-        route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
-        route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
-        new_route = route_to_cs.edges + route_from_cs.edges[1:]
-        try:
+        if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
+            # find route to charging station and from charging station to destination
+            route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
+            route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
+            new_route = route_to_cs.edges + route_from_cs.edges[1:]
             traci.vehicle.setRoute(vehicle_id, new_route)
-            traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=1)
+        try:
+            traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=CHARGING_DURATION)
         except traci.exceptions.TraCIException:
             raise ValueError("Vehicle is past the charging station, rerouting not possible")
 
@@ -113,7 +119,8 @@ class Simulation():
         """
         return traci.simulation.getLoadedIDList()
 
-    def vehicle_is_rerouted(self, vehicle_id):
+    def vehicle_is_rerouted(self, vehicle_id) -> bool:
+        """ Checks if a vehicle is already rerouted to a charging station. """
         stops = traci.vehicle.getNextStops(vehicle_id)
         if stops:
             if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
@@ -146,7 +153,7 @@ class Simulation():
         traci.vehicle.setColor(vehicle_id, color)  
 
     def __simulate_empty_battery(self, vehicle_id):
-        print("Battery empty, vehicle will dissapear shortly")
+        logging.info("Battery empty, vehicle will dissapear shortly")
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
