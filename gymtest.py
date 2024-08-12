@@ -95,16 +95,15 @@ class CircleEnv(gym.Env):
         logging.getLogger().setLevel(log_level)
 
     def __log_step_details(self, observation, reward, terminated, truncated):
-        logging.debug(f"step observation: {observation}, step reward: {reward}")
+        logging.debug(f"state: {self.state}, step reward: {reward}")
         if terminated:
-            logging.debug("step terminated")
-            logging.debug(f"state: {self.state}")
+            logging.debug("episode terminated")
             if destination_is_reached:
                 logging.info("destination is reached")
             if battery_is_empty:
                 logging.info("battery is empty")
         if truncated:
-            logging.info("step truncated")
+            logging.info("episode truncated")
     
     def __process_vehicles(self, action, observation):
         reward = 0
