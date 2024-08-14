@@ -191,5 +191,5 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    # test_env()
-    demo_env()
+    test_env()
+    # demo_env()
