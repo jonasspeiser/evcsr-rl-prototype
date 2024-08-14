@@ -180,5 +180,16 @@ if __name__ == "__main__":
         check_env(env, skip_render_check=True)
         print("CHECKS PASSED")
         env.close()
+
+    def demo_env():
+        env = CircleEnv(render_mode="human", log_level="debug")
+        observation, info = env.reset()
+        for _ in range(200):
+            action = env.action_space.sample() # select a random action
+            observation, reward, terminated, truncated, info = env.step(action)
+            if terminated or truncated:
+                observation, info = env.reset()
+        env.close()
     
-    test_env()
+    # test_env()
+    demo_env()
