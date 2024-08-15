@@ -12,7 +12,7 @@ class CircleEnv(gym.Env):
 
 
 
-    def __init__(self, render_mode=None, log_level="info"):
+    def __init__(self, render_mode=None, log_level="info", vehicles_to_spawn=1):
         """
         Define self.observation_space and self.action_space
         """
@@ -26,7 +26,7 @@ class CircleEnv(gym.Env):
         else:
             gui = False
         self.simulation = Simulation(gui=gui)
-        self.vehicles_to_spawn = 1
+        self.vehicles_to_spawn = vehicles_to_spawn
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
 
@@ -79,9 +79,6 @@ class CircleEnv(gym.Env):
         logging.debug(f"reset observation: {observation}")
         return (observation, info)
 
-    def __action_is_charge(self, vehicle_action):
-        return vehicle_action == 1
-
     def __set_logging_level(self, log_level_str):
         # Map string to logging level
         log_levels = {
@@ -104,20 +101,39 @@ class CircleEnv(gym.Env):
                 logging.info("battery is empty")
         if truncated:
             logging.info("episode truncated")
+
+    def __action_is_charge(self, vehicle_action):
+        return vehicle_action == 1
     
+    def __action_is_do_nothing(self, vehicle_action):
+        return vehicle_action == 0
+
+    def __handle_action(self, vehicle_id, vehicle_action):
+        logging.debug(f"action {vehicle_action} for {vehicle_id}")
+        charging_stop_is_planned = self.simulation.vehicle_is_rerouted(vehicle_id)
+        if self.__action_is_charge(vehicle_action):
+            if charging_stop_is_planned:
+                logging.debug(f"Charging stop is already planned for vehicle {vehicle_id}")
+                return
+            try:
+                self.simulation.reroute_for_charging(vehicle_id, cs_id)
+                logging.debug(f"Vehicle {vehicle_id} rerouted for charging")
+            except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
+                raise ValueError(f"Rerouting failed for vehicle {vehicle_id}")
+        elif self.__action_is_do_nothing(vehicle_action):
+            if charging_stop_is_planned:
+                self.simulation.remove_charging_stop(vehicle_id)
+                logging.debug(f"Charging stop removed for vehicle {vehicle_id}")
+
     def __process_vehicles(self, action, observation):
         reward = 0
 
         for index, vehicle_id in enumerate(observation):
-
-            if self.__action_is_charge(action[index]):
-                try:
-                    self.simulation.reroute_for_charging(vehicle_id, cs_id)
-                    logging.debug("REROUTED")
-                except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
-                    logging.debug("Rerouting failed")
-                    reward -= 1
-
+            try:
+                self.__handle_action(vehicle_id, action[index])
+            except ValueError as e:
+                logging.error(e)
+                reward -= 1
             vehicle_state = self.state[vehicle_id]
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
             battery_is_empty = (vehicle_state["battery_soc"] <= 0)
