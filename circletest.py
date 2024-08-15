@@ -38,6 +38,7 @@ class Simulation():
 
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
+        self.added_vehicles = []
 
 
     def add_vehicles(self, amount = 1):
@@ -46,6 +47,7 @@ class Simulation():
             vehID = "myVehicle" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
             traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
+            self.added_vehicles.append(vehID)
 
     def __get_vehicle_edge(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
@@ -87,6 +89,23 @@ class Simulation():
         except traci.exceptions.TraCIException:
             raise ValueError("Vehicle is past the charging station, rerouting not possible")
 
+    def remove_charging_stop(self, vehicle_id):
+        try:
+            traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="", teleport=2) # teleport=2 will trigger rerouting between the prior and next stop
+        except traci.exceptions.TraCIException:
+            logging.info("No charging stop to remove")
+
+    def get_stops(self, vehicle_id):
+        return traci.vehicle.getNextStops(vehicle_id)
+
+    def vehicle_is_rerouted(self, vehicle_id) -> bool:
+        """ Checks if a vehicle is already rerouted to a charging station. """
+        stops = self.get_stops(vehicle_id)
+        if stops:
+            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
+                return True
+        return False
+
     def step(self):
         traci.simulationStep()
 
@@ -107,25 +126,21 @@ class Simulation():
         next_charging_station_position = self.__get_cs_edge(next_charging_station)
         return self.__calculate_distance(vehicle_position, next_charging_station_position)
 
-    def get_all_vehicles(self):
+    def get_all_vehicle_ids(self):
+        """ Returns a list of all vehicle ids that have been added to the simulation. """
+        return self.added_vehicles
+
+    def get_online_vehicle_ids(self):
         """Returns a list of ids of all vehicles currently running within the scenario"""
         return traci.vehicle.getIDList()
 
-    def get_loaded_vehicles(self):
+    def get_loaded_vehicle_ids(self):
         """
         Returns a list of all loaded vehicle ids that have not yet arrived. This includes vehicles that are meant to depart in the future.
         Remark: Sumo does not load all vehicle definitions in advance but only when they are needed. 
         If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define inidvidual vehicles not with flows. 
         """
         return traci.simulation.getLoadedIDList()
-
-    def vehicle_is_rerouted(self, vehicle_id) -> bool:
-        """ Checks if a vehicle is already rerouted to a charging station. """
-        stops = traci.vehicle.getNextStops(vehicle_id)
-        if stops:
-            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
-                return True
-        return False
 
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
@@ -190,12 +205,9 @@ class Simulation():
 
     def get_state(self):
         state = {}
-        for vehicle_id in self.get_all_vehicles():
+        for vehicle_id in self.get_all_vehicle_ids():
             state[vehicle_id] = self.get_vehicle_state(vehicle_id)
         return state
-
-    def get_all_vehicle_ids(self):
-        return traci.vehicle.getIDList()
 
 if __name__ == "__main__":
 
@@ -208,24 +220,28 @@ if __name__ == "__main__":
         if position == destination:
             traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)  
 
-    cs_id = "cs_0"
+    def driving_in_circles():
+        cs_id = "cs_0"
 
-    simulation = Simulation(gui=True)
+        simulation = Simulation(gui=True)
 
-    simulation.add_vehicles(50)
+        simulation.add_vehicles(50)
 
-    while simulation.active_vehicles_exist():
+        while simulation.active_vehicles_exist():
 
-        for vehicle_id in simulation.get_all_vehicles():
-            state = simulation.get_vehicle_state(vehicle_id)
-            print(state)
-            # send the vehicle driving in circles
-            adapt_destination(vehicle_id)
-            # reroute to charging station if battery is low
-            if float(state["battery_soc"]) < 100:
-                print("Battery low, rerouting to charge")
-                simulation.reroute_for_charging(vehicle_id, cs_id)
+            for vehicle_id in simulation.get_all_vehicle_ids():
+                state = simulation.get_vehicle_state(vehicle_id)
+                print(state)
+                # send the vehicle driving in circles
+                adapt_destination(vehicle_id)
+                # reroute to charging station if battery is low
+                if float(state["battery_soc"]) < 100:
+                    print("Battery low, rerouting to charge")
+                    simulation.reroute_for_charging(vehicle_id, cs_id)
 
-        simulation.step()
+            simulation.step()
 
-    simulation.close()
+        simulation.close()
+    
+    driving_in_circles()
+
