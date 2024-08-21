@@ -45,7 +45,9 @@ class CircleEnv(gym.Env):
 
         # --- Define observation space ---
         # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
-        single_vehicle_observation_space = spaces.MultiDiscrete([100000, 2000]) # battery soc is in between 0 and 100000 Wh, distance to the next charging station is in between 0 and 2000 meters
+        # battery soc is in between 0 and 100000 Wh, distance to the next charging station is in between 0 and 2000 meters
+        # -1 is used to signal that the vehicle is not spawned yet ("padding")
+        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1]), high=np.array([100000, 2000]), dtype=int) 
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
