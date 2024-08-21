@@ -99,7 +99,11 @@ class Simulation():
             logging.info("No charging stop to remove")
 
     def get_stops(self, vehicle_id):
-        return traci.vehicle.getNextStops(vehicle_id)
+        try:
+            stops = traci.vehicle.getNextStops(vehicle_id)
+            return stops
+        except traci.exceptions.TraCIException:
+            raise ValueError(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
 
     def vehicle_is_rerouted(self, vehicle_id) -> bool:
         """ Checks if a vehicle is already rerouted to a charging station. """
@@ -189,21 +193,32 @@ class Simulation():
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
-        battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-        vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
-        if self.gui:
-            self.__adapt_vehicle_color(vehicle_id, battery_soc)
-        # stop vehicle if battery is empty
-        if battery_soc <= 0:
-            self.__simulate_empty_battery(vehicle_id)
         try:
-            vehicle_edge = self.__get_vehicle_edge(vehicle_id) #traci.vehicle.getPosition(vehicle_id)
-            distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
-            state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": int(round(distance_to_next_cs)), "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
-        except ValueError:
-            vehicle_edge = None
+            battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+            battery_soc = int(round(battery_soc))
+        except traci.exceptions.TraCIException:
+            logging.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
+            battery_soc = None
             distance_to_next_cs = None
-            state = {"battery_soc": int(round(battery_soc)), "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+            vehicle_edge = None
+            vehicle_destination = None
+        else:
+            if self.gui:
+                self.__adapt_vehicle_color(vehicle_id, battery_soc)
+            # stop vehicle if battery is empty
+            if battery_soc <= 0:
+                self.__simulate_empty_battery(vehicle_id)
+
+            try:
+                vehicle_edge = self.__get_vehicle_edge(vehicle_id) 
+                distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
+                distance_to_next_cs = int(round(distance_to_next_cs))
+            except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet
+                vehicle_edge = None
+                distance_to_next_cs = None
+            vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
+
+        state = {"battery_soc": battery_soc, "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
     def get_state(self):

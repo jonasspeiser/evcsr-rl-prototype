@@ -140,10 +140,13 @@ class CircleEnv(gym.Env):
                 self.__handle_action(vehicle_id, action[index])
             except ValueError as e:
                 logging.error(e)
-                reward -= 1
+                reward -= 1 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
             vehicle_state = self.state[vehicle_id]
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
-            battery_is_empty = (vehicle_state["battery_soc"] <= 0)
+            if destination_is_reached:
+                battery_is_empty = False
+            else:
+                battery_is_empty = (vehicle_state["battery_soc"] <= 0)
             reward_per_vehicle = -10 if battery_is_empty else 1 if destination_is_reached else 0
             reward += reward_per_vehicle
 
