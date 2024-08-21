@@ -54,7 +54,11 @@ class CircleEnv(gym.Env):
         observation = dict()
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
-            observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
+            logging.debug(f"vehicle_state: {vehicle_state}, dtype: {type(vehicle_state)}")
+            if vehicle_state["distance_to_next_cs"] == None:
+                observation[vehicle_id] = np.array([-1, -1], dtype=int) # signal that vehicle is not spawned yet
+            else:
+                observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
         return observation
     
     def __get_info(self):
@@ -67,6 +71,7 @@ class CircleEnv(gym.Env):
         """
         logging.debug("reset")
         super().reset(seed=seed) # needed for api compliance
+        self.added_vehicles = []
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.simulation.step() # to spawn vehicles
@@ -155,6 +160,7 @@ class CircleEnv(gym.Env):
 
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
+        logging.debug(f"step observation: {observation}")
         reward, destination_is_reached, battery_is_empty = self.__process_vehicles(action, observation)
 
         terminated = (destination_is_reached or battery_is_empty)
