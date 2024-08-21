@@ -75,7 +75,10 @@ class Simulation():
         # get vehicle type, lane, edge, and destination
         v_type = traci.vehicle.getTypeID(vehicle_id)
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
-        current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        try:
+            current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        except traci.exceptions.TraCIException:
+            raise ValueError(f"Lane {vehicle_lane} not found, most likely vehicle {vehicle_id} does not exist in the simulation yet")
         destination = traci.vehicle.getRoute(vehicle_id)[-1]
         cs_edge = self.__get_cs_edge(cs_id)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
