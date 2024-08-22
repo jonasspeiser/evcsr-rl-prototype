@@ -61,6 +61,15 @@ class Simulation():
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
 
+    def get_position_and_destination(self, vehicle_id):
+        vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
+        try:
+            current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        except traci.exceptions.TraCIException:
+            raise ValueError(f"Lane {vehicle_lane} not found, most likely vehicle {vehicle_id} does not exist in the simulation yet")
+        destination = traci.vehicle.getRoute(vehicle_id)[-1]
+        return current_vehicle_edge, destination
+
     def reroute_for_charging(self, vehicle_id, cs_id):
         """
         Reroutes the vehicle via a charging station.
@@ -74,12 +83,7 @@ class Simulation():
         """
         # get vehicle type, lane, edge, and destination
         v_type = traci.vehicle.getTypeID(vehicle_id)
-        vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
-        try:
-            current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
-        except traci.exceptions.TraCIException:
-            raise ValueError(f"Lane {vehicle_lane} not found, most likely vehicle {vehicle_id} does not exist in the simulation yet")
-        destination = traci.vehicle.getRoute(vehicle_id)[-1]
+        current_vehicle_edge, destination = self.get_position_and_destination(vehicle_id)
         cs_edge = self.__get_cs_edge(cs_id)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
             # find route to charging station and from charging station to destination
@@ -94,7 +98,7 @@ class Simulation():
 
     def remove_charging_stop(self, vehicle_id):
         try:
-            traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="", teleport=2) # teleport=2 will trigger rerouting between the prior and next stop
+            traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="")
         except traci.exceptions.TraCIException:
             logging.info("No charging stop to remove")
 
