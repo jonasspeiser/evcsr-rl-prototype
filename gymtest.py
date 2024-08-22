@@ -56,7 +56,6 @@ class CircleEnv(gym.Env):
         observation = dict()
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
-            logging.debug(f"vehicle_state: {vehicle_state}, dtype: {type(vehicle_state)}")
             if vehicle_state["distance_to_next_cs"] == None:
                 observation[vehicle_id] = np.array([-1, -1], dtype=int) # signal that vehicle is not spawned yet
             else:

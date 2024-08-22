@@ -123,6 +123,7 @@ class Simulation():
         traci.close()
 
     def reset(self):
+        self.added_vehicles = []
         traci.simulation.loadState("initial_state")
 
     def __calculate_distance(self, edgeID1, edgeID2):
