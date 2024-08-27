@@ -131,8 +131,10 @@ class CircleEnv(gym.Env):
                 self.simulation.remove_charging_stop(vehicle_id)
                 logging.debug(f"Charging stop removed for vehicle {vehicle_id}")
 
-    def __process_vehicles(self, action, observation):
+    def __calculate_reward(self, action, observation):
         reward = 0
+        one_vehicle_is_empty = False
+        all_vehicles_at_destination = True
 
         for index, vehicle_id in enumerate(observation):
             try:
@@ -141,15 +143,23 @@ class CircleEnv(gym.Env):
                 logging.error(e)
                 reward -= 1 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
             vehicle_state = self.state[vehicle_id]
+            
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
+            
             if destination_is_reached:
                 battery_is_empty = False
             else:
+                all_vehicles_at_destination = False
                 battery_is_empty = (vehicle_state["battery_soc"] <= 0)
+
+            if battery_is_empty:
+                logging.debug(f"Vehicle {vehicle_id} is empty")
+                one_vehicle_is_empty = True
+            
             reward_per_vehicle = -10 if battery_is_empty else 1 if destination_is_reached else 0
             reward += reward_per_vehicle
 
-        return reward, destination_is_reached, battery_is_empty
+        return reward, one_vehicle_is_empty, all_vehicles_at_destination
 
     def step(self, action, log_level=None):
         """
@@ -165,9 +175,12 @@ class CircleEnv(gym.Env):
         self.state = self.simulation.get_state()
         observation = self.__get_observation()
         logging.debug(f"step observation: {observation}")
-        reward, destination_is_reached, battery_is_empty = self.__process_vehicles(action, observation)
+        reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation)
 
-        terminated = (destination_is_reached or battery_is_empty)
+        # terminated = (destination_is_reached or battery_is_empty)
+        # TODO: Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
+        terminated = one_vehicle_is_empty or all_vehicles_at_destination
+        
         truncated = not self.simulation.active_vehicles_exist()
         info = self.__get_info()
 
