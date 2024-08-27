@@ -143,7 +143,7 @@ class CircleEnv(gym.Env):
                 logging.error(e)
                 reward -= 1 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
             vehicle_state = self.state[vehicle_id]
-            
+
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
             
             if destination_is_reached:
@@ -177,15 +177,14 @@ class CircleEnv(gym.Env):
         logging.debug(f"step observation: {observation}")
         reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation)
 
-        # terminated = (destination_is_reached or battery_is_empty)
-        # TODO: Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
+        # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
         terminated = one_vehicle_is_empty or all_vehicles_at_destination
         
         truncated = not self.simulation.active_vehicles_exist()
         info = self.__get_info()
 
         self.simulation.step()
-        self.__log_step_details(observation, reward, terminated, truncated, destination_is_reached, battery_is_empty)
+        self.__log_step_details(observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
         
         if log_level is not None:
             # Reset the logging level to its original state
