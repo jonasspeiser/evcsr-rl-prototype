@@ -197,22 +197,38 @@ class CircleEnv(gym.Env):
         accumulated_reward += illegal_action_penalty
         #TODO: step should loop through sumo-steps until the next vehicle goes online
 
-        observation = self.__get_observation()
-        logging.debug(f"step observation: {observation}")
-        reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation)
+        while not charging_request:
+            observation = self.__get_observation()
+            logging.debug(f"step while loop observation: {observation}")
+            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation)
+            accumulated_reward += temp_reward
+            # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
+            terminated = one_vehicle_is_empty or all_vehicles_at_destination
+            truncated = not self.simulation.active_vehicles_exist()
+            
+            # Find out if there are new vehicle ids online
+            new_online_vehicle_ids = simulation.get_online_vehicle_ids()
+            online_vehicle_ids_set = set(self.online_vehicle_ids)
+            new_online_vehicle_ids_set = set(new_online_vehicle_ids)
+            new_ids = new_online_vehicle_ids_set - online_vehicle_ids_set
+            if new_ids:
+                charging_request = True
 
-        # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
-        terminated = one_vehicle_is_empty or all_vehicles_at_destination
+            self.online_vehicle_ids = new_online_vehicle_ids
+            if charging_request or terminated or truncated:
+                break
+
+            self.simulation.step()
         
-        truncated = not self.simulation.active_vehicles_exist()
+        reward = accumulated_reward
         info = self.__get_info()
 
-        self.simulation.step()
         self.__log_step_details(observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
         
         # Reset the logging level to its original state
         if log_level is not None:
             logging.getLogger().setLevel(original_log_level)
+        
         
         return observation, reward, terminated, truncated, info
 
