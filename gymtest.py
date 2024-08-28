@@ -28,10 +28,12 @@ class CircleEnv(gym.Env):
         self.simulation = Simulation(gui=gui)
         self.vehicles_to_spawn = vehicles_to_spawn
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.simulation.step() # to spawn vehicles
 
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        self.online_vehicle_ids = Simulation.get_online_vehicle_ids()  
         logging.debug(f"vehicle_ids: {self.vehicle_ids}")
+
+        self.simulation.step() # to spawn first vehicle
 
         # --- Define action space ---        
         # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
@@ -53,6 +55,7 @@ class CircleEnv(gym.Env):
         })
 
     def __get_observation(self):
+        self.state = self.simulation.get_state()
         observation = dict()
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
@@ -75,11 +78,14 @@ class CircleEnv(gym.Env):
         self.added_vehicles = []
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.simulation.step() # to spawn vehicles
-        self.simulation.step()
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()  
+
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        self.online_vehicle_ids = Simulation.get_online_vehicle_ids()  
         logging.debug(f"vehicle_ids: {self.vehicle_ids}")
-        self.state = self.simulation.get_state()
+
+        self.simulation.step() # to spawn first vehicle
+        self.simulation.step()        
+
         observation = self.__get_observation()
         info = self.__get_info()
         logging.debug(f"reset observation: {observation}")
@@ -114,7 +120,10 @@ class CircleEnv(gym.Env):
     def __action_is_do_nothing(self, vehicle_action):
         return vehicle_action == 0
 
-    def __handle_action(self, vehicle_id, vehicle_action):
+    def __handle_vehicle_action(self, vehicle_id, vehicle_action):
+        """
+        Handles the action for the vehicle with the given vehicle_id.
+        """
         logging.debug(f"action {vehicle_action} for {vehicle_id}")
         charging_stop_is_planned = self.simulation.vehicle_is_rerouted(vehicle_id)
         if self.__action_is_charge(vehicle_action):
@@ -131,17 +140,29 @@ class CircleEnv(gym.Env):
                 self.simulation.remove_charging_stop(vehicle_id)
                 logging.debug(f"Charging stop removed for vehicle {vehicle_id}")
 
+    def __perform_actions(actionlist):
+        """
+        Perform the actions of all vehicles in the actionlist. Returns a penalty value (int) if illegal actions were used.
+        """
+        illegal_action_penalty = 0
+
+        for index, vehicle_id in enumerate(self.vehicle_ids):
+            vehicle_action = actionlist[index]
+            try:
+                self.__handle_vehicle_action(vehicle_id, vehicle_action)
+            except ValueError as e:
+                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
+                logging.error(e)
+                illegal_action_penalty -= 1
+
+        return illegal_action_penalty
+
     def __calculate_reward(self, action, observation):
         reward = 0
         one_vehicle_is_empty = False
         all_vehicles_at_destination = True
 
         for index, vehicle_id in enumerate(observation):
-            try:
-                self.__handle_action(vehicle_id, action[index])
-            except ValueError as e:
-                logging.error(e)
-                reward -= 1 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
             vehicle_state = self.state[vehicle_id]
 
             destination_is_reached = (vehicle_state["vehicle_destination"] == vehicle_state["vehicle_position"])
@@ -165,14 +186,17 @@ class CircleEnv(gym.Env):
         """
         Returns: The next observation, the reward, done and optionally additional info
         """
-
+        # Dynamically set the logging level for this step
         if log_level is not None:
-            # Save the current logging level
+            # Save the current logging level to reset it after the step
             original_log_level = logging.getLogger().level
-            # Set logging level dynamically
             self.__set_logging_level(log_level)
+        charging_request = False
+        accumulated_reward = 0
+        illegal_action_penalty = self.__perform_actions(action)
+        accumulated_reward += illegal_action_penalty
+        #TODO: step should loop through sumo-steps until the next vehicle goes online
 
-        self.state = self.simulation.get_state()
         observation = self.__get_observation()
         logging.debug(f"step observation: {observation}")
         reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation)
@@ -186,8 +210,8 @@ class CircleEnv(gym.Env):
         self.simulation.step()
         self.__log_step_details(observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
         
+        # Reset the logging level to its original state
         if log_level is not None:
-            # Reset the logging level to its original state
             logging.getLogger().setLevel(original_log_level)
         
         return observation, reward, terminated, truncated, info
