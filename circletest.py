@@ -154,6 +154,14 @@ class Simulation():
         """
         return traci.simulation.getLoadedIDList()
 
+    def get_arrived_vehicle_ids(self):
+        """Returns a list of ids of all vehicles that have arrived at their destination during the current time step"""
+        return traci.simulation.getArrivedIDList()
+
+    def get_spawned_vehicle_ids(self):
+        """Returns a list of ids of all vehicles that have spawned during the current time step"""
+        return traci.simulation.getDepartedIDList()        
+
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
         The vehicles color in the GUI is changed based on its battery SOC. 
@@ -231,6 +239,10 @@ class Simulation():
         for vehicle_id in self.get_all_vehicle_ids():
             state[vehicle_id] = self.get_vehicle_state(vehicle_id)
         return state
+
+    def get_current_time_step(self):
+        """Returns the current time step of the SUMO simulation"""
+        return traci.simulation.getTime()
 
 if __name__ == "__main__":
 
