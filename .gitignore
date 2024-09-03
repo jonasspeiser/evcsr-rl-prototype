@@ -1,3 +1,6 @@
 __pycache__
 initial_state
+# map files
 map_data_aut_highway
+# tensorboard log files
+events.out.tfevents.*

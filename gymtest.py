@@ -31,6 +31,7 @@ class CircleEnv(gym.Env):
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logging.debug(f"vehicle_ids: {self.vehicle_ids}")
+        self.arrived_vehicle_ids = []
 
         # --- Define action space ---        
         # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
@@ -78,6 +79,7 @@ class CircleEnv(gym.Env):
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logging.debug(f"vehicle_ids: {self.vehicle_ids}")
+        self.arrived_vehicle_ids = []
 
         self.simulation.step() # to spawn first vehicle
         self.simulation.step()        
@@ -157,17 +159,27 @@ class CircleEnv(gym.Env):
         vehicle_state = self.state[vehicle_id]
         battery_soc = vehicle_state["battery_soc"]
 
-        destination_is_reached = (vehicle_state["vehicle_position"] == vehicle_state["vehicle_destination"])
+        # destination_edge_is_reached = (vehicle_state["vehicle_position"] == vehicle_state["vehicle_destination"])
+        destination_is_reached = True if vehicle_id in self.arrived_vehicle_ids else False
+        logging.debug(f"checking if {vehicle_id} is in {self.arrived_vehicle_ids}")
         logging.debug(f"checking battery_is_empty for Vehicle {vehicle_id}. Battery_soc is {battery_soc} ")
         battery_is_empty = (battery_soc is not None) and (battery_soc == 0) # if battery_soc is None, the vehicle is not currently online
         vehicle_just_despawned = True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
         vehicle_just_reached_destination = destination_is_reached and vehicle_just_despawned
+        
+        logging.debug(f"newly_arrived_ids: {newly_arrived_ids} (checked with vehicle_id: {vehicle_id})")
+
+        if vehicle_just_despawned:
+            logging.info(f"Vehicle {vehicle_id} despawned")
+
+        if vehicle_just_reached_destination:
+            logging.info(f"Vehicle {vehicle_id} JUST reached destination")
 
         if destination_is_reached:
-            logging.debug(f"Vehicle {vehicle_id} reached destination")
+            logging.info(f"Vehicle {vehicle_id} destination is reached")
 
         if battery_is_empty:
-            logging.debug(f"Vehicle {vehicle_id} is empty")
+            logging.info(f"Vehicle {vehicle_id} is empty")
 
         reward_per_vehicle = -10 if battery_is_empty else 1 if vehicle_just_reached_destination else 0
         # TODO: battery_is_empty, destination_is_reached sollten im state gespeichert werden (z.B. in einem vehicle objekt). Dann ist die Funktion hier auch deutlich sauberer
@@ -180,7 +192,7 @@ class CircleEnv(gym.Env):
         all_vehicles_at_destination = True
 
         for index, vehicle_id in enumerate(observation):
-            reward_per_vehicle, vehicle_is_empty, vehicle_is_at_destination = self.__get_reward_for_vehicle(vehicle_id, newly_arrived_ids)
+            reward_per_vehicle, vehicle_is_empty, vehicle_is_at_destination = self.__get_reward_for_vehicle(vehicle_id, newly_arrived_ids, )
             reward += reward_per_vehicle
 
             if vehicle_is_empty:
@@ -199,9 +211,7 @@ class CircleEnv(gym.Env):
             # Save the current logging level to reset it after the step
             original_log_level = logging.getLogger().level
             self.__set_logging_level(log_level)
-        
-        logging.debug(f"current gym step:")
-        
+                
         charging_request = False
         accumulated_reward = 0
 
@@ -210,6 +220,7 @@ class CircleEnv(gym.Env):
         accumulated_reward += illegal_action_penalty
         
         # loop through sumo-steps until the next vehicle goes online
+        loop_counter = 0
         while not charging_request:
             
             logging.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
@@ -219,23 +230,24 @@ class CircleEnv(gym.Env):
             # Find out if there are new vehicle ids online or offline
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
-
-
+            self.arrived_vehicle_ids.extend(newly_arrived_ids)
 
             temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation, newly_arrived_ids)
             logging.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
             terminated = one_vehicle_is_empty or all_vehicles_at_destination
-            truncated = not self.simulation.active_vehicles_exist()
-            
+            # Truncate (abort) when it takes too long
+            # truncated = not self.simulation.active_vehicles_exist()
+            loop_counter += 1
+            truncated = loop_counter > 300
 
-            
+            # end the step for the agent if there is a charging request or the episode is terminated or truncated  
             if newly_spawned_ids:
                 charging_request = True
                 logging.debug(f"charging request for {newly_spawned_ids}")
-            # end the step for the agent if there is a charging request or the episode is terminated or truncated    
-            if charging_request or terminated or truncated:
+
+            if terminated or truncated:
                 break
 
             self.simulation.step()
