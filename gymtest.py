@@ -131,7 +131,7 @@ class CircleEnv(gym.Env):
 
         if self.__action_is_charge(vehicle_action):
             charging_stations = self.simulation.get_all_charging_station_ids()
-            cs_id = charging_stations[action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
+            cs_id = charging_stations[vehicle_action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
             if cs_id == next_charging_stop:
                 logging.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
                 return
