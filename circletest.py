@@ -105,7 +105,7 @@ class Simulation():
 
     def get_stops(self, vehicle_id):
         try:
-            stops = traci.vehicle.getNextStops(vehicle_id)
+            stops = traci.vehicle.getStops(vehicle_id)
             return stops
         except traci.exceptions.TraCIException:
             raise ValueError(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
@@ -114,9 +114,16 @@ class Simulation():
         """ Checks if a vehicle is already rerouted to a charging station. """
         stops = self.get_stops(vehicle_id)
         if stops:
-            if stops[0][3] == 64:  # 64 is traci's code for a planned charging station stop, changes to 65 while charging
+            if stops[0].stopFlags == 32:  # 32 is traci's code for a planned charging station stop, changes to 33 while charging
                 return True
         return False
+
+    def get_next_charging_stop_id(self, vehicle_id):
+        """ Returns the charging station id for the next planned stop for given vehicle_id. Returns None if no stop is planned. """
+        stops = self.get_stops(vehicle_id)
+        if stops:
+            return stops[0].stoppingPlaceID
+        return None
 
     def step(self):
         traci.simulationStep()

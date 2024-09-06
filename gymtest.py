@@ -4,8 +4,6 @@ import numpy as np
 from circletest import Simulation
 import logging
 
-cs_id = "cs_0" # hardcoded for the toy use case. Will be part of the action in later versions.
-
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,8 +32,8 @@ class CircleEnv(gym.Env):
         self.arrived_vehicle_ids = []
 
         # --- Define action space ---        
-        # We have 2 actions for each vehicle: do nothing (0) and send charging (1)
-        actions_per_vehicle = 2 
+        # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
+        actions_per_vehicle = 5 
         # Dynamically create the action space for each vehicle
         # e.g. spaces.MultiDiscrete([2,2,2]) for 3 vehicles
         action_space_list = [actions_per_vehicle for vehicle in self.vehicle_ids]
@@ -118,7 +116,7 @@ class CircleEnv(gym.Env):
             logging.info("episode truncated")
 
     def __action_is_charge(self, vehicle_action):
-        return vehicle_action == 1
+        return vehicle_action in (1,2,3,4)
     
     def __action_is_do_nothing(self, vehicle_action):
         return vehicle_action == 0
@@ -128,14 +126,18 @@ class CircleEnv(gym.Env):
         Handles the action for the vehicle with the given vehicle_id.
         """
         logging.debug(f"action {vehicle_action} for {vehicle_id}")
-        charging_stop_is_planned = self.simulation.vehicle_is_rerouted(vehicle_id)
+        next_charging_stop = self.simulation.get_next_charging_stop_id(vehicle_id)
+        charging_stop_is_planned = next_charging_stop is not None
+
         if self.__action_is_charge(vehicle_action):
-            if charging_stop_is_planned:
-                logging.debug(f"Charging stop is already planned for vehicle {vehicle_id}")
+            charging_stations = self.simulation.get_all_charging_station_ids()
+            cs_id = charging_stations[action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
+            if cs_id == next_charging_stop:
+                logging.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
                 return
             try:
                 self.simulation.reroute_for_charging(vehicle_id, cs_id)
-                logging.debug(f"Vehicle {vehicle_id} rerouted for charging")
+                logging.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
             except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
                 raise ValueError(f"Rerouting failed for vehicle {vehicle_id}")
         elif self.__action_is_do_nothing(vehicle_action):
@@ -191,7 +193,7 @@ class CircleEnv(gym.Env):
         return reward_per_vehicle, battery_is_empty, destination_is_reached
 
 
-    def __calculate_reward(self, action, observation, newly_arrived_ids):
+    def __calculate_reward(self, observation, newly_arrived_ids):
         reward = 0
         one_vehicle_is_empty = False
         all_vehicles_at_destination = True
@@ -237,7 +239,7 @@ class CircleEnv(gym.Env):
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
 
-            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(action, observation, newly_arrived_ids)
+            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(observation, newly_arrived_ids)
             logging.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
