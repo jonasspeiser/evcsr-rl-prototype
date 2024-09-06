@@ -297,7 +297,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_env():
-        env = CircleEnv(render_mode="human", log_level="debug")
+        env = CircleEnv(render_mode="human", log_level="info", vehicles_to_spawn=15)
         observation, info = env.reset()
         for _ in range(200):
             action = env.action_space.sample() # select a random action
@@ -306,5 +306,5 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    test_env()
-    # demo_env()
+    # test_env()
+    demo_env()
