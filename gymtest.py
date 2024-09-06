@@ -104,14 +104,14 @@ class CircleEnv(gym.Env):
         log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
         logging.getLogger().setLevel(log_level)
 
-    def __log_step_details(self, observation, reward, terminated, truncated, destination_is_reached, battery_is_empty):
+    def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
         logging.debug(f"state: {self.state}, step reward: {reward}")
         if terminated:
             logging.debug("episode terminated")
-            if destination_is_reached:
-                logging.info("destination is reached")
+            if all_vehicles_at_destination:
+                logging.info("all vehicles arrived at their destination")
             if battery_is_empty:
-                logging.info("battery is empty")
+                logging.info("one vehicle's battery is empty")
         if truncated:
             logging.info("episode truncated")
 
