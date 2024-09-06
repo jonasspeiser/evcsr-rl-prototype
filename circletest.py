@@ -2,6 +2,7 @@ import os
 import sys
 if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
+import random
 import traci
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -14,6 +15,7 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
+SUMO_CONFIG_PATH = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
 CHARGING_DURATION = 5 # charging duration in seconds
 
 class Simulation():
@@ -26,7 +28,7 @@ class Simulation():
             sumoBinary = checkBinary('sumo-gui')
         else:
             sumoBinary = checkBinary('sumo')
-        config_file = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
+        config_file = SUMO_CONFIG_PATH
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
@@ -43,11 +45,16 @@ class Simulation():
 
 
     def add_vehicles(self, amount = 1):
+        """ 
+        Adds the specified amount of vehicles to the simulation. 
+        Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
+        """
         traci.route.add("trip", ["E0", "E19"])
         for i in range(amount):
             vehID = "myVehicle" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
-            traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", "200")
+            battery_soc = random.randint(50, 500)
+            traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", str(battery_soc))
             self.added_vehicles.append(vehID)
 
     def __get_vehicle_edge(self, vehicle_id):
