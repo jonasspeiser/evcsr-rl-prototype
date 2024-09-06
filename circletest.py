@@ -38,6 +38,7 @@ class Simulation():
 
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
+        self.charging_stations = traci.chargingstation.getIDList()
         self.added_vehicles = []
 
 
@@ -133,10 +134,18 @@ class Simulation():
     def __calculate_distance(self, edgeID1, edgeID2):
         return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
 
-    def __get_distance_to_next_cs(self, vehicle_position):
-        next_charging_station = "cs_0"
-        next_charging_station_position = self.__get_cs_edge(next_charging_station)
-        return self.__calculate_distance(vehicle_position, next_charging_station_position)
+    def __get_distance_to_cs(self, vehicle_position) -> dict:
+        charging_stations = self.charging_stations
+        distance_dict = {}
+        for station_id in charging_stations:
+            charging_station_position = self.__get_cs_edge(station_id)
+            distance = self.__calculate_distance(vehicle_position, charging_station_position)
+            distance_dict[station_id] = float(distance)
+        return distance_dict
+
+
+    def get_all_charging_station_ids(self):
+        return self.charging_stations
 
     def get_all_vehicle_ids(self):
         """ Returns a list of all vehicle ids that have been added to the simulation. """
@@ -202,20 +211,20 @@ class Simulation():
         Returns:
         - dict: A dictionary containing the following information:
             - battery_soc (float): The actual battery capacity of the vehicle.
-            - distance_to_next_cs (float): The distance to the next charging station.
+            - distance_to_cs (float): The distance to the next charging station.
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
         try:
             battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
             battery_soc = int(round(battery_soc))
-        except traci.exceptions.TraCIException:
+        except traci.exceptions.TraCIException: # if battery_soc is not returned by TraCI
             logging.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
             battery_soc = None
-            distance_to_next_cs = None
+            distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None
-        else:
+        else: # only execute if vehicle has a battery, otherwise skip
             if self.gui:
                 self.__adapt_vehicle_color(vehicle_id, battery_soc)
             # stop vehicle if battery is empty
@@ -224,14 +233,13 @@ class Simulation():
 
             try:
                 vehicle_edge = self.__get_vehicle_edge(vehicle_id) 
-                distance_to_next_cs = float(self.__get_distance_to_next_cs(vehicle_edge))
-                distance_to_next_cs = int(round(distance_to_next_cs))
+                distance_to_cs = self.__get_distance_to_cs(vehicle_edge)
             except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet
                 vehicle_edge = None
-                distance_to_next_cs = None
+                distance_to_cs = None
             vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
 
-        state = {"battery_soc": battery_soc, "distance_to_next_cs": distance_to_next_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+        state = {"battery_soc": battery_soc, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
     def get_state(self):

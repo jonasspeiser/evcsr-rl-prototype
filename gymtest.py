@@ -47,20 +47,25 @@ class CircleEnv(gym.Env):
         # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
         # battery soc is in between 0 and 100000 Wh, distance to the next charging station is in between 0 and 2000 meters
         # -1 is used to signal that the vehicle is not spawned yet ("padding")
-        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1]), high=np.array([100000, 2000]), dtype=int) 
+        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1]), high=np.array([100000, 2000, 2000, 2000, 2000]), dtype=int) 
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
 
     def __get_observation(self):
         self.state = self.simulation.get_state()
-        observation = dict()
+        observation = {}
         for vehicle_id in self.vehicle_ids:
             vehicle_state = self.state[vehicle_id]
-            if vehicle_state["distance_to_next_cs"] == None:
-                observation[vehicle_id] = np.array([-1, -1], dtype=int) # signal that vehicle is not spawned yet
+            distance_dict = vehicle_state["distance_to_cs"]
+            if distance_dict == None:
+                vehicle_observation = [-1, -1, -1, -1, -1] # signal that vehicle is not spawned yet
             else:
-                observation[vehicle_id] = np.array([vehicle_state["battery_soc"], vehicle_state["distance_to_next_cs"]], dtype=int)
+                distance_to_cs = []
+                for charging_station_id, distance in distance_dict.items():
+                    distance_to_cs.append(distance)
+                vehicle_observation = [vehicle_state["battery_soc"]] + distance_to_cs
+            observation[vehicle_id] = np.array(vehicle_observation, dtype=int)
         return observation
     
     def __get_info(self):
