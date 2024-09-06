@@ -183,7 +183,7 @@ class CircleEnv(gym.Env):
             logging.info(f"Vehicle {vehicle_id} JUST reached destination")
 
         if destination_is_reached:
-            logging.info(f"Vehicle {vehicle_id} destination is reached")
+            logging.debug(f"Vehicle {vehicle_id} destination is reached")
 
         if battery_is_empty:
             logging.info(f"Vehicle {vehicle_id} is empty")
