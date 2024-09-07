@@ -238,6 +238,8 @@ class CircleEnv(gym.Env):
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
+            # Find out if there are vehicles that just finished charging
+            just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
             temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(observation, newly_arrived_ids)
             logging.debug(f"step while loop reward: {temp_reward}")
@@ -250,7 +252,9 @@ class CircleEnv(gym.Env):
             truncated = loop_counter > 300
 
             # end the step for the agent if there is a charging request or the episode is terminated or truncated  
-            if newly_spawned_ids:
+            # a charging request is generated whenever a new vehicle enters the simulation or a vehicle just finished charging
+            # i.e. a vehicle was not evaluated yet or needs re-evaluation
+            if newly_spawned_ids or just_charged_ids:
                 charging_request = True
                 logging.debug(f"charging request for {newly_spawned_ids}")
 
@@ -306,5 +310,5 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    # test_env()
+    test_env()
     demo_env()

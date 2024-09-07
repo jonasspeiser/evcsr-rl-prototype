@@ -177,13 +177,17 @@ class Simulation():
         """
         return traci.simulation.getLoadedIDList()
 
+    def get_spawned_vehicle_ids(self):
+        """Returns a list of ids of all vehicles that have spawned during the current time step"""
+        return traci.simulation.getDepartedIDList()        
+
     def get_arrived_vehicle_ids(self):
         """Returns a list of ids of all vehicles that have arrived at their destination during the current time step"""
         return traci.simulation.getArrivedIDList()
 
-    def get_spawned_vehicle_ids(self):
-        """Returns a list of ids of all vehicles that have spawned during the current time step"""
-        return traci.simulation.getDepartedIDList()        
+    def get_charging_stop_ending_vehicle_ids(self):
+        """Returns a list of ids of vehicles that begin to continue their journey, leaving a scheduled stop in this time step"""
+        return traci.simulation.getStopEndingVehiclesIDList()
 
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
