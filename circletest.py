@@ -77,7 +77,7 @@ class Simulation():
             current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         except traci.exceptions.TraCIException:
             raise ValueError(f"Lane {vehicle_lane} not found, most likely vehicle {vehicle_id} does not exist in the simulation yet")
-        destination = traci.vehicle.getRoute(vehicle_id)[-1]
+        destination = self.get_vehicle_destination(vehicle_id)
         return current_vehicle_edge, destination
 
     def reroute_for_charging(self, vehicle_id, cs_id):
@@ -134,6 +134,28 @@ class Simulation():
             return stops[0].stoppingPlaceID
         return None
 
+    def get_remaining_range(self, vehicle_id):
+        """
+        Returns the estimated remaining range of given vehicle in km. 
+        This is an approximation and may vary based on driving conditions.
+        """
+        remaining_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+        # Get the energy consumption in Wh/km
+        energy_consumption = float(traci.vehicle.getParameter(vehicle_id, "device.battery.energyConsumed")) / \
+            float(traci.vehicle.getDistance(vehicle_id))
+        remaining_range_km = remaining_capacity / energy_consumption
+        return remaining_range_km
+
+    def get_vehicle_destination(self, vehicle_id):
+        return traci.vehicle.getRoute(vehicle_id)[-1]
+
+    def get_distance_to_destination(self, vehicle_id):
+        """ Returns the driving distance of given vehicles current position to its destination. """
+        current_vehicle_edge = self.__get_vehicle_edge(vehicle_id)
+        destination = self.get_vehicle_destination(vehicle_id)
+        distance = self.__calculate_distance(vehicle_edge, destination)
+        return distance
+
     def step(self):
         traci.simulationStep()
 
@@ -146,19 +168,6 @@ class Simulation():
     def reset(self):
         self.added_vehicles = []
         traci.simulation.loadState("initial_state")
-
-    def __calculate_distance(self, edgeID1, edgeID2):
-        return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
-
-    def __get_distance_to_cs(self, vehicle_position) -> dict:
-        charging_stations = self.charging_stations
-        distance_dict = {}
-        for station_id in charging_stations:
-            charging_station_position = self.__get_cs_edge(station_id)
-            distance = self.__calculate_distance(vehicle_position, charging_station_position)
-            distance_dict[station_id] = float(distance)
-        return distance_dict
-
 
     def get_all_charging_station_ids(self):
         return self.charging_stations
@@ -221,6 +230,18 @@ class Simulation():
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
+    def __calculate_distance(self, edgeID1, edgeID2):
+        return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
+
+    def __get_distance_to_cs(self, vehicle_position) -> dict:
+        charging_stations = self.charging_stations
+        distance_dict = {}
+        for station_id in charging_stations:
+            charging_station_position = self.__get_cs_edge(station_id)
+            distance = self.__calculate_distance(vehicle_position, charging_station_position)
+            distance_dict[station_id] = float(distance)
+        return distance_dict
+
     def get_vehicle_state(self, vehicle_id): 
         """
         Retrieves the state of a vehicle.
@@ -257,7 +278,7 @@ class Simulation():
             except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet
                 vehicle_edge = None
                 distance_to_cs = None
-            vehicle_destination = traci.vehicle.getRoute(vehicle_id)[-1]
+            vehicle_destination = self.get_vehicle_destination(vehicle_id)
 
         state = {"battery_soc": battery_soc, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
