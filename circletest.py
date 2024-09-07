@@ -53,7 +53,9 @@ class Simulation():
         for i in range(amount):
             vehID = "myVehicle" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
-            battery_soc = random.randint(50, 500)
+            battery_max = 500
+            battery_soc = random.randint(50, battery_max)
+            traci.vehicle.setParameter(vehID, "device.battery.maximumBatteryCapacity", str(battery_max))
             traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", str(battery_soc))
             self.added_vehicles.append(vehID)
 
