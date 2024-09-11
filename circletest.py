@@ -153,8 +153,18 @@ class Simulation():
         """ Returns the driving distance of given vehicles current position to its destination. """
         current_vehicle_edge = self.__get_vehicle_edge(vehicle_id)
         destination = self.get_vehicle_destination(vehicle_id)
-        distance = self.__calculate_distance(vehicle_edge, destination)
+        distance = self.__calculate_distance(current_vehicle_edge, destination)
         return distance
+
+    def remaining_range_is_sufficient(self, vehicle_id, buffer=0):
+        """ 
+        Returns whether a vehicle's battery soc is enough to reach its destination.
+        If the optional "buffer" parameter is set, it must have a battery soc higher than "buffer" when arriving, 
+        otherwise it just has to be not completely empty. 
+        """
+        remaining_range = self.get_remaining_range(vehicle_id)
+        distance_to_destination = self.get_distance_to_destination(vehicle_id)
+        return remaining_range > (distance_to_destination + buffer)
 
     def step(self):
         traci.simulationStep()

@@ -128,39 +128,40 @@ class CircleEnv(gym.Env):
         logging.debug(f"action {vehicle_action} for {vehicle_id}")
         next_charging_stop = self.simulation.get_next_charging_stop_id(vehicle_id)
         charging_stop_is_planned = next_charging_stop is not None
+        action_penalty = 0
 
         if self.__action_is_charge(vehicle_action):
             charging_stations = self.simulation.get_all_charging_station_ids()
             cs_id = charging_stations[vehicle_action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
             if cs_id == next_charging_stop:
                 logging.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
-                return
+                return action_penalty
             try:
                 self.simulation.reroute_for_charging(vehicle_id, cs_id)
                 logging.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
-            except ValueError: # if the vehicle is past the charging station and rerouting doesn't work
-                raise ValueError(f"Rerouting failed for vehicle {vehicle_id}")
+                # penalize the agent if it sends a vehicle charging although its battery is full enough to reach the destination
+                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
+                if remaining_range_is_sufficient:
+                    action_penalty = -1
+            except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
+                logging.error(e)
+                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
+                action_penalty = -1
         elif self.__action_is_do_nothing(vehicle_action):
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(vehicle_id)
                 logging.debug(f"Charging stop removed for vehicle {vehicle_id}")
+        return action_penalty
 
     def __perform_actions(self, actionlist):
         """
-        Perform the actions of all vehicles in the actionlist. Returns a penalty value (int) if illegal actions were used.
+        Perform the actions of all vehicles in the actionlist. Returns a penalty value (int) if illegal or unwanted actions were used.
         """
-        illegal_action_penalty = 0
-
+        action_penalty = 0
         for index, vehicle_id in enumerate(self.vehicle_ids):
             vehicle_action = actionlist[index]
-            try:
-                self.__handle_vehicle_action(vehicle_id, vehicle_action)
-            except ValueError as e:
-                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                logging.error(e)
-                illegal_action_penalty -= 1
-
-        return illegal_action_penalty
+            action_penalty += self.__handle_vehicle_action(vehicle_id, vehicle_action)
+        return action_penalty
 
     def __get_reward_for_vehicle(self, vehicle_id, newly_arrived_ids):
         vehicle_state = self.state[vehicle_id]
@@ -223,8 +224,8 @@ class CircleEnv(gym.Env):
         accumulated_reward = 0
 
         # perform actions for all vehicles
-        illegal_action_penalty = self.__perform_actions(action)
-        accumulated_reward += illegal_action_penalty
+        action_penalty = self.__perform_actions(action)
+        accumulated_reward += action_penalty
         
         # loop through sumo-steps until the next vehicle goes online
         loop_counter = 0
@@ -301,7 +302,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_env():
-        env = CircleEnv(render_mode="human", log_level="info", vehicles_to_spawn=15)
+        env = CircleEnv(render_mode="human", log_level="info", vehicles_to_spawn=5)
         observation, info = env.reset()
         for _ in range(200):
             action = env.action_space.sample() # select a random action
