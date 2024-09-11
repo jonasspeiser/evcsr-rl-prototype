@@ -138,11 +138,16 @@ class Simulation():
         """
         Returns the estimated remaining range of given vehicle in km. 
         This is an approximation and may vary based on driving conditions.
+        Returns None if remaining range can't be calculated.
         """
         remaining_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+        energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.energyConsumed"))
+        distance_travelled = float(traci.vehicle.getDistance(vehicle_id))
+        # Return None if remaining range can't be calculated (-> division by zero)
+        if distance_travelled == 0:
+            return None
         # Get the energy consumption in Wh/km
-        energy_consumption = float(traci.vehicle.getParameter(vehicle_id, "device.battery.energyConsumed")) / \
-            float(traci.vehicle.getDistance(vehicle_id))
+        energy_consumption = energy_consumed / distance_travelled
         remaining_range_km = remaining_capacity / energy_consumption
         return remaining_range_km
 
