@@ -148,6 +148,8 @@ class CircleEnv(gym.Env):
                 logging.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
                 # penalize the agent if it sends a vehicle charging although its battery is full enough to reach the destination
                 remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
+                if remaining_range_is_sufficient is None:
+                    logging.debug(f"vehicle {vehicle_id} was asked for remaining range but doesn't seem to exist")
                 if remaining_range_is_sufficient:
                     action_penalty = -1
             except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
