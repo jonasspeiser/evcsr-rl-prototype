@@ -141,7 +141,7 @@ class Simulation():
         Returns None if remaining range can't be calculated.
         """
         remaining_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-        energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.energyConsumed"))
+        energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.totalEnergyConsumed"))
         distance_travelled = float(traci.vehicle.getDistance(vehicle_id))
         # Return None if remaining range can't be calculated (-> division by zero)
         if distance_travelled == 0:
@@ -290,7 +290,7 @@ class Simulation():
             try:
                 vehicle_edge = self.__get_vehicle_edge(vehicle_id) 
                 distance_to_cs = self.__get_distance_to_cs(vehicle_edge)
-            except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet
+            except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet or despawned after arriving at destination
                 vehicle_edge = None
                 distance_to_cs = None
             vehicle_destination = self.get_vehicle_destination(vehicle_id)

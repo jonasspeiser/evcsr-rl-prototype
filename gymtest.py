@@ -126,9 +126,16 @@ class CircleEnv(gym.Env):
         Handles the action for the vehicle with the given vehicle_id.
         """
         logging.debug(f"action {vehicle_action} for {vehicle_id}")
+        action_penalty = 0
+
+        # for already arrived vehicles, do nothing and return. No penalty is given because the agent has to select an action for each vehicle in each step (due to the action space being static and not dynamic)
+        # I could think about penalizing it if it tries to send it to a charging station instead of just taking action 0. But right now that doesn't seem necessary.
+        if vehicle_id in self.arrived_vehicle_ids:
+            return action_penalty
+
         next_charging_stop = self.simulation.get_next_charging_stop_id(vehicle_id)
         charging_stop_is_planned = next_charging_stop is not None
-        action_penalty = 0
+        
 
         if self.__action_is_charge(vehicle_action):
             charging_stations = self.simulation.get_all_charging_station_ids()
@@ -169,13 +176,11 @@ class CircleEnv(gym.Env):
 
         # destination_edge_is_reached = (vehicle_state["vehicle_position"] == vehicle_state["vehicle_destination"])
         destination_is_reached = True if vehicle_id in self.arrived_vehicle_ids else False
-        logging.debug(f"checking if {vehicle_id} is in {self.arrived_vehicle_ids}")
-        logging.debug(f"checking battery_is_empty for Vehicle {vehicle_id}. Battery_soc is {battery_soc} ")
         battery_is_empty = (battery_soc is not None) and (battery_soc == 0) # if battery_soc is None, the vehicle is not currently online
         vehicle_just_despawned = True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
         vehicle_just_reached_destination = destination_is_reached and vehicle_just_despawned
         
-        logging.debug(f"newly_arrived_ids: {newly_arrived_ids} (checked with vehicle_id: {vehicle_id})")
+        logging.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids} (checked with vehicle_id: {vehicle_id})")
 
         if vehicle_just_despawned:
             logging.info(f"Vehicle {vehicle_id} despawned")
@@ -247,7 +252,7 @@ class CircleEnv(gym.Env):
             accumulated_reward += temp_reward
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
             terminated = one_vehicle_is_empty or all_vehicles_at_destination
-            # Truncate (abort) when it takes too long
+            # Truncate (abort) when it takes too long (i.e. more than 300 SUMO simulation steps WITHOUT a charging request being triggered)
             # truncated = not self.simulation.active_vehicles_exist()
             loop_counter += 1
             truncated = loop_counter > 300
@@ -257,7 +262,7 @@ class CircleEnv(gym.Env):
             # i.e. a vehicle was not evaluated yet or needs re-evaluation
             if newly_spawned_ids or just_charged_ids:
                 charging_request = True
-                logging.debug(f"charging request for {newly_spawned_ids}")
+                logging.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
 
             if terminated or truncated:
                 break
@@ -302,7 +307,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_env():
-        env = CircleEnv(render_mode="human", log_level="info", vehicles_to_spawn=5)
+        env = CircleEnv(render_mode="human", log_level="debug", vehicles_to_spawn=15)
         observation, info = env.reset()
         for _ in range(200):
             action = env.action_space.sample() # select a random action
@@ -311,5 +316,5 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    test_env()
+    # test_env()
     demo_env()
