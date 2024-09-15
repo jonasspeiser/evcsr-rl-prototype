@@ -5,10 +5,15 @@ from circletest import Simulation
 
 # configure logging
 import logging
-logger = logging.getLogger("gym_env_logger")
+from datetime import datetime
+log_path = "./logs/"
+# Append the current time to the log file name
+current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+log_file_name = f"environment_{current_time}.log"
+logger = logging.getLogger("environment_logger")
 logger.setLevel(logging.INFO)
 # create file handler which logs even debug messages
-fh = logging.FileHandler('./logs/environment.log')
+fh = logging.FileHandler(log_path + log_file_name)
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -123,7 +128,7 @@ class CircleEnv(gym.Env):
     def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
         logger.debug(f"state: {self.state}, step reward: {reward}")
         if terminated:
-            logger.debug("episode terminated")
+            logger.info("episode terminated")
             if all_vehicles_at_destination:
                 logger.info("all vehicles arrived at their destination")
             if battery_is_empty:
@@ -198,8 +203,6 @@ class CircleEnv(gym.Env):
         vehicle_just_despawned = True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
         vehicle_just_reached_destination = destination_is_reached and vehicle_just_despawned
         
-        logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids} (checked with vehicle_id: {vehicle_id})")
-
         if vehicle_just_despawned:
             logger.info(f"Vehicle {vehicle_id} despawned")
 
@@ -262,6 +265,7 @@ class CircleEnv(gym.Env):
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
+            logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
             # Find out if there are vehicles that just finished charging
             just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
