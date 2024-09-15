@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from circletest import Simulation
+from circle_simulation import Simulation
 
 # configure logging
 import logging
