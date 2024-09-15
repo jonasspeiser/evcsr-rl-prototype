@@ -3,28 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from circle_simulation import Simulation
 
-# configure logging
 import logging
-from datetime import datetime
-log_path = "./logs/"
-# Append the current time to the log file name
-current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-log_file_name = f"environment_{current_time}.log"
-logger = logging.getLogger("environment_logger")
-logger.setLevel(logging.INFO)
-# create file handler which logs even debug messages
-fh = logging.FileHandler(log_path + log_file_name)
-fh.setLevel(logging.DEBUG)
-# create console handler with a higher log level
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-# create formatter and add it to the handlers
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-ch.setFormatter(formatter)
-fh.setFormatter(formatter)
-# add the handlers to logger
-logger.addHandler(ch)
-logger.addHandler(fh)
 
 
 class CircleEnv(gym.Env):
@@ -35,8 +14,7 @@ class CircleEnv(gym.Env):
         """
         Define self.observation_space and self.action_space
         """
-        self.__set_logging_level(log_level)
-        logger.debug("init")
+        self.configure_logging(log_level=log_level)
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
@@ -49,7 +27,6 @@ class CircleEnv(gym.Env):
         self.simulation.add_vehicles(self.vehicles_to_spawn)
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
 
         # --- Define action space ---        
@@ -70,6 +47,39 @@ class CircleEnv(gym.Env):
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
+
+    def configure_logging(self, log_file_path=None, log_level="info"):
+        if log_file_path is None:
+            log_file_path = "./logs/environment_instantiation.log"
+        logger = logging.getLogger("environment_logger")
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        logger.setLevel(logging.DEBUG)
+        # create console handler 
+        ch = logging.StreamHandler()
+        # console_log_level = self.__convert_logging_level(log_level)
+        console_log_level = logging.INFO
+        ch.setLevel(console_log_level)
+        ch.setFormatter(formatter)
+        # create file handler which logs even debug messages
+        fh = logging.FileHandler(log_file_path, mode="a")
+        fh.setLevel(logging.DEBUG)
+        fh.setFormatter(formatter)
+        # add the handlers to logger
+        logger.addHandler(ch)
+        logger.addHandler(fh)
+        self.logger = logger
+
+    def __convert_logging_level(self, log_level_str):
+        # Map string to logging level
+        log_levels = {
+            "debug": logging.DEBUG,
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "critical": logging.CRITICAL
+        }
+        log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
+        return log_level
 
     def __get_observation(self):
         self.state = self.simulation.get_state()
@@ -95,14 +105,14 @@ class CircleEnv(gym.Env):
         Returns: The observation of the initial state
         Reset the environment to initial state so that a new episode (independent of previous ones) may start
         """
-        logger.debug("reset")
+        self.logger.debug("reset")
         super().reset(seed=seed) # needed for api compliance
         self.added_vehicles = []
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        logger.debug(f"vehicle_ids: {self.vehicle_ids}")
+        self.logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
 
         self.simulation.step() # to spawn first vehicle
@@ -110,31 +120,19 @@ class CircleEnv(gym.Env):
 
         observation = self.__get_observation()
         info = self.__get_info()
-        logger.debug(f"reset observation: {observation}")
+        self.logger.debug(f"reset observation: {observation}")
         return (observation, info)
 
-    def __set_logging_level(self, log_level_str):
-        # Map string to logging level
-        log_levels = {
-            "debug": logging.DEBUG,
-            "info": logging.INFO,
-            "warning": logging.WARNING,
-            "error": logging.ERROR,
-            "critical": logging.CRITICAL
-        }
-        log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
-        logger.setLevel(log_level)
-
     def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
-        logger.debug(f"state: {self.state}, step reward: {reward}")
+        self.logger.debug(f"state: {self.state}, step reward: {reward}")
         if terminated:
-            logger.info("episode terminated")
+            self.logger.info("episode terminated")
             if all_vehicles_at_destination:
-                logger.info("all vehicles arrived at their destination")
+                self.logger.info("all vehicles arrived at their destination")
             if battery_is_empty:
-                logger.info("one vehicle's battery is empty")
+                self.logger.info("one vehicle's battery is empty")
         if truncated:
-            logger.info("episode truncated")
+            self.logger.info("episode truncated")
 
     def __action_is_charge(self, vehicle_action):
         return vehicle_action in (1,2,3,4)
@@ -146,7 +144,7 @@ class CircleEnv(gym.Env):
         """
         Handles the action for the vehicle with the given vehicle_id.
         """
-        logger.debug(f"action {vehicle_action} for {vehicle_id}")
+        self.logger.debug(f"action {vehicle_action} for {vehicle_id}")
         action_penalty = 0
 
         # for already arrived vehicles, do nothing and return. No penalty is given because the agent has to select an action for each vehicle in each step (due to the action space being static and not dynamic)
@@ -162,25 +160,25 @@ class CircleEnv(gym.Env):
             charging_stations = self.simulation.get_all_charging_station_ids()
             cs_id = charging_stations[vehicle_action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
             if cs_id == next_charging_stop:
-                logger.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
+                self.logger.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
                 return action_penalty
             try:
                 self.simulation.reroute_for_charging(vehicle_id, cs_id)
-                logger.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
+                self.logger.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
                 # penalize the agent if it sends a vehicle charging although its battery is full enough to reach the destination
                 remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
                 if remaining_range_is_sufficient is None:
-                    logger.debug(f"vehicle {vehicle_id} was asked for remaining range but doesn't seem to exist")
+                    self.logger.debug(f"vehicle {vehicle_id} was asked for remaining range but doesn't seem to exist")
                 if remaining_range_is_sufficient:
                     action_penalty = -1
             except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
-                logger.error(e)
+                self.logger.error(e)
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
                 action_penalty = -1
         elif self.__action_is_do_nothing(vehicle_action):
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(vehicle_id)
-                logger.debug(f"Charging stop removed for vehicle {vehicle_id}")
+                self.logger.debug(f"Charging stop removed for vehicle {vehicle_id}")
         return action_penalty
 
     def __perform_actions(self, actionlist):
@@ -204,16 +202,16 @@ class CircleEnv(gym.Env):
         vehicle_just_reached_destination = destination_is_reached and vehicle_just_despawned
         
         if vehicle_just_despawned:
-            logger.info(f"Vehicle {vehicle_id} despawned")
+            self.logger.info(f"Vehicle {vehicle_id} despawned")
 
         if vehicle_just_reached_destination:
-            logger.info(f"Vehicle {vehicle_id} JUST reached destination")
+            self.logger.info(f"Vehicle {vehicle_id} JUST reached destination")
 
         if destination_is_reached:
-            logger.debug(f"Vehicle {vehicle_id} destination is reached")
+            self.logger.debug(f"Vehicle {vehicle_id} destination is reached")
 
         if battery_is_empty:
-            logger.info(f"Vehicle {vehicle_id} is empty")
+            self.logger.info(f"Vehicle {vehicle_id} is empty")
 
         reward_per_vehicle = -10 if battery_is_empty else 1 if vehicle_just_reached_destination else 0
         # TODO: battery_is_empty, destination_is_reached sollten im state gespeichert werden (z.B. in einem vehicle objekt). Dann ist die Funktion hier auch deutlich sauberer
@@ -236,16 +234,11 @@ class CircleEnv(gym.Env):
                 all_vehicles_at_destination = False
         return reward, one_vehicle_is_empty, all_vehicles_at_destination
 
-    def step(self, action, log_level=None):
+    def step(self, action):
         """
         Returns: The next observation, the reward, done and optionally additional info
         """
-        # Dynamically set the logging level for this step
-        if log_level is not None:
-            # Save the current logging level to reset it after the step
-            original_log_level = logger.level
-            self.__set_logging_level(log_level)
-                
+               
         charging_request = False
         accumulated_reward = 0
 
@@ -257,20 +250,20 @@ class CircleEnv(gym.Env):
         loop_counter = 0
         while not charging_request:
             
-            logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
+            self.logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
             observation = self.__get_observation()
-            logger.debug(f"step while loop observation: {observation}")
+            self.logger.debug(f"step while loop observation: {observation}")
 
             # Find out if there are new vehicle ids online or offline
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
-            logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
+            self.logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
             # Find out if there are vehicles that just finished charging
             just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
             temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(observation, newly_arrived_ids)
-            logger.debug(f"step while loop reward: {temp_reward}")
+            self.logger.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
             terminated = one_vehicle_is_empty or all_vehicles_at_destination
@@ -284,7 +277,7 @@ class CircleEnv(gym.Env):
             # i.e. a vehicle was not evaluated yet or needs re-evaluation
             if newly_spawned_ids or just_charged_ids:
                 charging_request = True
-                logger.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
+                self.logger.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
 
             if terminated or truncated:
                 break
@@ -295,9 +288,6 @@ class CircleEnv(gym.Env):
         info = self.__get_info()
 
         self.__log_step_details(observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
-        # Reset the logging level to its original state
-        if log_level is not None:
-            logger.setLevel(original_log_level)
         
         return observation, reward, terminated, truncated, info
 
@@ -308,7 +298,7 @@ class CircleEnv(gym.Env):
         Show the current environment state e.g. the graphical window in 'CartPole-v1'
         This method must be implemented, but it is OK to have an empty implementation if rendering is not important
         """
-        logger.debug("render")
+        self.logger.debug("render")
         pass
 
     def close(self):
@@ -316,7 +306,7 @@ class CircleEnv(gym.Env):
         Returns: None
         This is optional. Used to cleanup all resources (threads, graphical windows, etc)
         """
-        logger.debug("close")
+        self.logger.debug("close")
         self.simulation.close()
 
 
