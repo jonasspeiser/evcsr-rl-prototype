@@ -118,7 +118,7 @@ class CircleEnv(gym.Env):
         # I could think about penalizing it if it tries to send it to a charging station instead of just taking action 0. But right now that doesn't seem necessary.
         if vehicle_id in self.arrived_vehicle_ids:
             return action_penalty
-
+        
         next_charging_stop = self.simulation.get_next_charging_stop_id(vehicle_id)
         charging_stop_is_planned = next_charging_stop is not None
         
@@ -174,9 +174,6 @@ class CircleEnv(gym.Env):
         if vehicle_just_reached_destination:
             logger.info(f"Vehicle {vehicle_id} JUST reached destination")
 
-        if destination_is_reached:
-            logger.debug(f"Vehicle {vehicle_id} destination is reached")
-
         if battery_is_empty:
             logger.info(f"Vehicle {vehicle_id} is empty")
 
@@ -208,13 +205,9 @@ class CircleEnv(gym.Env):
                
         charging_request = False
         accumulated_reward = 0
-
-        # perform actions for all vehicles
-        action_penalty = self.__perform_actions(action)
-        accumulated_reward += action_penalty
-        
-        # loop through sumo-steps until the next vehicle goes online
         loop_counter = 0
+
+        # loop through sumo-steps until the next vehicle goes online or a vehicle just finished charging
         while not charging_request:
             
             logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
@@ -229,14 +222,20 @@ class CircleEnv(gym.Env):
             # Find out if there are vehicles that just finished charging
             just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
+            # only execute once per step
+            if loop_counter == 0:
+                # perform actions for all vehicles
+                action_penalty = self.__perform_actions(action)
+                accumulated_reward += action_penalty
+
+            # calculate reward             
             temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(observation, newly_arrived_ids)
             logger.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
+
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
             terminated = one_vehicle_is_empty or all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than 300 SUMO simulation steps WITHOUT a charging request being triggered)
-            # truncated = not self.simulation.active_vehicles_exist()
-            loop_counter += 1
             truncated = loop_counter > 300
 
             # end the step for the agent if there is a charging request or the episode is terminated or truncated  
@@ -248,7 +247,8 @@ class CircleEnv(gym.Env):
 
             if terminated or truncated:
                 break
-
+            
+            loop_counter += 1
             self.simulation.step()
         
         reward = accumulated_reward

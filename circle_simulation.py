@@ -130,7 +130,10 @@ class Simulation():
 
     def get_next_charging_stop_id(self, vehicle_id):
         """ Returns the charging station id for the next planned stop for given vehicle_id. Returns None if no stop is planned. """
-        stops = self.get_stops(vehicle_id)
+        try:
+            stops = self.get_stops(vehicle_id)
+        except ValueError as e:
+            raise e
         if stops:
             return stops[0].stoppingPlaceID
         return None
