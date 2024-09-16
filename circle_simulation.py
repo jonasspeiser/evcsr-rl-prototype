@@ -8,7 +8,7 @@ from sumolib import checkBinary
 
 # configure logging
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rl.environment.simulation") # child logger of "application.environment"
 
 # define color values for vehicles in the GUI
 BLUE = [153, 255, 255]
