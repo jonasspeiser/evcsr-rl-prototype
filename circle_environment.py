@@ -279,19 +279,18 @@ class CircleEnv(gym.Env):
 
 if __name__ == "__main__":
 
-    def configure_logging():
-        # set up logging to file
-        logging.basicConfig(level=logging.DEBUG,
-                        format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                        datefmt='%m-%d %H:%M',
-                        filename='logs/myapp.log',
-                        filemode='w')
+    def configure_logging(log_file_path='logs/myapp.log'):
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         # define a Handler which writes INFO messages or higher to the sys.stderr
         console_handler = logging.StreamHandler()
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(formatter)
-        logging.getLogger("rl").addHandler(console_handler)
+        # create file handler which logs even debug messages
+        file_handler = logging.FileHandler(log_file_path, mode="w")
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        # add the handlers to the (root) logger
+        logging.basicConfig(level=logging.DEBUG, handlers=[console_handler, file_handler])
 
     # Some quick tests
 
