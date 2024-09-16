@@ -14,7 +14,7 @@ class CircleEnv(gym.Env):
         """
         Define self.observation_space and self.action_space
         """
-        self.configure_logging(log_level=log_level)
+        self.configure_logging(console_log_level=log_level)
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
 
@@ -48,25 +48,26 @@ class CircleEnv(gym.Env):
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
 
-    def configure_logging(self, log_file_path=None, log_level="info"):
-        if log_file_path is None:
-            log_file_path = "./logs/environment_instantiation.log"
+    def configure_logging(self, log_file_path=None, console_log_level="info"):
         logger = logging.getLogger("environment_logger")
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         logger.setLevel(logging.DEBUG)
-        # create console handler 
-        ch = logging.StreamHandler()
-        # console_log_level = self.__convert_logging_level(log_level)
-        console_log_level = logging.INFO
-        ch.setLevel(console_log_level)
-        ch.setFormatter(formatter)
-        # create file handler which logs even debug messages
-        fh = logging.FileHandler(log_file_path, mode="a")
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
-        # add the handlers to logger
-        logger.addHandler(ch)
-        logger.addHandler(fh)
+
+        if console_log_level is not None:
+            # create console handler 
+            ch = logging.StreamHandler()
+            log_level = self.__convert_logging_level(console_log_level)
+            ch.setLevel(log_level)
+            ch.setFormatter(formatter)
+            logger.addHandler(ch)
+
+        if log_file_path is not None:
+            # create file handler which logs even debug messages
+            fh = logging.FileHandler(log_file_path, mode="a")
+            fh.setLevel(logging.DEBUG)
+            fh.setFormatter(formatter)
+            logger.addHandler(fh)
+
         self.logger = logger
 
     def __convert_logging_level(self, log_level_str):
@@ -78,8 +79,19 @@ class CircleEnv(gym.Env):
             "error": logging.ERROR,
             "critical": logging.CRITICAL
         }
-        log_level = log_levels.get(log_level_str.lower(), logging.DEBUG)  # Default to DEBUG if not found
+        log_level = log_levels.get(log_level_str.lower(), logging.INFO)  # Default to INFO if not found
         return log_level
+
+    def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
+        self.logger.debug(f"state: {self.state}, step reward: {reward}")
+        if terminated:
+            self.logger.info("episode terminated")
+            if all_vehicles_at_destination:
+                self.logger.info("all vehicles arrived at their destination")
+            if battery_is_empty:
+                self.logger.info("one vehicle's battery is empty")
+        if truncated:
+            self.logger.info("episode truncated")        
 
     def __get_observation(self):
         self.state = self.simulation.get_state()
@@ -122,17 +134,6 @@ class CircleEnv(gym.Env):
         info = self.__get_info()
         self.logger.debug(f"reset observation: {observation}")
         return (observation, info)
-
-    def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
-        self.logger.debug(f"state: {self.state}, step reward: {reward}")
-        if terminated:
-            self.logger.info("episode terminated")
-            if all_vehicles_at_destination:
-                self.logger.info("all vehicles arrived at their destination")
-            if battery_is_empty:
-                self.logger.info("one vehicle's battery is empty")
-        if truncated:
-            self.logger.info("episode truncated")
 
     def __action_is_charge(self, vehicle_action):
         return vehicle_action in (1,2,3,4)

@@ -4,12 +4,13 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
 import random
 import traci
-import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-
 from sumolib import checkBinary
 
+# configure logging
+import logging
+logger = logging.getLogger(__name__)
+
+# define color values for vehicles in the GUI
 BLUE = [153, 255, 255]
 GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
@@ -110,7 +111,7 @@ class Simulation():
         try:
             traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="")
         except traci.exceptions.TraCIException:
-            logging.info("No charging stop to remove")
+            logger.info("No charging stop to remove")
 
     def get_stops(self, vehicle_id):
         try:
@@ -244,7 +245,7 @@ class Simulation():
         traci.vehicle.setColor(vehicle_id, color)  
 
     def __simulate_empty_battery(self, vehicle_id):
-        logging.info("Battery empty, vehicle will dissapear shortly")
+        logger.info("Battery empty, vehicle will dissapear shortly")
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
@@ -278,7 +279,7 @@ class Simulation():
             battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
             battery_soc = int(round(battery_soc))
         except traci.exceptions.TraCIException: # if battery_soc is not returned by TraCI
-            logging.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
+            logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
             battery_soc = None
             distance_to_cs = None
             vehicle_edge = None
