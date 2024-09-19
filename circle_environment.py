@@ -138,10 +138,12 @@ class CircleEnv(gym.Env):
                     logger.debug(f"vehicle {vehicle_id} was asked for remaining range but doesn't seem to exist")
                 if remaining_range_is_sufficient:
                     action_penalty = -1
+                    logger.debug(f"action penalty: vehicle {vehicle_id} was asked to charge but has enough range to reach destination (reward -1)")
             except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
                 logger.error(e)
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
                 action_penalty = -1
+                logger.debug(f"action penalty: vehicle {vehicle_id} tried to charge but is past the charging station (reward -1)")
         elif self.__action_is_do_nothing(vehicle_action):
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(vehicle_id)
@@ -172,13 +174,13 @@ class CircleEnv(gym.Env):
             logger.info(f"Vehicle {vehicle_id} despawned")
 
         if vehicle_just_reached_destination:
-            logger.info(f"Vehicle {vehicle_id} JUST reached destination")
+            logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +1)")
 
         if battery_is_empty:
-            logger.info(f"Vehicle {vehicle_id} is empty")
+            logger.info(f"Vehicle {vehicle_id} is empty (reward -10)")
 
-        reward_per_vehicle = -10 if battery_is_empty else 1 if vehicle_just_reached_destination else 0
-        # TODO: battery_is_empty, destination_is_reached sollten im state gespeichert werden (z.B. in einem vehicle objekt). Dann ist die Funktion hier auch deutlich sauberer
+        reward_per_vehicle = -100 if battery_is_empty else 10 if vehicle_just_reached_destination else 0
+        # TODO: battery_is_empty, destination_is_reached sollten im state gespeichert werden (z.B. in einem vehicle objekt). Dann ist der Return dieser Funktion hier auch deutlich sauberer
         return reward_per_vehicle, battery_is_empty, destination_is_reached
 
 
