@@ -16,7 +16,7 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
-SUMO_CONFIG_PATH = r"C:\Users\SPJ1WI\projects\rl_toy_usecase\circle.sumocfg"
+SUMO_CONFIG_PATH = "circle.sumocfg"
 CHARGING_DURATION = 5 # charging duration in seconds
 
 class Simulation():
@@ -30,6 +30,7 @@ class Simulation():
         else:
             sumoBinary = checkBinary('sumo')
         config_file = SUMO_CONFIG_PATH
+        print(f"Starting SUMO with sumoBinary {sumoBinary}")
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
