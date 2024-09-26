@@ -30,7 +30,6 @@ class Simulation():
         else:
             sumoBinary = checkBinary('sumo')
         config_file = SUMO_CONFIG_PATH
-        print(f"Starting SUMO with sumoBinary {sumoBinary}")
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
@@ -42,9 +41,22 @@ class Simulation():
 
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
-        self.charging_stations = traci.chargingstation.getIDList()
+        self.charging_stations = self.__fetch_charging_stations()
         self.added_vehicles = []
 
+
+    def __fetch_charging_stations(self):
+        charging_station_ids = traci.chargingstation.getIDList()
+        charging_stations = {}
+        for cs_id in charging_station_ids:
+            cs_edge = self.__get_cs_edge(cs_id)
+            charging_stations[cs_id] = cs_edge
+        return charging_stations
+
+    def __get_cs_edge(self, cs_id):
+        cs_lane = traci.chargingstation.getLaneID(cs_id)
+        cs_edge = traci.lane.getEdgeID(cs_lane)
+        return cs_edge
 
     def add_vehicles(self, amount = 1):
         """ 
@@ -67,11 +79,6 @@ class Simulation():
             raise ValueError("Vehicle is not on a lane")
         vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         return vehicle_edge
-
-    def __get_cs_edge(self, cs_id):
-        cs_lane = traci.chargingstation.getLaneID(cs_id)
-        cs_edge = traci.lane.getEdgeID(cs_lane)
-        return cs_edge
 
     def get_position_and_destination(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
@@ -96,7 +103,7 @@ class Simulation():
         # get vehicle type, lane, edge, and destination
         v_type = traci.vehicle.getTypeID(vehicle_id)
         current_vehicle_edge, destination = self.get_position_and_destination(vehicle_id)
-        cs_edge = self.__get_cs_edge(cs_id)
+        cs_edge = self.charging_stations[cs_id]
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
             # find route to charging station and from charging station to destination
             route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
@@ -154,6 +161,7 @@ class Simulation():
         # Get the energy consumption in Wh/km
         energy_consumption = energy_consumed / distance_travelled
         remaining_range_km = remaining_capacity / energy_consumption
+        logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
         return remaining_range_km
 
     def get_vehicle_destination(self, vehicle_id):
@@ -193,7 +201,7 @@ class Simulation():
         traci.simulation.loadState("initial_state")
 
     def get_all_charging_station_ids(self):
-        return self.charging_stations
+        return list(self.charging_stations.keys())
 
     def get_all_vehicle_ids(self):
         """ Returns a list of all vehicle ids that have been added to the simulation. """
@@ -259,9 +267,9 @@ class Simulation():
     def __get_distance_to_cs(self, vehicle_position) -> dict:
         charging_stations = self.charging_stations
         distance_dict = {}
-        for station_id in charging_stations:
-            charging_station_position = self.__get_cs_edge(station_id)
-            distance = self.__calculate_distance(vehicle_position, charging_station_position)
+        for station_id in charging_stations.keys():
+            charging_station_edge = charging_stations[station_id]
+            distance = self.__calculate_distance(vehicle_position, charging_station_edge)
             distance_dict[station_id] = float(distance)
         return distance_dict
 
