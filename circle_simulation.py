@@ -279,6 +279,16 @@ class Simulation():
             distance_dict[station_id] = float(distance)
         return distance_dict
 
+    def get_battery_soc(self, vehicle_id):
+        """Returns the actual battery capacity of the vehicle."""
+        try:
+            battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+            battery_soc = int(round(battery_soc))
+            return battery_soc
+        except traci.exceptions.TraCIException: 
+            logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
+            return None
+
     def get_vehicle_state(self, vehicle_id): 
         """
         Retrieves the state of a vehicle.
@@ -293,12 +303,8 @@ class Simulation():
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
-        try:
-            battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-            battery_soc = int(round(battery_soc))
-        except traci.exceptions.TraCIException: # if battery_soc is not returned by TraCI
-            logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")
-            battery_soc = None
+        battery_soc = self.get_battery_soc(vehicle_id)
+        if battery_soc is None: # if battery_soc is not returned by TraCI
             distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None

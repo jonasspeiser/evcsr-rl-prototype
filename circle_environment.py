@@ -11,12 +11,20 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
 
-    def __init__(self, render_mode=None, vehicles_to_spawn=1):
+    def __init__(self, render_mode=None, vehicles_to_spawn=1, observation_sampling_rate=30, truncate_after_n_steps=300):
         """
-        Define self.observation_space and self.action_space
+        Define self.observation_space and self.action_space.
+
+        Parameters:
+        - render_mode: str, the mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
+        - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation
+        - observation_sampling_rate: int, the rate at which the observation is sampled (i.e. every x simulation steps)
+        - truncate_after_n_steps: int, the number of simulation steps after which the episode is truncated if no charging request is triggered
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
+        self.observation_sampling_rate = observation_sampling_rate # only sample the observation every x simulation steps for performance reasons
+        self.truncate_after_n_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
 
         if self.render_mode == "human":
             gui = True
@@ -48,8 +56,8 @@ class CircleEnv(gym.Env):
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
 
-    def __log_step_details(self, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
-        logger.debug(f"state: {self.state}, step reward: {reward}")
+    def __log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
+        logger.debug(f"state: {simulation_state}, step reward: {reward}")
         if terminated:
             logger.info("episode terminated")
             if all_vehicles_at_destination:
@@ -59,11 +67,10 @@ class CircleEnv(gym.Env):
         if truncated:
             logger.info("episode truncated")        
 
-    def __get_observation(self):
-        self.state = self.simulation.get_state()
+    def __get_observation(self, simulation_state):
         observation = {}
         for vehicle_id in self.vehicle_ids:
-            vehicle_state = self.state[vehicle_id]
+            vehicle_state = simulation_state[vehicle_id]
             distance_dict = vehicle_state["distance_to_cs"]
             if distance_dict == None:
                 vehicle_observation = [-1, -1, -1, -1, -1] # signal that vehicle is not spawned yet
@@ -96,7 +103,8 @@ class CircleEnv(gym.Env):
         self.simulation.step() # to spawn first vehicle
         self.simulation.step()        
 
-        observation = self.__get_observation()
+        simulation_state = self.simulation.get_state()
+        observation = self.__get_observation(simulation_state)
         info = self.__get_info()
         logger.debug(f"reset observation: {observation}")
         return (observation, info)
@@ -160,37 +168,45 @@ class CircleEnv(gym.Env):
             action_penalty += self.__handle_vehicle_action(vehicle_id, vehicle_action)
         return action_penalty
 
-    def __get_reward_for_vehicle(self, vehicle_id, newly_arrived_ids):
-        vehicle_state = self.state[vehicle_id]
-        battery_soc = vehicle_state["battery_soc"]
+    def __destination_is_reached(self, vehicle_id):
+        return True if vehicle_id in self.arrived_vehicle_ids else False
 
-        # destination_edge_is_reached = (vehicle_state["vehicle_position"] == vehicle_state["vehicle_destination"])
-        destination_is_reached = True if vehicle_id in self.arrived_vehicle_ids else False
-        battery_is_empty = (battery_soc is not None) and (battery_soc == 0) # if battery_soc is None, the vehicle is not currently online
-        vehicle_just_despawned = True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
-        vehicle_just_reached_destination = destination_is_reached and vehicle_just_despawned
+    def __battery_is_empty(self, vehicle_id):
+        battery_soc = self.simulation.get_battery_soc(vehicle_id)
+        return (battery_soc is not None) and (battery_soc <= 0) # if battery_soc is None, the vehicle is not currently online
+
+    def __vehicle_has_just_despawned(self, vehicle_id, newly_arrived_ids):
+        return True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
+
+    def __get_reward_for_vehicle(self, vehicle_id, battery_is_empty, vehicle_has_just_reached_destination):
         
-        if vehicle_just_despawned:
-            logger.info(f"Vehicle {vehicle_id} despawned")
+        reward_per_vehicle = -100 if battery_is_empty else 10 if vehicle_has_just_reached_destination else 0
 
-        if vehicle_just_reached_destination:
+        if vehicle_has_just_reached_destination:
             logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +1)")
 
         if battery_is_empty:
             logger.info(f"Vehicle {vehicle_id} is empty (reward -10)")
 
-        reward_per_vehicle = -100 if battery_is_empty else 10 if vehicle_just_reached_destination else 0
-        # TODO: battery_is_empty, destination_is_reached sollten im state gespeichert werden (z.B. in einem vehicle objekt). Dann ist der Return dieser Funktion hier auch deutlich sauberer
-        return reward_per_vehicle, battery_is_empty, destination_is_reached
+        return reward_per_vehicle
 
 
-    def __calculate_reward(self, observation, newly_arrived_ids):
+    def __calculate_reward(self, newly_arrived_ids):
         reward = 0
         one_vehicle_is_empty = False
         all_vehicles_at_destination = True
 
-        for index, vehicle_id in enumerate(observation):
-            reward_per_vehicle, vehicle_is_empty, vehicle_is_at_destination = self.__get_reward_for_vehicle(vehicle_id, newly_arrived_ids, )
+        for index, vehicle_id in enumerate(self.vehicle_ids):
+
+            vehicle_is_empty = self.__battery_is_empty(vehicle_id)
+            vehicle_is_at_destination = self.__destination_is_reached(vehicle_id)
+            vehicle_has_just_despawned = self.__vehicle_has_just_despawned(vehicle_id, newly_arrived_ids)
+            if vehicle_has_just_despawned:
+                logger.info(f"Vehicle {vehicle_id} despawned")
+
+            vehicle_has_just_reached_destination = vehicle_is_at_destination and vehicle_has_just_despawned
+
+            reward_per_vehicle = self.__get_reward_for_vehicle(vehicle_id, vehicle_is_empty, vehicle_has_just_reached_destination)
             reward += reward_per_vehicle
 
             if vehicle_is_empty:
@@ -198,6 +214,7 @@ class CircleEnv(gym.Env):
 
             if not vehicle_is_at_destination:
                 all_vehicles_at_destination = False
+                
         return reward, one_vehicle_is_empty, all_vehicles_at_destination
 
     def step(self, action):
@@ -213,8 +230,6 @@ class CircleEnv(gym.Env):
         while not charging_request:
             
             logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
-            observation = self.__get_observation()
-            logger.debug(f"step while loop observation: {observation}")
 
             # Find out if there are new vehicle ids online or offline
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
@@ -225,20 +240,21 @@ class CircleEnv(gym.Env):
             just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
             # only execute once per step
-            if loop_counter == 0:
+            loop_just_started = loop_counter == 0
+            if loop_just_started == 0:
                 # perform actions for all vehicles
                 action_penalty = self.__perform_actions(action)
                 accumulated_reward += action_penalty
 
-            # calculate reward             
-            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(observation, newly_arrived_ids)
+            # calculate reward
+            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids)
             logger.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
 
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
             terminated = one_vehicle_is_empty or all_vehicles_at_destination
-            # Truncate (abort) when it takes too long (i.e. more than 300 SUMO simulation steps WITHOUT a charging request being triggered)
-            truncated = loop_counter > 300
+            # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
+            truncated = loop_counter > self.truncate_after_n_steps
 
             # end the step for the agent if there is a charging request or the episode is terminated or truncated  
             # a charging request is generated whenever a new vehicle enters the simulation or a vehicle just finished charging
@@ -246,6 +262,15 @@ class CircleEnv(gym.Env):
             if newly_spawned_ids or just_charged_ids:
                 charging_request = True
                 logger.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
+
+            important_event_happened = charging_request or terminated or truncated
+            some_simulation_time_passed = loop_counter % self.observation_sampling_rate == 0
+
+            # get observation (only every few simulation steps, for performance purposes)
+            if loop_just_started or some_simulation_time_passed or important_event_happened:
+                simulation_state = self.simulation.get_state()
+                observation = self.__get_observation(simulation_state)
+                logger.debug(f"step while loop observation: {observation}")
 
             if terminated or truncated:
                 break
@@ -256,7 +281,7 @@ class CircleEnv(gym.Env):
         reward = accumulated_reward
         info = self.__get_info()
 
-        self.__log_step_details(observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
+        self.__log_step_details(simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
         
         return observation, reward, terminated, truncated, info
 
