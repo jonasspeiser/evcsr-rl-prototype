@@ -43,6 +43,7 @@ class Simulation():
         traci.simulation.saveState("initial_state") # needed for reset
         self.charging_stations = self.__fetch_charging_stations()
         self.added_vehicles = []
+        self.vehicle_destinations = {}
 
 
     def __fetch_charging_stations(self):
@@ -165,7 +166,12 @@ class Simulation():
         return remaining_range_km
 
     def get_vehicle_destination(self, vehicle_id):
-        return traci.vehicle.getRoute(vehicle_id)[-1]
+        """ Returns the destination of given vehicle. Caches the destination for each vehicle, so isn't aware if destination changes in SUMO. """
+        destination = self.vehicle_destinations.get(vehicle_id)
+        if destination is None:
+            destination = traci.vehicle.getRoute(vehicle_id)[-1]
+            self.vehicle_destinations[vehicle_id] = destination
+        return destination
 
     def get_distance_to_destination(self, vehicle_id):
         """ Returns the driving distance of given vehicles current position to its destination. """
