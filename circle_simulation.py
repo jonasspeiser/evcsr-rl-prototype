@@ -59,7 +59,7 @@ class Simulation():
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
 
-    def add_vehicles(self, amount = 1):
+    def add_vehicles(self, amount = 1, random_seed = None):
         """ 
         Adds the specified amount of vehicles to the simulation. 
         Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
@@ -68,8 +68,9 @@ class Simulation():
         for i in range(amount):
             vehID = "myVehicle" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
+            battery_min = 100
             battery_max = 500
-            battery_soc = random.randint(50, battery_max)
+            battery_soc = random.randint(battery_min, battery_max)
             traci.vehicle.setParameter(vehID, "device.battery.maximumBatteryCapacity", str(battery_max))
             traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", str(battery_soc))
             self.added_vehicles.append(vehID)
