@@ -240,7 +240,7 @@ class CircleEnv(gym.Env):
             just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
             # only execute once per step
-            loop_just_started = loop_counter == 0
+            loop_just_started = (loop_counter == 0)
             if loop_just_started == 0:
                 # perform actions for all vehicles
                 action_penalty = self.__perform_actions(action)
@@ -264,7 +264,7 @@ class CircleEnv(gym.Env):
                 logger.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
 
             important_event_happened = charging_request or terminated or truncated
-            some_simulation_time_passed = loop_counter % self.observation_sampling_rate == 0
+            some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
 
             # get observation (only every few simulation steps, for performance purposes)
             if loop_just_started or some_simulation_time_passed or important_event_happened:
@@ -328,9 +328,13 @@ if __name__ == "__main__":
         print("CHECKS PASSED")
         env.close()
 
-    def demo_env():
+    def demo_env(random_seed=None):
         env = CircleEnv(render_mode="human", vehicles_to_spawn=15)
-        observation, info = env.reset()
+        # set seed for reproducability
+        import random
+        random.seed(random_seed) # needed for batteries of simulation class TODO: make this seedable via the env.seed of gymnasium
+        observation, info = env.reset(seed=random_seed)
+        env.action_space.seed(random_seed)
         for _ in range(20):
             action = env.action_space.sample() # select a random action
             observation, reward, terminated, truncated, info = env.step(action)
@@ -338,6 +342,6 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    configure_logging()
-    test_env()
-    # demo_env()
+    configure_logging(log_file_path='logs/myapp1.log')
+    # test_env()
+    demo_env(random_seed=1)

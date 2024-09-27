@@ -7,3 +7,5 @@ events.out.tfevents.*
 *.log
 # model dumps
 *.zip
+# benchmark files
+*.pstats
