@@ -43,6 +43,7 @@ class Simulation():
         traci.simulation.saveState("initial_state") # needed for reset
         self.charging_stations = self.__fetch_charging_stations()
         self.added_vehicles = []
+        self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
 
 
@@ -161,9 +162,13 @@ class Simulation():
         if distance_travelled == 0:
             return None
         # Get the energy consumption in Wh/km
-        energy_consumption = energy_consumed / distance_travelled
-        remaining_range_km = remaining_capacity / energy_consumption
-        logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
+        try:
+            energy_consumption = energy_consumed / distance_travelled
+            remaining_range_km = remaining_capacity / energy_consumption
+            logger.info(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
+            logger.debug(f"vehicle {vehicle_id}: Energy consumed: {energy_consumed}, distance travelled: {distance_travelled}, remaining capacity: {remaining_capacity}, energy consumption: {energy_consumption}")
+        except ZeroDivisionError as e:
+            raise ZeroDivisionError(f"Vehicle {vehicle_id} has not moved yet, can't calculate remaining range. energy_consumed: {energy_consumed}, distance_travelled: {distance_travelled}, remaining_capacity: {remaining_capacity}, energy_consumption: {energy_consumption}")
         return remaining_range_km
 
     def get_vehicle_destination(self, vehicle_id):
@@ -233,6 +238,17 @@ class Simulation():
     def get_arrived_vehicle_ids(self):
         """Returns a list of ids of all vehicles that have arrived at their destination during the current time step"""
         return traci.simulation.getArrivedIDList()
+
+    def get_charging_vehicle_ids(self):
+        charging_vehicles = []
+        charging_stations_ids = self.get_all_charging_station_ids()
+
+        for station in charging_stations_ids:
+            # Get vehicles stopped at this charging station
+            vehicles = traci.chargingstation.getVehicleIDs(station)
+            charging_vehicles.extend(vehicles)
+
+        return charging_vehicles
 
     def get_charging_stop_ending_vehicle_ids(self):
         """Returns a list of ids of vehicles that begin to continue their journey, leaving a scheduled stop in this time step"""

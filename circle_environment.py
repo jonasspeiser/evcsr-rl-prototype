@@ -191,13 +191,13 @@ class CircleEnv(gym.Env):
         return reward_per_vehicle
 
 
-    def __calculate_reward(self, newly_arrived_ids):
+    def __calculate_reward(self, newly_arrived_ids, charging_ids):
         reward = 0
         one_vehicle_is_empty = False
         all_vehicles_at_destination = True
 
         for index, vehicle_id in enumerate(self.vehicle_ids):
-
+            vehicle_is_charging = vehicle_id in charging_ids
             vehicle_is_empty = self.__battery_is_empty(vehicle_id)
             vehicle_is_at_destination = self.__destination_is_reached(vehicle_id)
             vehicle_has_just_despawned = self.__vehicle_has_just_despawned(vehicle_id, newly_arrived_ids)
@@ -214,7 +214,14 @@ class CircleEnv(gym.Env):
 
             if not vehicle_is_at_destination:
                 all_vehicles_at_destination = False
-                
+
+            if vehicle_is_charging:
+                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
+                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
+                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
+                if not remaining_range_is_sufficient:
+                    reward +1
+                                
         return reward, one_vehicle_is_empty, all_vehicles_at_destination
 
     def step(self, action):
@@ -234,6 +241,8 @@ class CircleEnv(gym.Env):
             # Find out if there are new vehicle ids online or offline
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
+            charging_ids = self.simulation.get_charging_vehicle_ids()
+            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, charging_ids: {charging_ids}")
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
             logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
             # Find out if there are vehicles that just finished charging
@@ -247,7 +256,7 @@ class CircleEnv(gym.Env):
                 accumulated_reward += action_penalty
 
             # calculate reward
-            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids)
+            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids, charging_ids)
             logger.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
 
@@ -342,6 +351,6 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
     
-    configure_logging(log_file_path='logs/myapp1.log')
-    # test_env()
-    demo_env(random_seed=1)
+    configure_logging(log_file_path='logs/myapp.log')
+    test_env()
+    # demo_env(random_seed=1)
