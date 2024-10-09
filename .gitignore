@@ -9,3 +9,5 @@ events.out.tfevents.*
 *.zip
 # benchmark files
 *.pstats
+# python venvs
+.venv
