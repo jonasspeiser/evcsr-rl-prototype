@@ -59,6 +59,27 @@ class Simulation():
         cs_lane = traci.chargingstation.getLaneID(cs_id)
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
+    
+    def add_non_member_routes(self):
+        """Add routes for charging station usage of non-member EVs"""
+        for cs_id, cs_edge in self.charging_stations.items():
+            incoming_edges = traci.edge.getIncoming(cs_edge)
+            outgoing_edges = traci.edge.getOutgoing(cs_edge)
+            traci.route.add(f"{cs_id}_non_member_route", [incoming_edges[0], cs_edge, outgoing_edges[0]])
+        
+    def add_non_member_vehicle(self, cs_id, depart_time, charge_duration):
+        """
+        Add a vehicle with a specific departure time directly in front of specified charging station. The vehicle disappears shortly after charging has finished.
+        Params: 
+            cs_id (str): The CS where the vehicle should charge
+            depart_time (int): The time step at which the vehicle should enter the simulation (in seconds)
+            charge_duration (int): The charging duraction in seconds
+        """
+        vehicle_id = f"non_member_ev_{depart_time}"
+        route_id = f"{cs_id}_non_member_route"
+        traci.vehicle.add(vehicle_id, route_id, depart=depart_time)
+        traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=charge_duration)
+
 
     def add_vehicles(self, amount = 1, random_seed = None):
         """ 
