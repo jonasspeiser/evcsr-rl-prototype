@@ -2,6 +2,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from circle_simulation import Simulation
+from data_processing import Obelis_Data_Provider
 
 # configure logging
 import logging
@@ -37,6 +38,9 @@ class CircleEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         self.arrived_vehicle_ids = []
 
+        self.data_provider = Obelis_Data_Provider()
+        self.__add_non_member_vehicles()
+
         # --- Define action space ---        
         # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
         actions_per_vehicle = 5 
@@ -67,6 +71,12 @@ class CircleEnv(gym.Env):
         if truncated:
             logger.info("episode truncated")        
 
+    def __add_non_member_vehicles(self):
+        self.simulation.add_non_member_routes()
+        vehicle_data = self.data_provider.get_non_member_vehicle_data()
+        for entry in vehicle_data:
+            self.simulation.add_non_member_vehicle(cs_id=entry["cs_id"], depart_time=entry["charge_begin_seconds"], charge_duration=entry["charge_duration"])
+    
     def __get_observation(self, simulation_state):
         observation = {}
         for vehicle_id in self.vehicle_ids:
@@ -99,6 +109,8 @@ class CircleEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
+
+        self.__add_non_member_vehicles()
 
         self.simulation.step() # to spawn first vehicle
         self.simulation.step()        

@@ -2,7 +2,7 @@ import pandas as pd
 
 CSV_PATH="obelis_data/df_lv.csv"
 
-class Obelis_Data_Processor():
+class Obelis_Data_Provider():
 
 
     def __init__(self) -> None:
