@@ -1,13 +1,14 @@
 import pandas as pd
 
+CSV_PATH="obelis_data/df_lv.csv"
+
 class Obelis_Data_Processor():
+
 
     def __init__(self) -> None:
         self.lp_ids = ['6804_shuffled', '6973_shuffled', '16564_shuffled', '6326_shuffled']
+        self.df = pd.read_csv(CSV_PATH, delimiter=";", parse_dates=["beginn", "ende"])
 
-    def __import_from_csv(self, csv_path="obelis_data/df_lv.csv"):
-        df = pd.read_csv(csv_path, delimiter=";", parse_dates=["beginn", "ende"])
-        return df
     
     def __prepare_dataframe(self, dataframe, filter_date):
         # include only the lp_ids specified in self.lp_ids
@@ -50,7 +51,7 @@ class Obelis_Data_Processor():
 
     def get_non_member_vehicle_data(self):
         filter_date = '2023-03-05'
-        df = self.__import_from_csv()
+        df = self.df
         df_filtered = self.__prepare_dataframe(df, filter_date)
         vehicle_data = self.extract_non_member_vehicle_data(df_filtered)
         return vehicle_data
