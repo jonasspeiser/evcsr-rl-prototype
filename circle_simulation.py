@@ -63,9 +63,7 @@ class Simulation():
     def add_non_member_routes(self):
         """Add routes for charging station usage of non-member EVs"""
         for cs_id, cs_edge in self.charging_stations.items():
-            incoming_edges = traci.edge.getIncoming(cs_edge)
-            outgoing_edges = traci.edge.getOutgoing(cs_edge)
-            traci.route.add(f"{cs_id}_non_member_route", [incoming_edges[0], cs_edge, outgoing_edges[0]])
+            traci.route.add(f"{cs_id}_non_member_route", [cs_edge])
         
     def add_non_member_vehicle(self, cs_id, depart_time, charge_duration):
         """
@@ -88,7 +86,7 @@ class Simulation():
         """
         traci.route.add("trip", ["E0", "E19"])
         for i in range(amount):
-            vehID = "myVehicle" + str(i)
+            vehID = "member_ev_" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
             battery_min = 100
             battery_max = 500
@@ -235,14 +233,19 @@ class Simulation():
 
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
+    
+    def __filter_list_for_member_evs(self, original_list):
+        filtered_list = [item for item in original_list if item.startswith("member_ev")]
+        return filtered_list
 
     def get_all_vehicle_ids(self):
         """ Returns a list of all vehicle ids that have been added to the simulation. """
         return self.added_vehicles
 
     def get_online_vehicle_ids(self):
-        """Returns a list of ids of all vehicles currently running within the scenario"""
-        return traci.vehicle.getIDList()
+        """Returns a list of ids of all member vehicles currently running within the scenario"""
+        original_list= traci.vehicle.getIDList()
+        return self.__filter_list_for_member_evs(original_list)
 
     def get_loaded_vehicle_ids(self):
         """
@@ -250,15 +253,21 @@ class Simulation():
         Remark: Sumo does not load all vehicle definitions in advance but only when they are needed. 
         If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define inidvidual vehicles not with flows. 
         """
-        return traci.simulation.getLoadedIDList()
+        original_list = traci.simulation.getLoadedIDList()
+        return self.__filter_list_for_member_evs(original_list)
+
 
     def get_spawned_vehicle_ids(self):
-        """Returns a list of ids of all vehicles that have spawned during the current time step"""
-        return traci.simulation.getDepartedIDList()        
+        """Returns a list of ids of all member vehicles that have spawned during the current time step"""
+        original_list = traci.simulation.getDepartedIDList()
+        return self.__filter_list_for_member_evs(original_list)
+
 
     def get_arrived_vehicle_ids(self):
-        """Returns a list of ids of all vehicles that have arrived at their destination during the current time step"""
-        return traci.simulation.getArrivedIDList()
+        """Returns a list of ids of all member vehicles that have arrived at their destination during the current time step"""
+        original_list = traci.simulation.getArrivedIDList()
+        return self.__filter_list_for_member_evs(original_list)
+
 
     def get_charging_vehicle_ids(self):
         charging_vehicles = []
@@ -269,11 +278,15 @@ class Simulation():
             vehicles = traci.chargingstation.getVehicleIDs(station)
             charging_vehicles.extend(vehicles)
 
-        return charging_vehicles
+        original_list = charging_vehicles
+        return self.__filter_list_for_member_evs(original_list)
+
 
     def get_charging_stop_ending_vehicle_ids(self):
-        """Returns a list of ids of vehicles that begin to continue their journey, leaving a scheduled stop in this time step"""
-        return traci.simulation.getStopEndingVehiclesIDList()
+        """Returns a list of ids of member vehicles that begin to continue their journey, leaving a scheduled stop in this time step"""
+        original_list = traci.simulation.getStopEndingVehiclesIDList()
+        return self.__filter_list_for_member_evs(original_list)
+    
 
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
@@ -376,37 +389,54 @@ class Simulation():
 
 if __name__ == "__main__":
 
-    def adapt_destination(vehicle_id):
+    simulation = Simulation(gui=True)
+
+    def __adapt_destination(vehicle_id, vehicle_state):
         """Routes the vehicles in circles"""
         start = "E0"
         end = "E10"
-        position = state["vehicle_position"]
-        destination = state["vehicle_destination"]
+        position = vehicle_state["vehicle_position"]
+        destination = vehicle_state["vehicle_destination"]
         if position == destination:
             traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)  
 
     def driving_in_circles():
         cs_id = "cs_0"
 
-        simulation = Simulation(gui=True)
-
         simulation.add_vehicles(50)
 
         while simulation.active_vehicles_exist():
 
             for vehicle_id in simulation.get_all_vehicle_ids():
-                state = simulation.get_vehicle_state(vehicle_id)
-                print(state)
+                vehicle_state = simulation.get_vehicle_state(vehicle_id)
+                print(vehicle_state)
                 # send the vehicle driving in circles
-                adapt_destination(vehicle_id)
+                __adapt_destination(vehicle_id, vehicle_state)
                 # reroute to charging station if battery is low
-                if float(state["battery_soc"]) < 100:
+                if float(vehicle_state["battery_soc"]) < 100:
                     print("Battery low, rerouting to charge")
                     simulation.reroute_for_charging(vehicle_id, cs_id)
 
             simulation.step()
 
         simulation.close()
+
+    def test_non_member_vehicles():
+        from data_processing import Obelis_Data_Provider
+        data_provider = Obelis_Data_Provider()
+        print("Data provider added")
+        simulation.add_non_member_routes()
+        print("routes added")
+        vehicle_data = data_provider.get_non_member_vehicle_data()
+        print("got non member vehicle data")
+        for entry in vehicle_data:
+            simulation.add_non_member_vehicle(cs_id=entry["cs_id"], depart_time=entry["charge_begin_seconds"], charge_duration=entry["charge_duration"])
+        
+        for i in range(40000):
+            simulation.step()
+        
+        simulation.close()
     
-    driving_in_circles()
+    # driving_in_circles()
+    test_non_member_vehicles()
 
