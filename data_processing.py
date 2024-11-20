@@ -1,13 +1,15 @@
 import pandas as pd
 
 CSV_PATH="obelis_data/df_lv.csv"
+FEATHER_PATH="obelis_data/df_lv.feather"
 
 class Obelis_Data_Provider():
 
 
     def __init__(self) -> None:
         self.lp_ids = ['6804_shuffled', '6973_shuffled', '16564_shuffled', '6326_shuffled']
-        self.df = pd.read_csv(CSV_PATH, delimiter=";", parse_dates=["beginn", "ende"])
+        # self.df = pd.read_csv(CSV_PATH, delimiter=";", parse_dates=["beginn", "ende"])
+        self.df = pd.read_feather(FEATHER_PATH)
 
     
     def __prepare_dataframe(self, dataframe, filter_date):
