@@ -12,7 +12,7 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
 
-    def __init__(self, render_mode=None, vehicles_to_spawn=1, observation_sampling_rate=30, truncate_after_n_steps=300):
+    def __init__(self, render_mode=None, vehicles_to_spawn=1, observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs:bool=False):
         """
         Define self.observation_space and self.action_space.
 
@@ -21,6 +21,7 @@ class CircleEnv(gym.Env):
         - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation
         - observation_sampling_rate: int, the rate at which the observation is sampled (i.e. every x simulation steps)
         - truncate_after_n_steps: int, the number of simulation steps after which the episode is truncated if no charging request is triggered
+        - simulate_non_member_evs: bool, whether or not to spawn non-member EVs. Default: False
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -38,8 +39,10 @@ class CircleEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         self.arrived_vehicle_ids = []
 
-        self.data_provider = Obelis_Data_Provider()
-        self.__add_non_member_vehicles()
+        self.simulate_non_member_evs = simulate_non_member_evs
+        if self.simulate_non_member_evs:
+            self.data_provider = Obelis_Data_Provider()
+            self.__add_non_member_vehicles()
 
         # --- Define action space ---        
         # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
@@ -110,7 +113,8 @@ class CircleEnv(gym.Env):
         logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
 
-        self.__add_non_member_vehicles()
+        if self.simulate_non_member_evs:
+            self.__add_non_member_vehicles()
 
         self.simulation.step() # to spawn first vehicle
         self.simulation.step()        
