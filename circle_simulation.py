@@ -400,6 +400,23 @@ if __name__ == "__main__":
         if position == destination:
             traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)  
 
+    def __print_vehicle_charging(vehicle_ids):
+        for vehicle_id in vehicle_ids:
+            is_charging = traci.vehicle.getStopState(vehicle_id) & 2 ** 5 != 0
+
+            if is_charging:
+                charging_station = traci.vehicle.getStopState(vehicle_id) & 2 ** 13 != 0
+
+                print(f"Vehicle {vehicle_id} is charging at a {'charging station' if charging_station else 'parking area'}")
+
+                # Get additional charging information
+                battery_capacity = traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity")
+                energy_charged = traci.vehicle.getParameter(vehicle_id, "device.battery.energyCharged")
+
+                print(f"  Battery Capacity: {battery_capacity} Wh")
+                print(f"  Energy Charged: {energy_charged} Wh")
+
+
     def driving_in_circles():
         cs_id = "cs_0"
 
@@ -422,6 +439,7 @@ if __name__ == "__main__":
         simulation.close()
 
     def test_non_member_vehicles():
+        """Test whether non_member_vehicles are spawning and despawning as expected - compare console output of this function to data source."""
         from data_processing import Obelis_Data_Provider
         data_provider = Obelis_Data_Provider()
         print("Data provider added")
@@ -431,8 +449,34 @@ if __name__ == "__main__":
         print("got non member vehicle data")
         for entry in vehicle_data:
             simulation.add_non_member_vehicle(cs_id=entry["cs_id"], depart_time=entry["charge_begin_seconds"], charge_duration=entry["charge_duration"])
+
+        # Set to keep track of vehicles in the simulation
+        active_vehicles = set()
+        # Subscribe to vehicle arrival and departure events
+        traci.simulation.subscribe([traci.constants.VAR_DEPARTED_VEHICLES_IDS, 
+                                    traci.constants.VAR_ARRIVED_VEHICLES_IDS])
         
         for i in range(40000):
+            # Get the current simulation step
+            current_step = traci.simulation.getTime()
+
+            # Get subscription results
+            result = traci.simulation.getSubscriptionResults()
+
+            # Check for new vehicles (spawned)
+            if result[traci.constants.VAR_DEPARTED_VEHICLES_IDS]:
+                for vehicle_id in result[traci.constants.VAR_DEPARTED_VEHICLES_IDS]:
+                    print(f"Step {current_step}: Vehicle {vehicle_id} spawned")
+                    active_vehicles.add(vehicle_id)
+
+            # Check for arrived vehicles (despawned)
+            if result[traci.constants.VAR_ARRIVED_VEHICLES_IDS]:
+                for vehicle_id in result[traci.constants.VAR_ARRIVED_VEHICLES_IDS]:
+                    print(f"Step {current_step}: Vehicle {vehicle_id} despawned")
+                    active_vehicles.remove(vehicle_id)
+            
+            __print_vehicle_charging(active_vehicles)
+            
             simulation.step()
         
         simulation.close()
