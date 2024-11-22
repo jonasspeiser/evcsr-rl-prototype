@@ -1,6 +1,6 @@
 traci
 stable-baselines3
 tensorboard
-SuperSuit
 gymnasium
-pettingzoo
+pandas
+pyarrow
