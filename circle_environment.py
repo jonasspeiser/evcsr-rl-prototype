@@ -38,6 +38,7 @@ class CircleEnv(gym.Env):
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         self.arrived_vehicle_ids = []
+        self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
 
         self.simulate_non_member_evs = simulate_non_member_evs
         if self.simulate_non_member_evs:
@@ -55,11 +56,13 @@ class CircleEnv(gym.Env):
 
 
         # --- Define observation space ---
-        # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
+        # We have 4 types of observations: the current state of the battery and the current distance to the next charging station
         # battery soc is in between 0 and 100000 Wh, distance to each of the charging stations is in between 0 and 2000 meters
-        # All values are normalized.
+        # These values are normalized.
+        # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())
+        # A binary value informs wether the vehicle has (1) or has not (0) reached its destination yet
         # -1 is used to signal that the vehicle is not spawned yet ("padding")
-        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1]), high=np.array([1, 1, 1, 1, 1]), dtype=np.float32) 
+        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1, -1, 0]), high=np.array([1, 1, 1, 1, 1, 4, 0]), dtype=np.float32) 
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -87,14 +90,17 @@ class CircleEnv(gym.Env):
             vehicle_state = simulation_state[vehicle_id]
             distance_dict = vehicle_state["distance_to_cs"]
             if distance_dict == None:
-                vehicle_observation = [-1, -1, -1, -1, -1] # signal that vehicle is not spawned yet
+                vehicle_observation = [-1, -1, -1, -1, -1, -1, 0] # signal that vehicle is not spawned yet
             else:
                 distance_to_cs = []
                 for charging_station_id, distance in distance_dict.items():
                     normalized_distance = distance / 2000 # 2000 km is considered as max. possible distance
                     distance_to_cs.append(normalized_distance)
                 normalized_soc = vehicle_state["battery_soc"] / 100000 # 100000 Wh is considered as max. possible capacity
-                vehicle_observation = [normalized_soc] + distance_to_cs
+                last_selected_action = self.currently_selected_actions[vehicle_id]
+                destination_reached = int(self.__destination_is_reached(vehicle_id))
+
+                vehicle_observation = [normalized_soc] + distance_to_cs + [last_selected_action] + [destination_reached]
             observation[vehicle_id] = np.array(vehicle_observation, dtype=np.float32)
         return observation
     
@@ -139,6 +145,7 @@ class CircleEnv(gym.Env):
         Handles the action for the vehicle with the given vehicle_id.
         """
         logger.debug(f"action {vehicle_action} for {vehicle_id}")
+        self.currently_selected_actions[vehicle_id] = vehicle_action
         action_penalty = 0
 
         # for already arrived vehicles, do nothing and return. No penalty is given because the agent has to select an action for each vehicle in each step (due to the action space being static and not dynamic)
