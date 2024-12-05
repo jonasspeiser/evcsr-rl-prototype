@@ -314,7 +314,7 @@ class Simulation():
         traci.vehicle.setColor(vehicle_id, color)  
 
     def __simulate_empty_battery(self, vehicle_id):
-        logger.info(f"Battery empty, vehicle {vehicle_id} will stop and remain at its position")
+        logger.info("Battery empty, vehicle will dissapear shortly")
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 

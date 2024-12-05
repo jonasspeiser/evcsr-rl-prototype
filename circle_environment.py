@@ -286,8 +286,8 @@ class CircleEnv(gym.Env):
             logger.debug(f"step while loop reward: {temp_reward}")
             accumulated_reward += temp_reward
 
-            # Terminate only when ALL vehicles are at destination
-            terminated = all_vehicles_at_destination
+            # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
+            terminated = one_vehicle_is_empty or all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
 
