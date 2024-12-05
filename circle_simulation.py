@@ -334,7 +334,6 @@ class Simulation():
         """Returns the actual battery capacity of the vehicle."""
         try:
             battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-            battery_soc = int(round(battery_soc))
             return battery_soc
         except traci.exceptions.TraCIException: 
             logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")

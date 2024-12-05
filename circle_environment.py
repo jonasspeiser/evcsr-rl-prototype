@@ -57,8 +57,9 @@ class CircleEnv(gym.Env):
         # --- Define observation space ---
         # We have 2 types of observations: the current state of the battery and the current distance to the next charging station
         # battery soc is in between 0 and 100000 Wh, distance to each of the charging stations is in between 0 and 2000 meters
+        # All values are normalized.
         # -1 is used to signal that the vehicle is not spawned yet ("padding")
-        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1]), high=np.array([100000, 2000, 2000, 2000, 2000]), dtype=np.float32) 
+        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1]), high=np.array([1, 1, 1, 1, 1]), dtype=np.float32) 
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -90,9 +91,11 @@ class CircleEnv(gym.Env):
             else:
                 distance_to_cs = []
                 for charging_station_id, distance in distance_dict.items():
-                    distance_to_cs.append(distance)
-                vehicle_observation = [vehicle_state["battery_soc"]] + distance_to_cs
-            observation[vehicle_id] = np.array(vehicle_observation, dtype=int)
+                    normalized_distance = distance / 2000 # 2000 km is considered as max. possible distance
+                    distance_to_cs.append(normalized_distance)
+                normalized_soc = vehicle_state["battery_soc"] / 100000 # 100000 Wh is considered as max. possible capacity
+                vehicle_observation = [normalized_soc] + distance_to_cs
+            observation[vehicle_id] = np.array(vehicle_observation, dtype=np.float32)
         return observation
     
     def __get_info(self):
