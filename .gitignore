@@ -13,3 +13,5 @@ events.out.tfevents.*
 .venv
 # OBELIS dataset
 obelis_data
+# ASFINAG dataset
+asfinag_data
