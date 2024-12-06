@@ -276,14 +276,14 @@ class CircleEnv(gym.Env):
 
             # only execute once per step
             loop_just_started = (loop_counter == 0)
-            if loop_just_started == 0:
+            if loop_just_started:
                 # perform actions for all vehicles
                 action_penalty = self.__perform_actions(action)
                 accumulated_reward += action_penalty
 
             # calculate reward
             temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids, charging_ids)
-            logger.debug(f"step while loop reward: {temp_reward}")
+            logger.debug(f"reward collected during current sumo time step: {temp_reward}")
             accumulated_reward += temp_reward
 
             # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
