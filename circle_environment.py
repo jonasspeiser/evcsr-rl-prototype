@@ -37,6 +37,7 @@ class CircleEnv(gym.Env):
         self.simulation.add_vehicles(self.vehicles_to_spawn)
 
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        self.empty_vehicle_ids = []
         self.arrived_vehicle_ids = []
         self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
 
@@ -200,31 +201,39 @@ class CircleEnv(gym.Env):
     def __battery_is_empty(self, vehicle_id):
         battery_soc = self.simulation.get_battery_soc(vehicle_id)
         return (battery_soc is not None) and (battery_soc <= 0) # if battery_soc is None, the vehicle is not currently online
+    
+    def __battery_just_died(self, vehicle_id):
+        if vehicle_id in self.empty_vehicle_ids: # i.e. vehicle was already empty before the current step
+            return False
+        if self.__battery_is_empty(vehicle_id): # i.e. vehicle is empty and was NOT empty before the current step
+            self.empty_vehicle_ids.append(vehicle_id)
+            return True
+        return False # i.e. vehicle is NOT empty
 
     def __vehicle_has_just_despawned(self, vehicle_id, newly_arrived_ids):
         return True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
 
-    def __get_reward_for_vehicle(self, vehicle_id, battery_is_empty, vehicle_has_just_reached_destination):
+    def __get_reward_for_vehicle(self, vehicle_id, battery_just_died, vehicle_has_just_reached_destination):
         
-        reward_per_vehicle = -100 if battery_is_empty else 10 if vehicle_has_just_reached_destination else 0
+        reward_per_vehicle = -100 if battery_just_died else 10 if vehicle_has_just_reached_destination else 0
 
         if vehicle_has_just_reached_destination:
-            logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +1)")
+            logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +10)")
 
-        if battery_is_empty:
-            logger.info(f"Vehicle {vehicle_id} is empty (reward -10)")
+        if battery_just_died:
+            logger.info(f"Vehicle {vehicle_id} JUST died (reward -100)")
 
         return reward_per_vehicle
 
 
     def __calculate_reward(self, newly_arrived_ids, charging_ids):
         reward = 0
-        one_vehicle_is_empty = False
+        one_vehicle_just_died = False
         all_vehicles_at_destination = True
 
         for index, vehicle_id in enumerate(self.vehicle_ids):
             vehicle_is_charging = vehicle_id in charging_ids
-            vehicle_is_empty = self.__battery_is_empty(vehicle_id)
+            vehicle_just_died = self.__battery_just_died(vehicle_id)
             vehicle_is_at_destination = self.__destination_is_reached(vehicle_id)
             vehicle_has_just_despawned = self.__vehicle_has_just_despawned(vehicle_id, newly_arrived_ids)
             if vehicle_has_just_despawned:
@@ -232,11 +241,11 @@ class CircleEnv(gym.Env):
 
             vehicle_has_just_reached_destination = vehicle_is_at_destination and vehicle_has_just_despawned
 
-            reward_per_vehicle = self.__get_reward_for_vehicle(vehicle_id, vehicle_is_empty, vehicle_has_just_reached_destination)
+            reward_per_vehicle = self.__get_reward_for_vehicle(vehicle_id, vehicle_just_died, vehicle_has_just_reached_destination)
             reward += reward_per_vehicle
 
-            if vehicle_is_empty:
-                one_vehicle_is_empty = True        
+            if vehicle_just_died:
+                one_vehicle_just_died = True        
 
             if not vehicle_is_at_destination:
                 all_vehicles_at_destination = False
@@ -248,7 +257,7 @@ class CircleEnv(gym.Env):
                 if not remaining_range_is_sufficient:
                     reward +1
                                 
-        return reward, one_vehicle_is_empty, all_vehicles_at_destination
+        return reward, one_vehicle_just_died, all_vehicles_at_destination
 
     def step(self, action):
         """
@@ -282,12 +291,13 @@ class CircleEnv(gym.Env):
                 accumulated_reward += action_penalty
 
             # calculate reward
-            temp_reward, one_vehicle_is_empty, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids, charging_ids)
+            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids, charging_ids)
             logger.debug(f"reward collected during current sumo time step: {temp_reward}")
             accumulated_reward += temp_reward
 
-            # Terminate only when either ONE vehicle is empty or ALL vehicles are at destination
-            terminated = one_vehicle_is_empty or all_vehicles_at_destination
+            # Terminate only when ALL vehicles are at destination
+            terminated = all_vehicles_at_destination
+            
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
 
@@ -316,7 +326,7 @@ class CircleEnv(gym.Env):
         reward = accumulated_reward
         info = self.__get_info()
 
-        self.__log_step_details(simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_is_empty)
+        self.__log_step_details(simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_just_died)
         
         return observation, reward, terminated, truncated, info
 
