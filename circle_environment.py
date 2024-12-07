@@ -255,7 +255,8 @@ class CircleEnv(gym.Env):
                 # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
                 remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
                 if not remaining_range_is_sufficient:
-                    reward +1
+                    logger.debug(f"vehicle {vehicle_id} is charging and otherwise doesn't have enough remaining range to arrive at its destination (+1 reward)")
+                    reward += 1
                                 
         return reward, one_vehicle_just_died, all_vehicles_at_destination
 
@@ -315,7 +316,8 @@ class CircleEnv(gym.Env):
             if loop_just_started or some_simulation_time_passed or important_event_happened:
                 simulation_state = self.simulation.get_state()
                 observation = self.__get_observation(simulation_state)
-                logger.debug(f"step while loop observation: {observation}")
+                logger.debug(f"intermediate state: {simulation_state}")
+                # logger.debug(f"intermediate observation: {observation}")
 
             if terminated or truncated:
                 break
