@@ -1,6 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+from collections import deque
 from circle_simulation import Simulation
 from data_processing import Obelis_Data_Provider
 
@@ -34,36 +35,29 @@ class CircleEnv(gym.Env):
             gui = False
         self.simulation = Simulation(gui=gui)
         self.vehicles_to_spawn = vehicles_to_spawn
-        self.simulation.add_vehicles(self.vehicles_to_spawn)
-
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        self.empty_vehicle_ids = []
-        self.arrived_vehicle_ids = []
-        self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
-
         self.simulate_non_member_evs = simulate_non_member_evs
         if self.simulate_non_member_evs:
             self.data_provider = Obelis_Data_Provider()
-            self.__add_non_member_vehicles()
+
+        self.simulation.add_vehicles(self.vehicles_to_spawn)
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        logger.debug(f"vehicle_ids: {self.vehicle_ids}")
 
         # --- Define action space ---        
         # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
-        actions_per_vehicle = 5 
-        # Dynamically create the action space for each vehicle
-        # e.g. spaces.MultiDiscrete([2,2,2]) for 3 vehicles
-        action_space_list = [actions_per_vehicle for vehicle in self.vehicle_ids]
-        # MultiDiscrete action space because Stable Baselines doesn't support dict action spaces
-        self.action_space = spaces.MultiDiscrete(action_space_list)
+        actions_per_vehicle = 5
+        self.action_space = spaces.Discrete(actions_per_vehicle)
 
 
         # --- Define observation space ---
-        # We have 4 types of observations: the current state of the battery and the current distance to the next charging station
+        # We have 4 types of observations per vehicle: the current state of the battery, the current distance to each charging station, the last selected action, arrived at destination, request pending
         # battery soc is in between 0 and 100000 Wh, distance to each of the charging stations is in between 0 and 2000 meters
         # These values are normalized.
         # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())
         # A binary value informs wether the vehicle has (1) or has not (0) reached its destination yet
+        # A binary value signals the "active" vehicle which filed the current charging request (with a 1, otherwise 0)
         # -1 is used to signal that the vehicle is not spawned yet ("padding")
-        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1, -1, 0]), high=np.array([1, 1, 1, 1, 1, 4, 0]), dtype=np.float32) 
+        single_vehicle_observation_space = spaces.Box(low=np.array([-1, -1, -1, -1, -1, -1, 0, 0]), high=np.array([1, 1, 1, 1, 1, 4, 1, 1]), dtype=np.float32) 
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -91,7 +85,7 @@ class CircleEnv(gym.Env):
             vehicle_state = simulation_state[vehicle_id]
             distance_dict = vehicle_state["distance_to_cs"]
             if distance_dict == None:
-                vehicle_observation = [-1, -1, -1, -1, -1, -1, 0] # signal that vehicle is not spawned yet
+                vehicle_observation = [-1, -1, -1, -1, -1, -1, 0, 0] # signal that vehicle is not spawned yet
             else:
                 distance_to_cs = []
                 for charging_station_id, distance in distance_dict.items():
@@ -100,8 +94,9 @@ class CircleEnv(gym.Env):
                 normalized_soc = vehicle_state["battery_soc"] / 100000 # 100000 Wh is considered as max. possible capacity
                 last_selected_action = self.currently_selected_actions[vehicle_id]
                 destination_reached = int(self.__destination_is_reached(vehicle_id))
+                active_charging_request = int(vehicle_id == self.active_charging_request_for_vehicle_id)
 
-                vehicle_observation = [normalized_soc] + distance_to_cs + [last_selected_action] + [destination_reached]
+                vehicle_observation = [normalized_soc] + distance_to_cs + [last_selected_action] + [destination_reached] + [active_charging_request]
             observation[vehicle_id] = np.array(vehicle_observation, dtype=np.float32)
         return observation
     
@@ -122,12 +117,19 @@ class CircleEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
+        self.empty_vehicle_ids = []
+        self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
+        self.charging_request_queue = deque()
+        self.active_charging_request_for_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
 
         if self.simulate_non_member_evs:
             self.__add_non_member_vehicles()
 
-        self.simulation.step() # to spawn first vehicle
-        self.simulation.step()        
+        #TODO: generate first charging request -> simulation.step until charging request = true
+        # to spawn first vehicle
+        while self.active_charging_request_for_vehicle_id is None:
+            self.__check_for_charging_request()
+            self.simulation.step() 
 
         simulation_state = self.simulation.get_state()
         observation = self.__get_observation(simulation_state)
@@ -183,16 +185,6 @@ class CircleEnv(gym.Env):
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(vehicle_id)
                 logger.debug(f"Charging stop removed for vehicle {vehicle_id}")
-        return action_penalty
-
-    def __perform_actions(self, actionlist):
-        """
-        Perform the actions of all vehicles in the actionlist. Returns a penalty value (int) if illegal or unwanted actions were used.
-        """
-        action_penalty = 0
-        for index, vehicle_id in enumerate(self.vehicle_ids):
-            vehicle_action = actionlist[index]
-            action_penalty += self.__handle_vehicle_action(vehicle_id, vehicle_action)
         return action_penalty
 
     def __destination_is_reached(self, vehicle_id):
@@ -260,6 +252,30 @@ class CircleEnv(gym.Env):
                                 
         return reward, one_vehicle_just_died, all_vehicles_at_destination
 
+    def __check_for_charging_request(self):
+        """
+        A charging request is generated (added to the queue) whenever a new vehicle enters the simulation or a vehicle just finished charging (i.e. when a vehicle was not evaluated yet or needs re-evaluation).
+        
+        Pops the next charging request out of the queue (FIFO) and sets it as the active charging request.
+
+        Returns: True if there is an active charging request, False otherwise
+        """
+        # Find out if there are new vehicle ids online
+        newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+        # Find out if there are vehicles that just finished charging
+        just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
+
+        if newly_spawned_ids or just_charged_ids:
+            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, just_charged_ids: {just_charged_ids}")
+            self.charging_request_queue.extend(newly_spawned_ids)
+            self.charging_request_queue.extend(just_charged_ids)
+        if self.charging_request_queue: # i.e. if the queue is not empty
+            self.active_charging_request_for_vehicle_id = self.charging_request_queue.popleft()
+            logger.debug(f"charging request for {self.active_charging_request_for_vehicle_id}")
+            return True
+        
+        return False
+    
     def step(self, action):
         """
         Returns: The next observation, the reward, done and optionally additional info
@@ -274,21 +290,18 @@ class CircleEnv(gym.Env):
             
             logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
 
-            # Find out if there are new vehicle ids online or offline
-            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+            # Find out if there are new vehicle ids offline or charging
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             charging_ids = self.simulation.get_charging_vehicle_ids()
-            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, charging_ids: {charging_ids}")
+            logger.debug(f"charging_ids: {charging_ids}")
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
             logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
-            # Find out if there are vehicles that just finished charging
-            just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
             # only execute once per step
             loop_just_started = (loop_counter == 0)
             if loop_just_started:
-                # perform actions for all vehicles
-                action_penalty = self.__perform_actions(action)
+                # perform action for the vehicle which filed the charging request
+                action_penalty = self.__handle_vehicle_action(self.active_charging_request_for_vehicle_id, action)
                 accumulated_reward += action_penalty
 
             # calculate reward
@@ -296,18 +309,12 @@ class CircleEnv(gym.Env):
             logger.debug(f"reward collected during current sumo time step: {temp_reward}")
             accumulated_reward += temp_reward
 
+            
             # Terminate only when ALL vehicles are at destination
             terminated = all_vehicles_at_destination
-            
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
-
-            # end the step for the agent if there is a charging request or the episode is terminated or truncated  
-            # a charging request is generated whenever a new vehicle enters the simulation or a vehicle just finished charging
-            # i.e. a vehicle was not evaluated yet or needs re-evaluation
-            if newly_spawned_ids or just_charged_ids:
-                charging_request = True
-                logger.debug(f"charging request for {newly_spawned_ids}, {just_charged_ids}")
+            charging_request = self.__check_for_charging_request()
 
             important_event_happened = charging_request or terminated or truncated
             some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
@@ -319,6 +326,7 @@ class CircleEnv(gym.Env):
                 logger.debug(f"intermediate state: {simulation_state}")
                 # logger.debug(f"intermediate observation: {observation}")
 
+            # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
                 break
             
