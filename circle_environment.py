@@ -1,7 +1,7 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from collections import deque
+from collections import deque, Counter
 from circle_simulation import Simulation
 from data_processing import Obelis_Data_Provider
 
@@ -71,7 +71,12 @@ class CircleEnv(gym.Env):
             if battery_is_empty:
                 logger.info("one vehicle's battery is empty")
         if truncated:
-            logger.info("episode truncated")        
+            logger.info("episode truncated")  
+
+    def __set_charging_stops_per_episode_mean(self):
+        """Used for tensorboard logging"""
+        charging_stops_total = sum(self.charging_stops_per_episode_counter.values())
+        self.charging_stops_per_episode_mean = charging_stops_total / len(self.charging_stops_per_episode_counter)
 
     def __add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
@@ -110,6 +115,12 @@ class CircleEnv(gym.Env):
         """
         logger.debug("reset")
         super().reset(seed=seed) # needed for api compliance
+
+        # reset logging values
+        self.charging_stops_per_episode_mean = None
+        # reset the counters for each vehicle to 0
+        self.charging_stops_per_episode_counter = Counter(dict.fromkeys(self.vehicle_ids, 0))
+
         self.added_vehicles = []
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
@@ -125,7 +136,7 @@ class CircleEnv(gym.Env):
         if self.simulate_non_member_evs:
             self.__add_non_member_vehicles()
 
-        #TODO: generate first charging request -> simulation.step until charging request = true
+        # generate first charging request -> simulation.step until charging request = true
         # to spawn first vehicle
         while self.active_charging_request_for_vehicle_id is None:
             self.__check_for_charging_request()
@@ -265,6 +276,9 @@ class CircleEnv(gym.Env):
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
 
+        # increase the counters for each vehicle that just stopped charging by one (this value is only used for logging)
+        self.charging_stops_per_episode_counter.update(just_charged_ids)
+
         if newly_spawned_ids or just_charged_ids:
             logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, just_charged_ids: {just_charged_ids}")
             self.charging_request_queue.extend(newly_spawned_ids)
@@ -336,6 +350,7 @@ class CircleEnv(gym.Env):
         reward = accumulated_reward
         info = self.__get_info()
 
+        self.__set_charging_stops_per_episode_mean()
         self.__log_step_details(simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_just_died)
         
         return observation, reward, terminated, truncated, info
