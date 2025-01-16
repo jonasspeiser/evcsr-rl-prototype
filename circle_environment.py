@@ -74,9 +74,18 @@ class CircleEnv(gym.Env):
             logger.info("episode truncated")  
 
     def __set_charging_stops_per_episode_mean(self):
-        """Used for tensorboard logging"""
+        """Used for tensorboard logging. Calculates the global average for number of charging stops per vehicle."""
         charging_stops_total = sum(self.charging_stops_per_episode_counter.values())
         self.charging_stops_per_episode_mean = charging_stops_total / len(self.charging_stops_per_episode_counter)
+
+    def __update_accumulated_waiting_times(self):
+        """Get the waiting times for each vehicle out of the simulation. This is only possible as long as a vehicle is still online."""
+        for vehicle_id in self.simulation.get_online_vehicle_ids():
+            self.accumulated_waiting_times[vehicle_id] = self.simulation.get_vehicle_waiting_time(vehicle_id)
+    
+    def __set_cumulated_waiting_time_per_episode(self):
+        """Used for tensorboard logging. Sums up the individual waiting times to get one global value."""
+        self.cumulated_waiting_time = sum(self.accumulated_waiting_times.values())
 
     def __add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
@@ -116,10 +125,11 @@ class CircleEnv(gym.Env):
         logger.debug("reset")
         super().reset(seed=seed) # needed for api compliance
 
-        # reset logging values
-        self.charging_stops_per_episode_mean = None
-        # reset the counters for each vehicle to 0
+        # reset logging values (tensorboard logging)
         self.charging_stops_per_episode_counter = Counter(dict.fromkeys(self.vehicle_ids, 0))
+        self.accumulated_waiting_times = {}
+        #self.charging_stops_per_episode_mean = None
+        #self.cumulated_waiting_time = None
 
         self.added_vehicles = []
         self.simulation.reset()
@@ -333,6 +343,8 @@ class CircleEnv(gym.Env):
             important_event_happened = charging_request or terminated or truncated
             some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
 
+            self.__update_accumulated_waiting_times()
+
             # get observation (only every few simulation steps, for performance purposes)
             if loop_just_started or some_simulation_time_passed or important_event_happened:
                 simulation_state = self.simulation.get_state()
@@ -342,15 +354,16 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
+                self.__set_charging_stops_per_episode_mean()
+                self.__set_cumulated_waiting_time_per_episode()                
                 break
             
             loop_counter += 1
             self.simulation.step()
-        
+
         reward = accumulated_reward
         info = self.__get_info()
 
-        self.__set_charging_stops_per_episode_mean()
         self.__log_step_details(simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, one_vehicle_just_died)
         
         return observation, reward, terminated, truncated, info

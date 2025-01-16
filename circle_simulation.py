@@ -287,6 +287,10 @@ class Simulation():
         original_list = traci.simulation.getStopEndingVehiclesIDList()
         return self.__filter_list_for_member_evs(original_list)
     
+    def get_vehicle_waiting_time(self, vehicle_id):
+        """Return the accumulated waiting time for the vehicle. Due to traci limitations, this is only possible for online vehicles."""
+        return traci.vehicle.getAccumulatedWaitingTime(vehicle_id)
+    
 
     def __adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
