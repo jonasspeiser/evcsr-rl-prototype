@@ -87,6 +87,10 @@ class CircleEnv(gym.Env):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value."""
         self.cumulated_waiting_time = sum(self.accumulated_waiting_times.values())
 
+    def __set_cumulated_waiting_time_per_episode_terminated(self):
+        """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
+        self.cumulated_waiting_time_only_terminated = sum(self.accumulated_waiting_times.values())
+
     def __add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
         vehicle_data = self.data_provider.get_non_member_vehicle_data()
@@ -354,6 +358,8 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
+                if terminated:
+                    self.__set_cumulated_waiting_time_per_episode_terminated()
                 self.__set_charging_stops_per_episode_mean()
                 self.__set_cumulated_waiting_time_per_episode()                
                 break
