@@ -417,6 +417,25 @@ if __name__ == "__main__":
         print("CHECKS PASSED")
         env.close()
 
+    def take_greedy_action(observation):
+        """
+        For each requesting vehicle, if SOC <= 0.2, send it to the nearest charging station.
+        """
+        for vehicle_obs in observation:
+            # find out which one is the active vehicle
+            filed_request = vehicle_obs[7]
+            if filed_request:
+                battery_soc = vehicle_obs[0]
+                station_distances = vehicle_obs[1:5]
+                break
+
+        if battery_soc > 0.2:
+            return 0 # i.e. "do nothing"
+        
+        shortest_distance = min(station_distances)
+        closest_station = station_distances.index(shortest_distance)
+        return closest_station + 1
+
     def demo_env(random_seed=None):
         env = CircleEnv(render_mode="human", vehicles_to_spawn=15)
         # set seed for reproducability
@@ -424,13 +443,16 @@ if __name__ == "__main__":
         random.seed(random_seed) # needed for batteries of simulation class TODO: make this seedable via the env.seed of gymnasium
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
+        # while env.simulation.active_vehicles_exist():
+
         for _ in range(20):
-            action = env.action_space.sample() # select a random action
+            #action = env.action_space.sample() # select a random action
+            action = take_greedy_action(observation)
             observation, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 observation, info = env.reset()
         env.close()
     
     configure_logging(log_file_path='logs/myapp.log')
-    test_env()
-    # demo_env(random_seed=1)
+    # test_env()
+    demo_env(random_seed=1)
