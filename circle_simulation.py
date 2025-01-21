@@ -353,12 +353,14 @@ class Simulation():
         Returns:
         - dict: A dictionary containing the following information:
             - battery_soc (float): The actual battery capacity of the vehicle.
+            - max_battery_capacity (float): The maximum battery capacity of the vehicle (i.e. capacity at full charge).
             - distance_to_cs (float): The distance to the next charging station.
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
         battery_soc = self.get_battery_soc(vehicle_id)
         if battery_soc is None: # if battery_soc is not returned by TraCI
+            max_battery_capacity = None
             distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None
@@ -376,8 +378,9 @@ class Simulation():
                 vehicle_edge = None
                 distance_to_cs = None
             vehicle_destination = self.get_vehicle_destination(vehicle_id)
+            max_battery_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.maximumBatteryCapacity"))
 
-        state = {"battery_soc": battery_soc, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+        state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
     def get_state(self):

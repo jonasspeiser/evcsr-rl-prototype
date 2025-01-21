@@ -143,6 +143,7 @@ class CircleEnv(gym.Env):
         logger.debug(f"vehicle_ids: {self.vehicle_ids}")
         self.arrived_vehicle_ids = []
         self.empty_vehicle_ids = []
+        self.low_battery_ids = []
         self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
         self.charging_request_queue = deque()
         self.active_charging_request_for_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
@@ -277,6 +278,20 @@ class CircleEnv(gym.Env):
                                 
         return reward, one_vehicle_just_died, all_vehicles_at_destination
 
+    def __get_new_low_battery_ids(self):
+        battery_threshold = 0.2 # the value under which the battery soc should be considered low
+        state = self.simulation.get_state()
+        new_low_battery_ids = []
+        for vehicle_id, vehicle_stats in state.items():
+            max_battery_capacity = vehicle_stats["max_battery_capacity"]
+            battery_soc = vehicle_stats["battery_soc"]
+            relative_battery_soc = battery_soc / max_battery_capacity
+            # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
+            if  relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
+                new_low_battery_ids.append(vehicle_id)
+                self.low_battery_ids.append(vehicle_id)
+        return new_low_battery_ids
+    
     def __check_for_charging_request(self):
         """
         A charging request is generated (added to the queue) whenever a new vehicle enters the simulation or a vehicle just finished charging (i.e. when a vehicle was not evaluated yet or needs re-evaluation).
@@ -289,14 +304,17 @@ class CircleEnv(gym.Env):
         newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
+        # Find out if there are vehicles that just entered low battery status
+        new_low_battery_ids = self.__get_new_low_battery_ids() 
 
-        # increase the counters for each vehicle that just stopped charging by one (this value is only used for logging)
+        charging_requests = newly_spawned_ids + just_charged_ids + new_low_battery_ids
+
+        # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
 
-        if newly_spawned_ids or just_charged_ids:
-            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, just_charged_ids: {just_charged_ids}")
-            self.charging_request_queue.extend(newly_spawned_ids)
-            self.charging_request_queue.extend(just_charged_ids)
+        if charging_requests:
+            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, just_charged_ids: {just_charged_ids}, new_low_battery_ids: {new_low_battery_ids}")
+            self.charging_request_queue.extend(charging_requests)
         if self.charging_request_queue: # i.e. if the queue is not empty
             self.active_charging_request_for_vehicle_id = self.charging_request_queue.popleft()
             logger.debug(f"charging request for {self.active_charging_request_for_vehicle_id}")
@@ -421,7 +439,7 @@ if __name__ == "__main__":
         """
         For each requesting vehicle, if SOC <= 0.2, send it to the nearest charging station.
         """
-        for vehicle_obs in observation:
+        for vehicle_obs in observation.values():
             # find out which one is the active vehicle
             filed_request = vehicle_obs[7]
             if filed_request:
@@ -432,8 +450,7 @@ if __name__ == "__main__":
         if battery_soc > 0.2:
             return 0 # i.e. "do nothing"
         
-        shortest_distance = min(station_distances)
-        closest_station = station_distances.index(shortest_distance)
+        closest_station = np.argmin(station_distances) # the index of the lowest distance
         return closest_station + 1
 
     def demo_env(random_seed=None):
@@ -454,5 +471,5 @@ if __name__ == "__main__":
         env.close()
     
     configure_logging(log_file_path='logs/myapp.log')
-    # test_env()
-    demo_env(random_seed=1)
+    test_env()
+    # demo_env(random_seed=1)
