@@ -278,6 +278,10 @@ class CircleEnv(gym.Env):
                                 
         return reward, one_vehicle_just_died, all_vehicles_at_destination
 
+    def __update_low_battery_ids(self, just_charged_ids):
+        """Deletes all vehicle_ids that just charged out of the low_battery_ids list"""
+        self.low_battery_ids = [vehicle_id for vehicle_id in self.low_battery_ids if vehicle_id not in just_charged_ids]
+
     def __get_new_low_battery_ids(self):
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         state = self.simulation.get_state()
@@ -285,6 +289,8 @@ class CircleEnv(gym.Env):
         for vehicle_id, vehicle_stats in state.items():
             max_battery_capacity = vehicle_stats["max_battery_capacity"]
             battery_soc = vehicle_stats["battery_soc"]
+            if battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
+                continue
             relative_battery_soc = battery_soc / max_battery_capacity
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
             if  relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
@@ -305,6 +311,7 @@ class CircleEnv(gym.Env):
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         # Find out if there are vehicles that just entered low battery status
+        self.__update_low_battery_ids(just_charged_ids)
         new_low_battery_ids = self.__get_new_low_battery_ids() 
 
         charging_requests = newly_spawned_ids + just_charged_ids + new_low_battery_ids
