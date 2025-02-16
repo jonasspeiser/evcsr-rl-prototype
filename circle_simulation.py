@@ -383,6 +383,10 @@ class Simulation():
         state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
         return state
 
+    def get_departure_time_for_vehicle(self, vehicle_id):
+        """Returns the actual departure time in seconds"""
+        return traci.vehicle.getDeparture(vehicle_id)
+    
     def get_state(self):
         state = {}
         for vehicle_id in self.get_all_vehicle_ids():

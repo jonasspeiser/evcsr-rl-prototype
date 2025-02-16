@@ -136,6 +136,7 @@ class CircleEnv(gym.Env):
         #self.cumulated_waiting_time = None
 
         self.added_vehicles = []
+        self.vehicle_times = {}
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
 
@@ -243,8 +244,22 @@ class CircleEnv(gym.Env):
 
         return reward_per_vehicle
 
+    def __update_vehicle_times(self, newly_arrived_ids):
+        """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
+        for vehicle_id in newly_arrived_ids:
+            arrival = self.simulation.get_current_time_step()
+            departure = self.vehicle.get_departure_time_for_vehicle(vehicle_id)
+            self.vehicle_times[vehicle_id]['arrival'] = arrival
+            self.vehicle_times[vehicle_id]['departure'] = departure
+            self.vehicle_times[vehicle_id]['ttt'] = arrival - departure
 
-    def __calculate_reward(self, newly_arrived_ids, charging_ids):
+    def __calculate_end_of_episode_reward(self):
+        global_ttt = 0
+        for vehicle_id in self.vehicle_times:
+            global_ttt += self.vehicle_times[vehicle_id]['ttt']
+        return global_ttt
+
+    def __calculate_step_reward(self, newly_arrived_ids, charging_ids):
         reward = 0
         one_vehicle_just_died = False
         all_vehicles_at_destination = True
@@ -350,6 +365,9 @@ class CircleEnv(gym.Env):
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
             logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
 
+            if newly_arrived_ids:
+                self.__update_vehicle_times(newly_arrived_ids)
+
             # only execute once per step
             loop_just_started = (loop_counter == 0)
             if loop_just_started:
@@ -358,7 +376,7 @@ class CircleEnv(gym.Env):
                 accumulated_reward += action_penalty
 
             # calculate reward
-            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = self.__calculate_reward(newly_arrived_ids, charging_ids)
+            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = self.__calculate_step_reward(newly_arrived_ids, charging_ids)
             logger.debug(f"reward collected during current sumo time step: {temp_reward}")
             accumulated_reward += temp_reward
 
@@ -383,6 +401,7 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
+                print(self.__calculate_end_of_episode_reward())
                 if terminated:
                     self.__set_cumulated_waiting_time_per_episode_terminated()
                 self.__set_charging_stops_per_episode_mean()
@@ -478,5 +497,5 @@ if __name__ == "__main__":
         env.close()
     
     configure_logging(log_file_path='logs/myapp.log')
-    test_env()
-    # demo_env(random_seed=1)
+    # test_env()
+    demo_env(random_seed=1)
