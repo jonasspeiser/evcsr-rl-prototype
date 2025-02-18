@@ -9,6 +9,29 @@ from data_processing import Obelis_Data_Provider
 import logging
 logger = logging.getLogger("rl.environment") # child logger of "application", parent logger to "application.environment.simulation"
 
+""" Reward strategy could look like this:
+
+class RewardStrategy:
+    def calculate_step_reward(self, state, action, done):
+        raise NotImplementedError
+    
+    def calculate_final_reward(self, state, action, done):
+        raise NotImplementedError
+
+class RewardBasic(RewardStrategy):
+    def calculate_step_reward(self, state, action, done):
+        return 0
+    def calculate_final_reward(self, state, action, done):
+        return ttt
+class RewardOnlyPreventEmpty(RewardStrategy):
+    def calculate_step_reward(self, state, action, done):
+        return 1.0 if action == 0 else -1.0
+
+class RewardShaping(RewardStrategy):
+    def calculate_step_reward(self, state, action, done):
+        return 1.0 if action == 0 else -1.0
+"""
+
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -263,7 +286,8 @@ class CircleEnv(gym.Env):
             self.vehicle_times[vehicle_id]['arrival'] = current_time
             print(f"arrival for {vehicle_id} at {current_time}")
 
-    def __calculate_end_of_episode_reward(self):
+    def __calculate_final_reward(self):
+        """Only given at the end of an episode"""
         global_ttt = 0
         for vehicle_id in self.vehicle_times:
             # Ensure 'arrival' exists; if not, set it to the current time
@@ -416,7 +440,7 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
-                print(self.__calculate_end_of_episode_reward())
+                print(self.__calculate_final_reward())
                 if terminated:
                     self.__set_cumulated_waiting_time_per_episode_terminated()
                 self.__set_charging_stops_per_episode_mean()
