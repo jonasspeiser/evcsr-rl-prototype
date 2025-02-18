@@ -32,6 +32,113 @@ class RewardShaping(RewardStrategy):
         return 1.0 if action == 0 else -1.0
 """
 
+# ======================================
+# Vehicle Class
+# ======================================
+class Vehicle:
+    def __init__(self, vehicle_id):
+        self.vehicle_id = vehicle_id
+        self.last_action = -1
+        self.arrived = False
+        self.empty = False
+        self.low_battery = False
+        self.departure_time = None
+        self.arrival_time = None
+        self.waiting_time = 0
+        self.battery_soc = None
+        self.distance_to_cs = None  # Expected to be a dict {cs_id: distance}
+
+    def update_from_state(self, state):
+        """
+        Update vehicle properties from the simulation-provided state.
+        If the vehicle has not spawned yet (i.e. state is None or missing key),
+        we reset to default values.
+        """
+        if state is None or state.get("distance_to_cs") is None:
+            self.battery_soc = None
+            self.distance_to_cs = None
+        else:
+            self.battery_soc = state.get("battery_soc")
+            self.distance_to_cs = state.get("distance_to_cs")
+
+    def get_observation(self, is_active=False):
+        """
+        Returns the observation for this vehicle as a NumPy array.
+        Observation format:
+          [normalized_soc] + 4 normalized distances + [last_action] + [destination_reached] + [active_charging_request]
+        If the vehicle is not spawned yet, a padded observation is returned.
+        """
+        if self.distance_to_cs is None:
+            # Use -1 as padding to indicate that the vehicle is not spawned.
+            return np.array([-1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
+        normalized_soc = self.battery_soc / 100000.0 if self.battery_soc is not None else -1
+        # Ensure a fixed order by sorting charging station ids; pad if needed.
+        distances = [self.distance_to_cs[k] / 2000.0 for k in sorted(self.distance_to_cs.keys())]
+        while len(distances) < 4:
+            distances.append(-1)
+        # destination_reached flag (1 if arrived, 0 otherwise)
+        destination_reached = int(self.arrived)
+        # active charging request flag is provided via the is_active parameter
+        obs = [normalized_soc] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
+        return np.array(obs, dtype=np.float32)
+
+    def handle_action(self, simulation, action):
+        """
+        Process the action for this vehicle.
+        Returns an action penalty (if any).
+        """
+        logger.debug(f"Vehicle {self.vehicle_id}: handling action {action}")
+        self.last_action = action
+        action_penalty = 0
+
+        if self.arrived:
+            # If the vehicle already arrived, do nothing.
+            return action_penalty
+
+        next_charging_stop = simulation.get_next_charging_stop_id(self.vehicle_id)
+        charging_stop_is_planned = next_charging_stop is not None
+
+        if action in (1, 2, 3, 4):
+            charging_stations = simulation.get_all_charging_station_ids()
+            cs_id = charging_stations[action - 1]
+            if cs_id == next_charging_stop:
+                logger.debug(f"Vehicle {self.vehicle_id}: charging stop {cs_id} is already planned")
+                return action_penalty
+            try:
+                simulation.reroute_for_charging(self.vehicle_id, cs_id)
+                logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
+                remaining_range_is_sufficient = simulation.remaining_range_is_sufficient(self.vehicle_id, buffer=0)
+                if remaining_range_is_sufficient:
+                    action_penalty = -1
+                    logger.debug(f"Vehicle {self.vehicle_id}: has sufficient range (penalty -1)")
+            except ValueError as e:
+                logger.error(e)
+                action_penalty = -1
+                logger.debug(f"Vehicle {self.vehicle_id}: illegal charging action (penalty -1)")
+        elif action == 0:
+            if charging_stop_is_planned:
+                simulation.remove_charging_stop(self.vehicle_id)
+                logger.debug(f"Vehicle {self.vehicle_id}: removed planned charging stop")
+        return action_penalty
+
+    def is_battery_empty(self):
+        return self.battery_soc is not None and self.battery_soc <= 0
+
+    def battery_just_died(self):
+        """
+        Returns True if the battery just died in this step.
+        Once marked, it will not be flagged again.
+        """
+        if self.empty:
+            return False
+        if self.is_battery_empty():
+            self.empty = True
+            return True
+        return False
+
+# ======================================
+# CircleEnv Class (with Vehicles)
+# ======================================
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
