@@ -71,9 +71,9 @@ class Vehicle:
         if self.distance_to_cs is None:
             # Use -1 as padding to indicate that the vehicle is not spawned.
             return np.array([-1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
-        normalized_soc = self.battery_soc / 100000.0 if self.battery_soc is not None else -1
+        normalized_soc = self.battery_soc / 100000.0 if self.battery_soc is not None else -1 # 100000 Wh is considered as max. possible capacity
         # Ensure a fixed order by sorting charging station ids; pad if needed.
-        distances = [self.distance_to_cs[k] / 2000.0 for k in sorted(self.distance_to_cs.keys())]
+        distances = [self.distance_to_cs[k] / 2000.0 for k in sorted(self.distance_to_cs.keys())] # 2000 km is considered as max. possible distance
         while len(distances) < 4:
             distances.append(-1)
         # destination_reached flag (1 if arrived, 0 otherwise)
@@ -98,9 +98,9 @@ class Vehicle:
         next_charging_stop = simulation.get_next_charging_stop_id(self.vehicle_id)
         charging_stop_is_planned = next_charging_stop is not None
 
-        if action in (1, 2, 3, 4):
+        if action in (1, 2, 3, 4): # action is "charge"
             charging_stations = simulation.get_all_charging_station_ids()
-            cs_id = charging_stations[action - 1]
+            cs_id = charging_stations[action - 1] # action 1 means: go to cs_0 -> action-1 gives us the list index
             if cs_id == next_charging_stop:
                 logger.debug(f"Vehicle {self.vehicle_id}: charging stop {cs_id} is already planned")
                 return action_penalty
@@ -110,19 +110,20 @@ class Vehicle:
                 remaining_range_is_sufficient = simulation.remaining_range_is_sufficient(self.vehicle_id, buffer=0)
                 if remaining_range_is_sufficient:
                     action_penalty = -1
-                    logger.debug(f"Vehicle {self.vehicle_id}: has sufficient range (penalty -1)")
-            except ValueError as e:
+                    logger.debug(f"Vehicle {self.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
+            except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
                 logger.error(e)
+                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
                 action_penalty = -1
                 logger.debug(f"Vehicle {self.vehicle_id}: illegal charging action (penalty -1)")
-        elif action == 0:
+        elif action == 0: # action is "do nothing"
             if charging_stop_is_planned:
                 simulation.remove_charging_stop(self.vehicle_id)
                 logger.debug(f"Vehicle {self.vehicle_id}: removed planned charging stop")
         return action_penalty
 
     def is_battery_empty(self):
-        return self.battery_soc is not None and self.battery_soc <= 0
+        return self.battery_soc is not None and self.battery_soc <= 0 # if battery_soc is None, the vehicle is not currently online
 
     def battery_just_died(self):
         """
@@ -137,7 +138,7 @@ class Vehicle:
         return False
 
 # ======================================
-# CircleEnv Class (with Vehicles)
+# CircleEnv Class
 # ======================================
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
@@ -217,15 +218,17 @@ class CircleEnv(gym.Env):
     def __update_accumulated_waiting_times(self):
         """Get the waiting times for each vehicle out of the simulation. This is only possible as long as a vehicle is still online."""
         for vehicle_id in self.simulation.get_online_vehicle_ids():
-            self.accumulated_waiting_times[vehicle_id] = self.simulation.get_vehicle_waiting_time(vehicle_id)
+            vehicle = self.vehicles.get(vehicle_id)
+            if vehicle:
+                vehicle.waiting_time = self.simulation.get_vehicle_waiting_time(vehicle_id)
     
     def __set_cumulated_waiting_time_per_episode(self):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value."""
-        self.cumulated_waiting_time = sum(self.accumulated_waiting_times.values())
-
+        self.cumulated_waiting_time = sum(v.waiting_time for v in self.vehicles.values())
+    
     def __set_cumulated_waiting_time_per_episode_terminated(self):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
-        self.cumulated_waiting_time_only_terminated = sum(self.accumulated_waiting_times.values())
+        self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
 
     def __add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
@@ -240,23 +243,12 @@ class CircleEnv(gym.Env):
         Build the observation dictionary by updating each vehicle from the simulation state.
         """
         observation = {}
-        for vehicle_id in self.vehicle_ids:
-            vehicle_state = simulation_state[vehicle_id]
-            distance_dict = vehicle_state["distance_to_cs"]
-            if distance_dict == None:
-                vehicle_observation = [-1, -1, -1, -1, -1, -1, 0, 0] # signal that vehicle is not spawned yet
-            else:
-                distance_to_cs = []
-                for charging_station_id, distance in distance_dict.items():
-                    normalized_distance = distance / 2000 # 2000 km is considered as max. possible distance
-                    distance_to_cs.append(normalized_distance)
-                normalized_soc = vehicle_state["battery_soc"] / 100000 # 100000 Wh is considered as max. possible capacity
-                last_selected_action = self.currently_selected_actions[vehicle_id]
-                destination_reached = int(self.__destination_is_reached(vehicle_id))
-                active_charging_request = int(vehicle_id == self.active_charging_request_for_vehicle_id)
-
-                vehicle_observation = [normalized_soc] + distance_to_cs + [last_selected_action] + [destination_reached] + [active_charging_request]
-            observation[vehicle_id] = np.array(vehicle_observation, dtype=np.float32)
+        for vehicle_id, vehicle in self.vehicles.items():
+            vehicle_state = simulation_state.get(vehicle_id)
+            vehicle.update_from_state(vehicle_state)
+            # Mark the vehicle as active if it filed the current charging request.
+            is_active = (vehicle_id == self.active_charging_request_vehicle_id)
+            observation[vehicle_id] = vehicle.get_observation(is_active=is_active)
         return observation
     
     def __get_info(self):
@@ -270,25 +262,29 @@ class CircleEnv(gym.Env):
         logger.debug("Resetting environment")
         super().reset(seed=seed) # needed for api compliance
 
-        # reset logging values (tensorboard logging)
-        self.charging_stops_per_episode_counter = Counter(dict.fromkeys(self.vehicle_ids, 0))
-        self.accumulated_waiting_times = {}
-        #self.charging_stops_per_episode_mean = None
-        #self.cumulated_waiting_time = None
+        # Reset logging and per-episode counters
+        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+        for vehicle in self.vehicles.values():
+            vehicle.waiting_time = 0
+            vehicle.last_action = -1
+            vehicle.arrived = False
+            vehicle.empty = False
+            vehicle.low_battery = False
+            vehicle.departure_time = None
+            vehicle.arrival_time = None
 
-        self.added_vehicles = []
-        self.vehicle_times = {}
         self.simulation.reset()
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        logger.debug(f"vehicle_ids: {self.vehicle_ids}")
-        self.arrived_vehicle_ids = []
-        self.empty_vehicle_ids = []
-        self.low_battery_ids = []
-        self.currently_selected_actions = dict.fromkeys(self.vehicle_ids, -1) # lists the last action the agent selected for each vehicle, puts -1 as default value (i.e. "no action selected yet")
+        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
+        # Re-create the vehicles dictionary in case new vehicles were spawned.
+        self.vehicles = {vid: Vehicle(vid) for vid in self.vehicle_ids}
+        self.active_charging_request_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
+
+        # Additional attributes for managing charging requests and logging
         self.charging_request_queue = deque()
-        self.active_charging_request_for_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
+        self.active_charging_request_vehicle_id = None
+        self.charging_stops_per_episode_counter = Counter()
 
         if self.simulate_non_member_evs:
             self.__add_non_member_vehicles()
@@ -303,88 +299,8 @@ class CircleEnv(gym.Env):
         simulation_state = self.simulation.get_state()
         observation = self.__get_observation(simulation_state)
         info = self.__get_info()
-        logger.debug(f"reset observation: {observation}")
-        return (observation, info)
-
-    def __action_is_charge(self, vehicle_action):
-        return vehicle_action in (1,2,3,4)
-    
-    def __action_is_do_nothing(self, vehicle_action):
-        return vehicle_action == 0
-
-    def __handle_vehicle_action(self, vehicle_id, vehicle_action):
-        """
-        Handles the action for the vehicle with the given vehicle_id.
-        """
-        logger.debug(f"action {vehicle_action} for {vehicle_id}")
-        self.currently_selected_actions[vehicle_id] = vehicle_action
-        action_penalty = 0
-
-        # for already arrived vehicles, do nothing and return. No penalty is given because the agent has to select an action for each vehicle in each step (due to the action space being static and not dynamic)
-        # I could think about penalizing it if it tries to send it to a charging station instead of just taking action 0. But right now that doesn't seem necessary.
-        if vehicle_id in self.arrived_vehicle_ids:
-            return action_penalty
-        
-        next_charging_stop = self.simulation.get_next_charging_stop_id(vehicle_id)
-        charging_stop_is_planned = next_charging_stop is not None
-        
-
-        if self.__action_is_charge(vehicle_action):
-            charging_stations = self.simulation.get_all_charging_station_ids()
-            cs_id = charging_stations[vehicle_action-1] # action 1 means: go to cs_0 -> action-1 gives us the list index
-            if cs_id == next_charging_stop:
-                logger.debug(f"Charging stop at {cs_id} is already planned for vehicle {vehicle_id}")
-                return action_penalty
-            try:
-                self.simulation.reroute_for_charging(vehicle_id, cs_id)
-                logger.debug(f"Vehicle {vehicle_id} rerouted for charging at {cs_id}")
-                # penalize the agent if it sends a vehicle charging although its battery is full enough to reach the destination
-                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
-                if remaining_range_is_sufficient is None:
-                    logger.debug(f"vehicle {vehicle_id} was asked for remaining range but doesn't seem to exist")
-                if remaining_range_is_sufficient:
-                    action_penalty = -1
-                    logger.debug(f"action penalty: vehicle {vehicle_id} was asked to charge but has enough range to reach destination (reward -1)")
-            except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
-                logger.error(e)
-                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                action_penalty = -1
-                logger.debug(f"action penalty: vehicle {vehicle_id} tried to charge but is past the charging station (reward -1)")
-        elif self.__action_is_do_nothing(vehicle_action):
-            if charging_stop_is_planned:
-                self.simulation.remove_charging_stop(vehicle_id)
-                logger.debug(f"Charging stop removed for vehicle {vehicle_id}")
-        return action_penalty
-
-    def __destination_is_reached(self, vehicle_id):
-        return True if vehicle_id in self.arrived_vehicle_ids else False
-
-    def __battery_is_empty(self, vehicle_id):
-        battery_soc = self.simulation.get_battery_soc(vehicle_id)
-        return (battery_soc is not None) and (battery_soc <= 0) # if battery_soc is None, the vehicle is not currently online
-    
-    def __battery_just_died(self, vehicle_id):
-        if vehicle_id in self.empty_vehicle_ids: # i.e. vehicle was already empty before the current step
-            return False
-        if self.__battery_is_empty(vehicle_id): # i.e. vehicle is empty and was NOT empty before the current step
-            self.empty_vehicle_ids.append(vehicle_id)
-            return True
-        return False # i.e. vehicle is NOT empty
-
-    def __vehicle_has_just_despawned(self, vehicle_id, newly_arrived_ids):
-        return True if (newly_arrived_ids and vehicle_id in newly_arrived_ids) else False
-
-    def __get_reward_for_vehicle(self, vehicle_id, battery_just_died, vehicle_has_just_reached_destination):
-        
-        reward_per_vehicle = -100 if battery_just_died else 10 if vehicle_has_just_reached_destination else 0
-
-        if vehicle_has_just_reached_destination:
-            logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +10)")
-
-        if battery_just_died:
-            logger.info(f"Vehicle {vehicle_id} JUST died (reward -100)")
-
-        return reward_per_vehicle
+        logger.debug(f"Reset observation: {observation}")
+        return observation, info
 
     def __update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
         """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
@@ -392,109 +308,65 @@ class CircleEnv(gym.Env):
             return
         
         current_time = self.simulation.get_current_time_step()
-    
         for vehicle_id in newly_spawned_ids or []:
-            self.vehicle_times.setdefault(vehicle_id, {})['departure'] = current_time
-            print(f"departure for {vehicle_id} at {current_time}")
-    
+            vehicle = self.vehicles.get(vehicle_id)
+            if vehicle and vehicle.departure_time is None:
+                vehicle.departure_time = current_time
+                logger.debug(f"Vehicle {vehicle_id} departure time set to {current_time}")
         for vehicle_id in newly_arrived_ids or []:
-            self.vehicle_times[vehicle_id]['arrival'] = current_time
-            print(f"arrival for {vehicle_id} at {current_time}")
+            vehicle = self.vehicles.get(vehicle_id)
+            if vehicle:
+                vehicle.arrival_time = current_time
+                vehicle.arrived = True
+                logger.debug(f"Vehicle {vehicle_id} arrival time set to {current_time}")
 
-    def __calculate_final_reward(self):
-        """Only given at the end of an episode"""
-        global_ttt = 0
-        for vehicle_id in self.vehicle_times:
-            # Ensure 'arrival' exists; if not, set it to the current time
-            if 'arrival' not in self.vehicle_times[vehicle_id]:
-                self.vehicle_times[vehicle_id]['arrival'] = self.simulation.get_current_time_step()
-            # Calculate TTT
-            vehicle_ttt = self.vehicle_times[vehicle_id]['arrival'] - self.vehicle_times[vehicle_id]['arrival']
-            global_ttt += vehicle_ttt
-        return global_ttt
-
-    def __calculate_step_reward(self, newly_arrived_ids, charging_ids):
-        reward = 0
-        one_vehicle_just_died = False
-        all_vehicles_at_destination = True
-
-        for index, vehicle_id in enumerate(self.vehicle_ids):
-            vehicle_is_charging = vehicle_id in charging_ids
-            vehicle_just_died = self.__battery_just_died(vehicle_id)
-            vehicle_is_at_destination = self.__destination_is_reached(vehicle_id)
-            vehicle_has_just_despawned = self.__vehicle_has_just_despawned(vehicle_id, newly_arrived_ids)
-            if vehicle_has_just_despawned:
-                logger.info(f"Vehicle {vehicle_id} despawned")
-
-            vehicle_has_just_reached_destination = vehicle_is_at_destination and vehicle_has_just_despawned
-
-            reward_per_vehicle = self.__get_reward_for_vehicle(vehicle_id, vehicle_just_died, vehicle_has_just_reached_destination)
-            reward += reward_per_vehicle
-
-            if vehicle_just_died:
-                one_vehicle_just_died = True        
-
-            if not vehicle_is_at_destination:
-                all_vehicles_at_destination = False
-
-            if vehicle_is_charging:
-                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
-                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
-                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle_id, buffer=0)
-                if not remaining_range_is_sufficient:
-                    logger.debug(f"vehicle {vehicle_id} is charging and otherwise doesn't have enough remaining range to arrive at its destination (+1 reward)")
-                    reward += 1
-                                
-        return reward, one_vehicle_just_died, all_vehicles_at_destination
-
-    def __update_low_battery_ids(self, just_charged_ids):
-        """Deletes all vehicle_ids that just charged out of the low_battery_ids list"""
-        self.low_battery_ids = [vehicle_id for vehicle_id in self.low_battery_ids if vehicle_id not in just_charged_ids]
-
-    def __get_new_low_battery_ids(self):
-        battery_threshold = 0.2 # the value under which the battery soc should be considered low
-        state = self.simulation.get_state()
-        new_low_battery_ids = []
-        for vehicle_id, vehicle_stats in state.items():
-            max_battery_capacity = vehicle_stats["max_battery_capacity"]
-            battery_soc = vehicle_stats["battery_soc"]
-            if battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
-                continue
-            relative_battery_soc = battery_soc / max_battery_capacity
-            # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
-            if  relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
-                new_low_battery_ids.append(vehicle_id)
-                self.low_battery_ids.append(vehicle_id)
-        return new_low_battery_ids
-    
     def __check_for_charging_request(self, newly_spawned_ids):
         """
-        A charging request is generated (added to the queue) whenever a new vehicle enters the simulation or a vehicle just finished charging (i.e. when a vehicle was not evaluated yet or needs re-evaluation).
-        
-        Pops the next charging request out of the queue (FIFO) and sets it as the active charging request.
-
-        Returns: True if there is an active charging request, False otherwise
+        Checks for charging requests based on newly spawned, just-charged,
+        and low-battery vehicles. If any exist, the first in the queue becomes active.
+        Returns: True if there is an active charging request, False otherwise.
         """
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         # Find out if there are vehicles that just entered low battery status
-        self.__update_low_battery_ids(just_charged_ids)
-        new_low_battery_ids = self.__get_new_low_battery_ids() 
-
-        charging_requests = newly_spawned_ids + just_charged_ids + new_low_battery_ids
-
+        self.__update_low_battery_flags(just_charged_ids)
+        new_low_battery_ids = self.__get_new_low_battery_ids()
+        charging_requests = (newly_spawned_ids or []) + just_charged_ids + new_low_battery_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
-
         if charging_requests:
-            logger.debug(f"newly_spawned_ids: {newly_spawned_ids}, just_charged_ids: {just_charged_ids}, new_low_battery_ids: {new_low_battery_ids}")
+            logger.debug(f"New charging requests: spawned={newly_spawned_ids}, just charged={just_charged_ids}, low battery={new_low_battery_ids}")
             self.charging_request_queue.extend(charging_requests)
-        if self.charging_request_queue: # i.e. if the queue is not empty
-            self.active_charging_request_for_vehicle_id = self.charging_request_queue.popleft()
-            logger.debug(f"charging request for {self.active_charging_request_for_vehicle_id}")
+        if self.charging_request_queue:
+            self.active_charging_request_vehicle_id = self.charging_request_queue.popleft()
+            logger.debug(f"Active charging request: {self.active_charging_request_vehicle_id}")
             return True
         return False
-    
+
+    def __update_low_battery_flags(self, just_charged_ids):
+        for vehicle in self.vehicles.values():
+            if vehicle.vehicle_id in just_charged_ids:
+                vehicle.low_battery = False
+
+    def __get_new_low_battery_ids(self):
+        battery_threshold = 0.2 # the value under which the battery soc should be considered low
+        new_low_battery_ids = []
+        state = self.simulation.get_state()
+        for vehicle_id, vehicle in self.vehicles.items():
+            vehicle_state = state.get(vehicle_id)
+            if vehicle_state is None:
+                continue
+            max_battery_capacity = vehicle_state.get("max_battery_capacity", 100000)
+            battery_soc = vehicle_state.get("battery_soc")
+            if battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
+                continue
+            relative_battery_soc = battery_soc / max_battery_capacity
+            # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
+            if relative_battery_soc < battery_threshold and not vehicle.low_battery:
+                new_low_battery_ids.append(vehicle_id)
+                vehicle.low_battery = True
+        return new_low_battery_ids
+
     def step(self, action):
         """
         Executes simulation steps until the next charging request (or termination/truncation).
@@ -510,9 +382,11 @@ class CircleEnv(gym.Env):
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             charging_ids = self.simulation.get_charging_vehicle_ids()
-            logger.debug(f"charging_ids: {charging_ids}")
-            self.arrived_vehicle_ids.extend(newly_arrived_ids)
-            logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
+
+            # Update vehicles’ arrival status.
+            for vid in newly_arrived_ids:
+                if vid in self.vehicles:
+                    self.vehicles[vid].arrived = True
 
             if newly_spawned_ids or newly_arrived_ids:
                 self.__update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
@@ -520,9 +394,11 @@ class CircleEnv(gym.Env):
             # only execute once per step
             loop_just_started = (loop_counter == 0)
             if loop_just_started:
-                # perform action for the vehicle which filed the charging request
-                action_penalty = self.__handle_vehicle_action(self.active_charging_request_for_vehicle_id, action)
-                accumulated_reward += action_penalty
+                # Process the action for the vehicle that filed the charging request.
+                if self.active_charging_request_vehicle_id in self.vehicles:
+                    vehicle = self.vehicles[self.active_charging_request_vehicle_id]
+                    action_penalty = vehicle.handle_action(self.simulation, action)
+                    accumulated_reward += action_penalty
 
             # calculate reward
             temp_reward, one_vehicle_just_died, all_vehicles_at_destination = self.__calculate_step_reward(
@@ -568,6 +444,58 @@ class CircleEnv(gym.Env):
                                 all_vehicles_at_destination, one_vehicle_just_died)
         return observation, reward, terminated, truncated, info
 
+    def __calculate_step_reward(self, newly_arrived_ids, charging_ids):
+        """
+        Calculate the step reward by iterating over all vehicles.
+        A reward of -100 is given if a battery just died and +10 when a vehicle reaches its destination.
+        Additionally, vehicles that are charging (and otherwise low on range) give an extra reward.
+        """
+        reward = 0
+        one_vehicle_just_died = False
+        all_vehicles_at_destination = True
+
+        for vehicle in self.vehicles.values():
+            vehicle_just_died = vehicle.battery_just_died()
+            vehicle_is_at_destination = vehicle.arrived
+            vehicle_has_just_reached_destination = vehicle_is_at_destination and (
+                (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids) or False
+            )
+            if vehicle_just_died:
+                logger.info(f"Vehicle {vehicle_id} JUST died (reward -100)")
+                reward += -100
+            elif vehicle_has_just_reached_destination:
+                logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +10)")
+                reward += 10
+
+            if vehicle_just_died:
+                one_vehicle_just_died = True
+            if not vehicle_is_at_destination:
+                all_vehicles_at_destination = False
+
+            if vehicle.vehicle_id in charging_ids:
+                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
+                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
+                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle.vehicle_id, buffer=0)
+                if not remaining_range_is_sufficient:
+                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+                    reward += 1
+
+        return reward, one_vehicle_just_died, all_vehicles_at_destination
+
+    def __calculate_final_reward(self):
+        """
+        Calculate the final reward (e.g. total travel time) by summing differences
+        between each vehicle’s departure and arrival times.
+        This reward is only given at the end of an episode.
+        """
+        global_ttt = 0
+        for vehicle in self.vehicles.values():
+            if vehicle.departure_time is None:
+                continue
+            if vehicle.arrival_time is None:
+                vehicle.arrival_time = self.simulation.get_current_time_step()
+            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
+        return global_ttt
     
     def render(self, mode='human'):
         """
