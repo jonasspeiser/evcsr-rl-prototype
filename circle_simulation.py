@@ -205,19 +205,6 @@ class Simulation():
         distance = self.__calculate_distance(current_vehicle_edge, destination)
         return distance
 
-    def remaining_range_is_sufficient(self, vehicle_id, buffer=0):
-        """ 
-        Returns whether a vehicle's battery soc is enough to reach its destination.
-        If the optional "buffer" parameter is set, it must have a battery soc higher than "buffer" when arriving, 
-        otherwise it just has to be not completely empty. 
-        Returns None if remaining range is None.
-        """
-        remaining_range = self.get_remaining_range(vehicle_id)
-        if remaining_range is None:
-            return None
-        distance_to_destination = self.get_distance_to_destination(vehicle_id)
-        return remaining_range > (distance_to_destination + buffer)
-
     def step(self):
         traci.simulationStep()
 
