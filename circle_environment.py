@@ -9,28 +9,179 @@ from data_processing import Obelis_Data_Provider
 import logging
 logger = logging.getLogger("rl.environment") # child logger of "application", parent logger to "application.environment.simulation"
 
-""" Reward strategy could look like this:
-
+# ======================================
+# Reward Strategies
+# ======================================
 class RewardStrategy:
-    def calculate_step_reward(self, state, action, done):
-        raise NotImplementedError
-    
-    def calculate_final_reward(self, state, action, done):
+    def calculate_step_reward(self, vehicles, simulation, newly_arrived_ids, charging_ids):
+        """
+        Calculate the step reward.
+        
+        Parameters:
+            vehicles: List of all vehicles.
+            newly_arrived_ids: List of vehicle ids that just reached their destination.
+            charging_ids: List of vehicle ids that are currently charging.
+        
+        Returns:
+            A tuple (reward, one_vehicle_just_died, all_vehicles_at_destination)
+        """
+        raise NotImplementedError("calculate_step_reward must be implemented in subclasses.")
+
+    def calculate_final_reward(self, vehicles, simulation):
+        """
+        Calculate the final reward at the end of an episode.
+        
+        Parameters:
+            vehicles: List of all vehicles.
+            
+        Returns:
+            A final reward value.
+        """
+        raise NotImplementedError("calculate_final_reward must be implemented in subclasses.")
+
+    def calculate_action_penalty(self, vehicle, context):
+        """
+        Compute an action penalty based on the context.
+        
+        Parameters:
+            vehicle: The vehicle that executed the action.
+            simulation: The simulation instance.
+            context: A dictionary with information about the action handling.
+                     For example, it might contain:
+                         - 'action': the action that was taken
+                         - 'target_cs': the charging station the vehicle tried to go to
+                         - 'next_charging_stop': the vehicle’s currently planned stop (if any)
+                         - 'reroute_successful': whether rerouting succeeded (True/False)
+                         - 'charging_stop_already_planned': whether a charging stop at the decided station was already planned in the last action
+                         - 'sufficient_range': whether the vehicle has sufficient range
+                         - 'rerouting_exception_occurred': whether an exception occurred during rerouting
+        Returns:
+            A numeric penalty (e.g., -1 for an undesired action, 0 for no penalty).
+        """
         raise NotImplementedError
 
-class RewardBasic(RewardStrategy):
-    def calculate_step_reward(self, state, action, done):
-        return 0
-    def calculate_final_reward(self, state, action, done):
-        return ttt
+class BasicRewardStrategy(RewardStrategy):
+    def calculate_step_reward(self, vehicles, simulation, newly_arrived_ids, charging_ids):
+        """
+        Calculate the step reward by iterating over all vehicles.
+        A reward of -100 is given if a battery just died and +10 when a vehicle reaches its destination.
+        Additionally, vehicles that are charging (and otherwise low on range) give an extra reward.
+        """
+        reward = 0
+        one_vehicle_just_died = False
+        all_vehicles_at_destination = True
+
+        for vehicle in vehicles.values():
+            vehicle_just_died = vehicle.battery_just_died()
+            vehicle_is_at_destination = vehicle.arrived
+            vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
+            
+            if vehicle_just_died:
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
+                reward += -100
+            elif vehicle_has_just_reached_destination:
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
+                reward += 10
+
+            if vehicle_just_died:
+                one_vehicle_just_died = True
+            if not vehicle_is_at_destination:
+                all_vehicles_at_destination = False
+
+            if vehicle.vehicle_id in charging_ids:
+                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
+                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
+                remaining_range_is_sufficient = simulation.remaining_range_is_sufficient(vehicle.vehicle_id, buffer=0)
+                if not remaining_range_is_sufficient:
+                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+                    reward += 1
+
+        return reward, one_vehicle_just_died, all_vehicles_at_destination
+
+    def calculate_final_reward(self, vehicles, simulation):
+        """
+        Calculate the final reward (e.g. total travel time) by summing differences
+        between each vehicle’s departure and arrival times.
+        This reward is only given at the end of an episode.
+        """
+        global_ttt = 0
+        for vehicle in vehicles.values():
+            if vehicle.departure_time is None:
+                continue
+            if vehicle.arrival_time is None:
+                vehicle.arrival_time = simulation.get_current_time_step()
+            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
+        return global_ttt
+
+    def calculate_action_penalty(self, vehicle, context):
+        # Example logic: if the vehicle is asked to charge (action 1-4)
+        # but has sufficient range (as determined by simulation.remaining_range_is_sufficient),
+        # then apply a penalty of -1.
+        action = context.get('action')
+        if action in (1, 2, 3, 4):
+            # If the vehicle already had this charging stop planned or rerouting failed,
+            # don't apply a penalty.
+            if context.get('charging_stop_already_planned', False):
+                return 0
+            if context.get('sufficient_range', False):
+                logger.debug(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
+                return -1
+            if context.get('rerouting_exception_ocurred', False):
+                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
+                logger.debug(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -1)")
+                return -1
+        return 0 # if action is "do nothing"
+
 class RewardOnlyPreventEmpty(RewardStrategy):
-    def calculate_step_reward(self, state, action, done):
-        return 1.0 if action == 0 else -1.0
+    def calculate_step_reward(self, env, newly_arrived_ids, charging_ids):
+        # Example: only penalize vehicles whose battery just died.
+        reward = 0
+        one_vehicle_just_died = False
+        all_vehicles_at_destination = True
+
+        for vehicle in env.vehicles.values():
+            if vehicle.battery_just_died():
+                logger.info(f"Vehicle {vehicle.vehicle_id} battery died (penalty -100)")
+                reward += -100
+                one_vehicle_just_died = True
+            if not vehicle.arrived:
+                all_vehicles_at_destination = False
+
+        return reward, one_vehicle_just_died, all_vehicles_at_destination
+
+    def calculate_final_reward(self, env):
+        # For this strategy, you might choose a different final reward.
+        return 0
+
 
 class RewardShaping(RewardStrategy):
-    def calculate_step_reward(self, state, action, done):
-        return 1.0 if action == 0 else -1.0
-"""
+    def calculate_step_reward(self, env, newly_arrived_ids, charging_ids):
+        # Example: shaped rewards that combine multiple signals.
+        reward = 0
+        one_vehicle_just_died = False
+        all_vehicles_at_destination = True
+
+        for vehicle in env.vehicles.values():
+            if vehicle.battery_just_died():
+                reward -= 50  # lesser penalty than BasicRewardStrategy
+                one_vehicle_just_died = True
+            if vehicle.arrived and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids):
+                reward += 5  # smaller bonus for reaching destination
+            if vehicle.vehicle_id in charging_ids:
+                # reward for charging if the vehicle is in danger of running empty
+                remaining_range_is_sufficient = env.simulation.remaining_range_is_sufficient(vehicle.vehicle_id, buffer=0)
+                if not remaining_range_is_sufficient:
+                    reward += 2
+
+            if not vehicle.arrived:
+                all_vehicles_at_destination = False
+
+        return reward, one_vehicle_just_died, all_vehicles_at_destination
+
+    def calculate_final_reward(self, env):
+        # A shaped final reward could also incorporate other metrics.
+        return BasicRewardStrategy().calculate_final_reward(env)
+
 
 # ======================================
 # Vehicle Class
@@ -82,18 +233,21 @@ class Vehicle:
         obs = [normalized_soc] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
         return np.array(obs, dtype=np.float32)
 
-    def handle_action(self, simulation, action):
+    def handle_action(self, simulation, action, reward_strategy):
         """
-        Process the action for this vehicle.
+        Handle the action (e.g. rerouting, removing stops) and then delegate
+        the penalty calculation to the reward strategy.
         Returns an action penalty (if any).
         """
         logger.debug(f"Vehicle {self.vehicle_id}: handling action {action}")
         self.last_action = action
-        action_penalty = 0
+
+        # Build a context dictionary with information useful for penalty calculation.
+        context = {'action': action}
 
         if self.arrived:
             # If the vehicle already arrived, do nothing.
-            return action_penalty
+            return 0
 
         next_charging_stop = simulation.get_next_charging_stop_id(self.vehicle_id)
         charging_stop_is_planned = next_charging_stop is not None
@@ -101,25 +255,32 @@ class Vehicle:
         if action in (1, 2, 3, 4): # action is "charge"
             charging_stations = simulation.get_all_charging_station_ids()
             cs_id = charging_stations[action - 1] # action 1 means: go to cs_0 -> action-1 gives us the list index
+            context['target_cs'] = cs_id
+            context['next_charging_stop'] = next_charging_stop
+
             if cs_id == next_charging_stop:
                 logger.debug(f"Vehicle {self.vehicle_id}: charging stop {cs_id} is already planned")
-                return action_penalty
+                context['reroute_successful'] = False
+                context['charging_stop_already_planned']
+                return 0
             try:
                 simulation.reroute_for_charging(self.vehicle_id, cs_id)
                 logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
-                remaining_range_is_sufficient = simulation.remaining_range_is_sufficient(self.vehicle_id, buffer=0)
-                if remaining_range_is_sufficient:
-                    action_penalty = -1
-                    logger.debug(f"Vehicle {self.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
+                context['reroute_successful'] = True
+                context['sufficient_range'] = simulation.remaining_range_is_sufficient(self.vehicle_id, buffer=0)    
             except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
                 logger.error(e)
-                # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                action_penalty = -1
-                logger.debug(f"Vehicle {self.vehicle_id}: illegal charging action (penalty -1)")
+                context['reroute_successful'] = False
+                context['rerouting_exception_occurred'] = True
+
+
         elif action == 0: # action is "do nothing"
             if charging_stop_is_planned:
                 simulation.remove_charging_stop(self.vehicle_id)
                 logger.debug(f"Vehicle {self.vehicle_id}: removed planned charging stop")
+
+        # Delegate penalty calculation to the reward strategy.
+        action_penalty = reward_strategy.calculate_action_penalty(self, context)
         return action_penalty
 
     def is_battery_empty(self):
@@ -136,6 +297,7 @@ class Vehicle:
             self.empty = True
             return True
         return False
+
 
 # ======================================
 # CircleEnv Class
@@ -197,6 +359,16 @@ class CircleEnv(gym.Env):
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
+
+        # Instantiate the reward strategy based on env_version.
+        if env_version == "basic":
+            self.reward_strategy = BasicRewardStrategy()
+        elif env_version == "only_prevent_empty":
+            self.reward_strategy = RewardOnlyPreventEmpty()
+        elif env_version == "shaping":
+            self.reward_strategy = RewardShaping()
+        else:
+            raise ValueError(f"Unknown env_version: {env_version}")
 
     def __log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
         logger.debug(f"State: {simulation_state}, Step reward: {reward}")
@@ -397,13 +569,13 @@ class CircleEnv(gym.Env):
                 # Process the action for the vehicle that filed the charging request.
                 if self.active_charging_request_vehicle_id in self.vehicles:
                     vehicle = self.vehicles[self.active_charging_request_vehicle_id]
-                    action_penalty = vehicle.handle_action(self.simulation, action)
+                    # The vehicle handles its action, then the reward strategy computes a penalty based on the context.
+                    action_penalty = vehicle.handle_action(self.simulation, action, self.reward_strategy)
                     accumulated_reward += action_penalty
 
-            # calculate reward
-            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = self.__calculate_step_reward(
-                newly_arrived_ids, charging_ids
-            )
+            # Delegate reward calculation to the reward strategy.
+            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = \
+                self.reward_strategy.calculate_step_reward(self.vehicles, self.simulation, newly_arrived_ids, charging_ids)
             logger.debug(f"Step reward from simulation: {temp_reward}")
             accumulated_reward += temp_reward
 
@@ -427,7 +599,7 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
-                final_reward = self.__calculate_final_reward()
+                final_reward = self.reward_strategy.calculate_final_reward(self)
                 logger.info(f"Final reward: {final_reward}")
                 if terminated:
                     self.__set_cumulated_waiting_time_per_episode_terminated()
@@ -444,59 +616,6 @@ class CircleEnv(gym.Env):
                                 all_vehicles_at_destination, one_vehicle_just_died)
         return observation, reward, terminated, truncated, info
 
-    def __calculate_step_reward(self, newly_arrived_ids, charging_ids):
-        """
-        Calculate the step reward by iterating over all vehicles.
-        A reward of -100 is given if a battery just died and +10 when a vehicle reaches its destination.
-        Additionally, vehicles that are charging (and otherwise low on range) give an extra reward.
-        """
-        reward = 0
-        one_vehicle_just_died = False
-        all_vehicles_at_destination = True
-
-        for vehicle in self.vehicles.values():
-            vehicle_just_died = vehicle.battery_just_died()
-            vehicle_is_at_destination = vehicle.arrived
-            vehicle_has_just_reached_destination = vehicle_is_at_destination and (
-                (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids) or False
-            )
-            if vehicle_just_died:
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
-                reward += -100
-            elif vehicle_has_just_reached_destination:
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
-                reward += 10
-
-            if vehicle_just_died:
-                one_vehicle_just_died = True
-            if not vehicle_is_at_destination:
-                all_vehicles_at_destination = False
-
-            if vehicle.vehicle_id in charging_ids:
-                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
-                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
-                remaining_range_is_sufficient = self.simulation.remaining_range_is_sufficient(vehicle.vehicle_id, buffer=0)
-                if not remaining_range_is_sufficient:
-                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
-                    reward += 1
-
-        return reward, one_vehicle_just_died, all_vehicles_at_destination
-
-    def __calculate_final_reward(self):
-        """
-        Calculate the final reward (e.g. total travel time) by summing differences
-        between each vehicle’s departure and arrival times.
-        This reward is only given at the end of an episode.
-        """
-        global_ttt = 0
-        for vehicle in self.vehicles.values():
-            if vehicle.departure_time is None:
-                continue
-            if vehicle.arrival_time is None:
-                vehicle.arrival_time = self.simulation.get_current_time_step()
-            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
-        return global_ttt
-    
     def render(self, mode='human'):
         """
         Returns: None
@@ -513,6 +632,7 @@ class CircleEnv(gym.Env):
         """
         logger.debug("Closing environment")
         self.simulation.close()
+
 
 # ======================================
 # Main Testing Functions
