@@ -461,10 +461,10 @@ class CircleEnv(gym.Env):
                 (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids) or False
             )
             if vehicle_just_died:
-                logger.info(f"Vehicle {vehicle_id} JUST died (reward -100)")
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
                 reward += -100
             elif vehicle_has_just_reached_destination:
-                logger.info(f"Vehicle {vehicle_id} JUST reached destination (reward +10)")
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
                 reward += 10
 
             if vehicle_just_died:
