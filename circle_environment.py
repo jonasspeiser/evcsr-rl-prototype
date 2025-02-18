@@ -13,7 +13,7 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
 
-    def __init__(self, render_mode=None, vehicles_to_spawn=1, observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs:bool=False):
+    def __init__(self, render_mode=None, env_version="basic", vehicles_to_spawn=1, observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs:bool=False):
         """
         Define self.observation_space and self.action_space.
 
@@ -155,7 +155,11 @@ class CircleEnv(gym.Env):
         # generate first charging request -> simulation.step until charging request = true
         # to spawn first vehicle
         while self.active_charging_request_for_vehicle_id is None:
-            self.__check_for_charging_request()
+            # Find out if there are new vehicle ids online
+            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+            # update vehicle times, otherwise departure time of vehicle_0 is not registered and leads to an error
+            self.__update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
+            self.__check_for_charging_request(newly_spawned_ids)
             self.simulation.step() 
 
         simulation_state = self.simulation.get_state()
@@ -244,19 +248,30 @@ class CircleEnv(gym.Env):
 
         return reward_per_vehicle
 
-    def __update_vehicle_times(self, newly_arrived_ids):
+    def __update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
         """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
-        for vehicle_id in newly_arrived_ids:
-            arrival = self.simulation.get_current_time_step()
-            departure = self.vehicle.get_departure_time_for_vehicle(vehicle_id)
-            self.vehicle_times[vehicle_id]['arrival'] = arrival
-            self.vehicle_times[vehicle_id]['departure'] = departure
-            self.vehicle_times[vehicle_id]['ttt'] = arrival - departure
+        if not (newly_spawned_ids or newly_arrived_ids):
+            return
+        
+        current_time = self.simulation.get_current_time_step()
+    
+        for vehicle_id in newly_spawned_ids or []:
+            self.vehicle_times.setdefault(vehicle_id, {})['departure'] = current_time
+            print(f"departure for {vehicle_id} at {current_time}")
+    
+        for vehicle_id in newly_arrived_ids or []:
+            self.vehicle_times[vehicle_id]['arrival'] = current_time
+            print(f"arrival for {vehicle_id} at {current_time}")
 
     def __calculate_end_of_episode_reward(self):
         global_ttt = 0
         for vehicle_id in self.vehicle_times:
-            global_ttt += self.vehicle_times[vehicle_id]['ttt']
+            # Ensure 'arrival' exists; if not, set it to the current time
+            if 'arrival' not in self.vehicle_times[vehicle_id]:
+                self.vehicle_times[vehicle_id]['arrival'] = self.simulation.get_current_time_step()
+            # Calculate TTT
+            vehicle_ttt = self.vehicle_times[vehicle_id]['arrival'] - self.vehicle_times[vehicle_id]['arrival']
+            global_ttt += vehicle_ttt
         return global_ttt
 
     def __calculate_step_reward(self, newly_arrived_ids, charging_ids):
@@ -313,7 +328,7 @@ class CircleEnv(gym.Env):
                 self.low_battery_ids.append(vehicle_id)
         return new_low_battery_ids
     
-    def __check_for_charging_request(self):
+    def __check_for_charging_request(self, newly_spawned_ids):
         """
         A charging request is generated (added to the queue) whenever a new vehicle enters the simulation or a vehicle just finished charging (i.e. when a vehicle was not evaluated yet or needs re-evaluation).
         
@@ -321,8 +336,6 @@ class CircleEnv(gym.Env):
 
         Returns: True if there is an active charging request, False otherwise
         """
-        # Find out if there are new vehicle ids online
-        newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         # Find out if there are vehicles that just entered low battery status
@@ -358,6 +371,8 @@ class CircleEnv(gym.Env):
             
             logger.debug(f"current sumo time step: {self.simulation.get_current_time_step()}")
 
+            # Find out if there are new vehicle ids online
+            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             # Find out if there are new vehicle ids offline or charging
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             charging_ids = self.simulation.get_charging_vehicle_ids()
@@ -365,8 +380,8 @@ class CircleEnv(gym.Env):
             self.arrived_vehicle_ids.extend(newly_arrived_ids)
             logger.debug(f"newly_arrived_ids: {newly_arrived_ids}, arrived_vehicle_ids: {self.arrived_vehicle_ids}")
 
-            if newly_arrived_ids:
-                self.__update_vehicle_times(newly_arrived_ids)
+            if newly_spawned_ids or newly_arrived_ids:
+                self.__update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
 
             # only execute once per step
             loop_just_started = (loop_counter == 0)
@@ -385,7 +400,7 @@ class CircleEnv(gym.Env):
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
-            charging_request = self.__check_for_charging_request()
+            charging_request = self.__check_for_charging_request(newly_spawned_ids)
 
             important_event_happened = charging_request or terminated or truncated
             some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
