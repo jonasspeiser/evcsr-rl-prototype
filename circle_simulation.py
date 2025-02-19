@@ -41,21 +41,21 @@ class Simulation():
 
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
-        self.charging_stations = self.__fetch_charging_stations()
+        self.charging_stations = self._fetch_charging_stations()
         self.added_vehicles = []
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
 
 
-    def __fetch_charging_stations(self):
+    def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
         charging_stations = {}
         for cs_id in charging_station_ids:
-            cs_edge = self.__get_cs_edge(cs_id)
+            cs_edge = self._get_cs_edge(cs_id)
             charging_stations[cs_id] = cs_edge
         return charging_stations
 
-    def __get_cs_edge(self, cs_id):
+    def _get_cs_edge(self, cs_id):
         cs_lane = traci.chargingstation.getLaneID(cs_id)
         cs_edge = traci.lane.getEdgeID(cs_lane)
         return cs_edge
@@ -95,7 +95,7 @@ class Simulation():
             traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", str(battery_soc))
             self.added_vehicles.append(vehID)
 
-    def __get_vehicle_edge(self, vehicle_id):
+    def _get_vehicle_edge(self, vehicle_id):
         vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         if str(vehicle_lane) == "":
             raise ValueError("Vehicle is not on a lane")
@@ -200,9 +200,9 @@ class Simulation():
 
     def get_distance_to_destination(self, vehicle_id):
         """ Returns the driving distance of given vehicles current position to its destination. """
-        current_vehicle_edge = self.__get_vehicle_edge(vehicle_id)
+        current_vehicle_edge = self._get_vehicle_edge(vehicle_id)
         destination = self.get_vehicle_destination(vehicle_id)
-        distance = self.__calculate_distance(current_vehicle_edge, destination)
+        distance = self._calculate_distance(current_vehicle_edge, destination)
         return distance
 
     def step(self):
@@ -221,7 +221,7 @@ class Simulation():
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
     
-    def __filter_list_for_member_evs(self, original_list):
+    def _filter_list_for_member_evs(self, original_list):
         filtered_list = [item for item in original_list if item.startswith("member_ev")]
         return filtered_list
 
@@ -232,7 +232,7 @@ class Simulation():
     def get_online_vehicle_ids(self):
         """Returns a list of ids of all member vehicles currently running within the scenario"""
         original_list= traci.vehicle.getIDList()
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
 
     def get_loaded_vehicle_ids(self):
         """
@@ -241,19 +241,19 @@ class Simulation():
         If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define inidvidual vehicles not with flows. 
         """
         original_list = traci.simulation.getLoadedIDList()
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
 
 
     def get_spawned_vehicle_ids(self):
         """Returns a list of ids of all member vehicles that have spawned during the current time step"""
         original_list = traci.simulation.getDepartedIDList()
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
 
 
     def get_arrived_vehicle_ids(self):
         """Returns a list of ids of all member vehicles that have arrived at their destination during the current time step"""
         original_list = traci.simulation.getArrivedIDList()
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
 
 
     def get_charging_vehicle_ids(self):
@@ -266,20 +266,20 @@ class Simulation():
             charging_vehicles.extend(vehicles)
 
         original_list = charging_vehicles
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
 
 
     def get_charging_stop_ending_vehicle_ids(self):
         """Returns a list of ids of member vehicles that begin to continue their journey, leaving a scheduled stop in this time step"""
         original_list = traci.simulation.getStopEndingVehiclesIDList()
-        return self.__filter_list_for_member_evs(original_list)
+        return self._filter_list_for_member_evs(original_list)
     
     def get_vehicle_waiting_time(self, vehicle_id):
         """Return the accumulated waiting time for the vehicle. Due to traci limitations, this is only possible for online vehicles."""
         return traci.vehicle.getAccumulatedWaitingTime(vehicle_id)
     
 
-    def __adapt_vehicle_color(self, vehicle_id, battery_soc):
+    def _adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
         The vehicles color in the GUI is changed based on its battery SOC. 
         Furthermore, it turns blue when a charging stop is planned.
@@ -304,20 +304,20 @@ class Simulation():
             color = YELLOW
         traci.vehicle.setColor(vehicle_id, color)  
 
-    def __simulate_empty_battery(self, vehicle_id):
+    def _simulate_empty_battery(self, vehicle_id):
         logger.info(f"Battery empty, vehicle {vehicle_id} will stop and remain at its position")
         traci.vehicle.setSpeed(vehicle_id, 0)
         # traci.vehicle.remove(vehicle_id)
 
-    def __calculate_distance(self, edgeID1, edgeID2):
+    def _calculate_distance(self, edgeID1, edgeID2):
         return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
 
-    def __get_distance_to_cs(self, vehicle_position) -> dict:
+    def _get_distance_to_cs(self, vehicle_position) -> dict:
         charging_stations = self.charging_stations
         distance_dict = {}
         for station_id in charging_stations.keys():
             charging_station_edge = charging_stations[station_id]
-            distance = self.__calculate_distance(vehicle_position, charging_station_edge)
+            distance = self._calculate_distance(vehicle_position, charging_station_edge)
             distance_dict[station_id] = float(distance)
         return distance_dict
 
@@ -353,14 +353,14 @@ class Simulation():
             vehicle_destination = None
         else: # only execute if vehicle has a battery, otherwise skip
             if self.gui:
-                self.__adapt_vehicle_color(vehicle_id, battery_soc)
+                self._adapt_vehicle_color(vehicle_id, battery_soc)
             # stop vehicle if battery is empty
             if battery_soc <= 0:
-                self.__simulate_empty_battery(vehicle_id)
+                self._simulate_empty_battery(vehicle_id)
 
             try:
-                vehicle_edge = self.__get_vehicle_edge(vehicle_id) 
-                distance_to_cs = self.__get_distance_to_cs(vehicle_edge)
+                vehicle_edge = self._get_vehicle_edge(vehicle_id) 
+                distance_to_cs = self._get_distance_to_cs(vehicle_edge)
             except ValueError: # if vehicle is not on a lane, i.e. it hasn't spawned yet or despawned after arriving at destination
                 vehicle_edge = None
                 distance_to_cs = None
@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     simulation = Simulation(gui=True)
 
-    def __adapt_destination(vehicle_id, vehicle_state):
+    def _adapt_destination(vehicle_id, vehicle_state):
         """Routes the vehicles in circles"""
         start = "E0"
         end = "E10"
@@ -397,7 +397,7 @@ if __name__ == "__main__":
         if position == destination:
             traci.vehicle.changeTarget(vehicle_id, end if destination == start else start)  
 
-    def __print_vehicle_charging(vehicle_ids):
+    def _print_vehicle_charging(vehicle_ids):
         for vehicle_id in vehicle_ids:
             is_charging = traci.vehicle.getStopState(vehicle_id) & 2 ** 5 != 0
 
@@ -425,7 +425,7 @@ if __name__ == "__main__":
                 vehicle_state = simulation.get_vehicle_state(vehicle_id)
                 print(vehicle_state)
                 # send the vehicle driving in circles
-                __adapt_destination(vehicle_id, vehicle_state)
+                _adapt_destination(vehicle_id, vehicle_state)
                 # reroute to charging station if battery is low
                 if float(vehicle_state["battery_soc"]) < 100:
                     print("Battery low, rerouting to charge")
@@ -472,7 +472,7 @@ if __name__ == "__main__":
                     print(f"Step {current_step}: Vehicle {vehicle_id} despawned")
                     active_vehicles.remove(vehicle_id)
             
-            __print_vehicle_charging(active_vehicles)
+            _print_vehicle_charging(active_vehicles)
             
             simulation.step()
         

@@ -80,7 +80,7 @@ class CircleEnv(gym.Env):
         else:
             raise ValueError(f"Unknown env_version: {env_version}")
 
-    def __log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination):
+    def _log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination):
         logger.debug(f"State: {simulation_state}, Step reward: {reward}")
         if terminated:
             logger.info("Episode terminated")
@@ -91,28 +91,28 @@ class CircleEnv(gym.Env):
         if truncated:
             logger.info("Episode truncated")
 
-    def __set_charging_stops_per_episode_mean(self):
+    def _set_charging_stops_per_episode_mean(self):
         """Used for tensorboard logging. Calculates the global average for number of charging stops per vehicle."""
         total = sum(self.charging_stops_per_episode_counter.values())
         count = len(self.charging_stops_per_episode_counter) if self.charging_stops_per_episode_counter else 1
         self.charging_stops_per_episode_mean = total / count
 
-    def __update_accumulated_waiting_times(self):
+    def _update_accumulated_waiting_times(self):
         """Get the waiting times for each vehicle out of the simulation. This is only possible as long as a vehicle is still online."""
         for vehicle_id in self.simulation.get_online_vehicle_ids():
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.waiting_time = self.simulation.get_vehicle_waiting_time(vehicle_id)
     
-    def __set_cumulated_waiting_time_per_episode(self):
+    def _set_cumulated_waiting_time_per_episode(self):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value."""
         self.cumulated_waiting_time = sum(v.waiting_time for v in self.vehicles.values())
     
-    def __set_cumulated_waiting_time_per_episode_terminated(self):
+    def _set_cumulated_waiting_time_per_episode_terminated(self):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
         self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
 
-    def __add_non_member_vehicles(self):
+    def _add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
         vehicle_data = self.data_provider.get_non_member_vehicle_data()
         for entry in vehicle_data:
@@ -120,7 +120,7 @@ class CircleEnv(gym.Env):
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
     
-    def __get_observation(self, simulation_state):
+    def _get_observation(self, simulation_state):
         """
         Build the observation dictionary by updating each vehicle from the simulation state.
         """
@@ -133,7 +133,7 @@ class CircleEnv(gym.Env):
             observation[vehicle_id] = vehicle.get_observation(is_active=is_active)
         return observation
     
-    def __get_info(self):
+    def _get_info(self):
         return dict()
 
     def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
@@ -169,22 +169,22 @@ class CircleEnv(gym.Env):
         self.charging_stops_per_episode_counter = Counter()
 
         if self.simulate_non_member_evs:
-            self.__add_non_member_vehicles()
+            self._add_non_member_vehicles()
 
         # Wait until a charging request is generated.
         while self.active_charging_request_vehicle_id is None:
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
-            self.__update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
-            self.__check_for_charging_request(newly_spawned_ids)
+            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
+            self._check_for_charging_request(newly_spawned_ids)
             self.simulation.step()
 
         simulation_state = self.simulation.get_state()
-        observation = self.__get_observation(simulation_state)
-        info = self.__get_info()
+        observation = self._get_observation(simulation_state)
+        info = self._get_info()
         logger.debug(f"Reset observation: {observation}")
         return observation, info
 
-    def __update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
+    def _update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
         """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
         if not (newly_spawned_ids or newly_arrived_ids):
             return
@@ -202,7 +202,7 @@ class CircleEnv(gym.Env):
                 vehicle.arrived = True
                 logger.debug(f"Vehicle {vehicle_id} arrival time set to {current_time}")
 
-    def __check_for_charging_request(self, newly_spawned_ids):
+    def _check_for_charging_request(self, newly_spawned_ids):
         """
         Checks for charging requests based on newly spawned, just-charged,
         and low-battery vehicles. If any exist, the first in the queue becomes active.
@@ -211,8 +211,8 @@ class CircleEnv(gym.Env):
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         # Find out if there are vehicles that just entered low battery status
-        self.__update_low_battery_flags(just_charged_ids)
-        new_low_battery_ids = self.__get_new_low_battery_ids()
+        self._update_low_battery_flags(just_charged_ids)
+        new_low_battery_ids = self._get_new_low_battery_ids()
         charging_requests = (newly_spawned_ids or []) + just_charged_ids + new_low_battery_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
@@ -225,12 +225,12 @@ class CircleEnv(gym.Env):
             return True
         return False
 
-    def __update_low_battery_flags(self, just_charged_ids):
+    def _update_low_battery_flags(self, just_charged_ids):
         for vehicle in self.vehicles.values():
             if vehicle.vehicle_id in just_charged_ids:
                 vehicle.low_battery = False
 
-    def __get_new_low_battery_ids(self):
+    def _get_new_low_battery_ids(self):
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         new_low_battery_ids = []
         state = self.simulation.get_state()
@@ -271,7 +271,7 @@ class CircleEnv(gym.Env):
                     self.vehicles[vid].arrived = True
 
             if newly_spawned_ids or newly_arrived_ids:
-                self.__update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
+                self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
 
             # only execute once per step
             loop_just_started = (loop_counter == 0)
@@ -295,17 +295,17 @@ class CircleEnv(gym.Env):
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
-            charging_request = self.__check_for_charging_request(newly_spawned_ids)
+            charging_request = self._check_for_charging_request(newly_spawned_ids)
 
             important_event_happened = charging_request or terminated or truncated
             some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
 
-            self.__update_accumulated_waiting_times()
+            self._update_accumulated_waiting_times()
 
             # get observation (only every few simulation steps, for performance purposes)
             if loop_just_started or some_simulation_time_passed or important_event_happened:
                 simulation_state = self.simulation.get_state()
-                observation = self.__get_observation(simulation_state)
+                observation = self._get_observation(simulation_state)
                 logger.debug(f"Intermediate simulation state: {simulation_state}")
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
@@ -314,17 +314,17 @@ class CircleEnv(gym.Env):
                 accumulated_reward += final_reward
                 logger.info(f"Final reward: {final_reward}")
                 if terminated:
-                    self.__set_cumulated_waiting_time_per_episode_terminated()
-                self.__set_charging_stops_per_episode_mean()
-                self.__set_cumulated_waiting_time_per_episode()
+                    self._set_cumulated_waiting_time_per_episode_terminated()
+                self._set_charging_stops_per_episode_mean()
+                self._set_cumulated_waiting_time_per_episode()
                 break
 
             loop_counter += 1
             self.simulation.step()
 
         reward = accumulated_reward
-        info = self.__get_info()
-        self.__log_step_details(simulation_state, observation, reward, terminated, truncated,
+        info = self._get_info()
+        self._log_step_details(simulation_state, observation, reward, terminated, truncated,
                                 all_vehicles_at_destination)
         return observation, reward, terminated, truncated, info
 
