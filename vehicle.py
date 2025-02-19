@@ -4,6 +4,9 @@ import numpy as np
 import logging
 logger = logging.getLogger("rl.environment.vehicle")
 
+MAX_POSSIBLE_CAPACITY = 100000.0 # 100000 Wh is considered as max. possible battery capacity (used for normalization)
+MAX_POSSIBLE_DISTANCE = 2000.0 # 2000 km is considered as max. possible distance between a vehicles start and destination (used for normalization)
+
 class Vehicle:
     def __init__(self, vehicle_id, simulation):
         self.vehicle_id = vehicle_id
@@ -41,9 +44,9 @@ class Vehicle:
         if self.distance_to_cs is None:
             # Use -1 as padding to indicate that the vehicle is not spawned.
             return np.array([-1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
-        normalized_soc = self.battery_soc / 100000.0 if self.battery_soc is not None else -1 # 100000 Wh is considered as max. possible capacity
+        normalized_soc = self.battery_soc / MAX_POSSIBLE_CAPACITY if self.battery_soc is not None else -1 
         # Ensure a fixed order by sorting charging station ids; pad if needed.
-        distances = [self.distance_to_cs[k] / 2000.0 for k in sorted(self.distance_to_cs.keys())] # 2000 km is considered as max. possible distance
+        distances = [self.distance_to_cs[k] / MAX_POSSIBLE_DISTANCE for k in sorted(self.distance_to_cs.keys())]
         while len(distances) < 4:
             distances.append(-1)
         # destination_reached flag (1 if arrived, 0 otherwise)
