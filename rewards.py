@@ -23,6 +23,7 @@ class RewardStrategy:
         
         Parameters:
             vehicles: List of all vehicles.
+            current_time: The current simulation timestep.
             
         Returns:
             A final reward value.
@@ -50,13 +51,26 @@ class RewardStrategy:
         """
         raise NotImplementedError
 
-class BasicRewardStrategy(RewardStrategy):
+class NoTimeComponentRewardStrategy(RewardStrategy):
+    """
+    This Reward Strategy only prevents vehicles from going empty but doesn't reward for shorter waiting- or travel times. It uses reward shaping to 
+    - make convergence quicker
+    - prevent the agent simply always recommending to charge, even if it's not necessary
+    - prevent illegal actions (recommending charging station which is not reachable anymore)
+
+    Step reward:
+    A reward of -100 is given if a battery just died and +10 when a vehicle reaches its destination.
+    Additionally, vehicles that are charging (and otherwise low on range) get an extra reward.
+
+    Final reward:
+    Calculate the final reward (total travel time) by summing differences
+    between each vehicle’s departure and arrival times.
+
+    Action penalties:
+    - Illegal charging actions (vehicle doesn't exist anymore or is past the charging station)
+    - Unnecessary charging actions
+    """
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        """
-        Calculate the step reward by iterating over all vehicles.
-        A reward of -100 is given if a battery just died and +10 when a vehicle reaches its destination.
-        Additionally, vehicles that are charging (and otherwise low on range) give an extra reward.
-        """
         reward = 0
         one_vehicle_just_died = False
         all_vehicles_at_destination = True
@@ -89,19 +103,7 @@ class BasicRewardStrategy(RewardStrategy):
         return reward, one_vehicle_just_died, all_vehicles_at_destination
 
     def calculate_final_reward(self, vehicles, current_time):
-        """
-        Calculate the final reward (e.g. total travel time) by summing differences
-        between each vehicle’s departure and arrival times.
-        This reward is only given at the end of an episode.
-        """
-        global_ttt = 0
-        for vehicle in vehicles.values():
-            if vehicle.departure_time is None:
-                continue
-            if vehicle.arrival_time is None:
-                vehicle.arrival_time = current_time
-            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
-        return global_ttt
+        return 0
 
     def calculate_action_penalty(self, vehicle, context):
         action = context.get('action')
@@ -119,52 +121,40 @@ class BasicRewardStrategy(RewardStrategy):
                 return -1
         return 0 # if action is "do nothing"
 
-class RewardOnlyPreventEmpty(RewardStrategy):
+class BasicRewardStrategy(RewardStrategy):
+    """
+    This Reward Strategy only gives a reward at the end of an episode, containing the negative value for the objective which we want to minimize (total travel time).
+
+    Step reward: 0
+
+    Final reward:
+    Calculate the final reward (total travel time) by summing differences
+    between each vehicle’s departure and arrival times.
+
+    Action penalties: 0
+    """
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        # Example: only penalize vehicles whose battery just died.
-        reward = 0
-        one_vehicle_just_died = False
-        all_vehicles_at_destination = True
-
-        for vehicle in vehicles.values():
-            if vehicle.battery_just_died():
-                logger.info(f"Vehicle {vehicle.vehicle_id} battery died (penalty -100)")
-                reward += -100
-                one_vehicle_just_died = True
-            if not vehicle.arrived:
-                all_vehicles_at_destination = False
-
-        return reward, one_vehicle_just_died, all_vehicles_at_destination
-
-    def calculate_final_reward(self, vehicles, current_time):
-        # For this strategy, you might choose a different final reward.
         return 0
 
-
-class RewardShaping(RewardStrategy):
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        # Example: shaped rewards that combine multiple signals.
-        reward = 0
-        one_vehicle_just_died = False
-        all_vehicles_at_destination = True
-
+    def calculate_final_reward(self, vehicles, current_time):
+        global_ttt = 0
         for vehicle in vehicles.values():
-            if vehicle.battery_just_died():
-                reward -= 50  # lesser penalty than BasicRewardStrategy
-                one_vehicle_just_died = True
-            if vehicle.arrived and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids):
-                reward += 5  # smaller bonus for reaching destination
-            if vehicle.vehicle_id in charging_ids:
-                # reward for charging if the vehicle is in danger of running empty
-                remaining_range_is_sufficient = vehicle.remaining_range_is_sufficient(buffer=0)
-                if not remaining_range_is_sufficient:
-                    reward += 2
+            if vehicle.departure_time is None:
+                continue
+            if vehicle.arrival_time is None:
+                vehicle.arrival_time = current_time
+            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
+        return global_ttt
+    
+    def calculate_action_penalty(self, vehicle, context):
+        return 0
 
-            if not vehicle.arrived:
-                all_vehicles_at_destination = False
-
-        return reward, one_vehicle_just_died, all_vehicles_at_destination
+class RewardShapingStrategy(RewardStrategy):
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+        return NoTimeComponentRewardStrategy().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
 
     def calculate_final_reward(self, vehicles, current_time):
-        # A shaped final reward could also incorporate other metrics.
         return BasicRewardStrategy().calculate_final_reward(vehicles, current_time)
+
+    def calculate_action_penalty(self, vehicle, context):
+        return NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)

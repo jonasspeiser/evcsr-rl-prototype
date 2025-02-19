@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from circle_simulation import Simulation
 from vehicle import Vehicle
-from rewards import BasicRewardStrategy, RewardOnlyPreventEmpty, RewardShaping
+from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider
 
 # configure logging
@@ -74,9 +74,9 @@ class CircleEnv(gym.Env):
         if env_version == "basic":
             self.reward_strategy = BasicRewardStrategy()
         elif env_version == "only_prevent_empty":
-            self.reward_strategy = RewardOnlyPreventEmpty()
+            self.reward_strategy = NoTimeComponentRewardStrategy()
         elif env_version == "shaping":
-            self.reward_strategy = RewardShaping()
+            self.reward_strategy = RewardShapingStrategy()
         else:
             raise ValueError(f"Unknown env_version: {env_version}")
 
