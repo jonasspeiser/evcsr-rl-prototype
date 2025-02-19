@@ -6,7 +6,7 @@ logger = logging.getLogger("rl.environment.vehicle")
 
 MAX_POSSIBLE_CAPACITY = 100000.0 # 100000 Wh is considered as max. possible battery capacity (used for normalization)
 MAX_POSSIBLE_DISTANCE = 2000.0 # 2000 km is considered as max. possible distance between a vehicles start and destination (used for normalization)
-
+EMPTY_SOC = 100 # value under which the battery should be considered empty
 class Vehicle:
     def __init__(self, vehicle_id, simulation):
         self.vehicle_id = vehicle_id
@@ -106,7 +106,7 @@ class Vehicle:
         return action_penalty
 
     def is_battery_empty(self):
-        return self.battery_soc is not None and self.battery_soc <= 0 # if battery_soc is None, the vehicle is not currently online
+        return self.battery_soc is not None and self.battery_soc <= EMPTY_SOC # if battery_soc is None, the vehicle is not currently online
 
     def battery_just_died(self):
         """

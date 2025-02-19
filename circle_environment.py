@@ -12,6 +12,8 @@ import logging
 logger = logging.getLogger("rl.environment") 
 # child logger of "rl", parent logger to "rl.environment.simulation", "rl.environment.vehicle", "rl.environment.rewards"
 
+EMPTY_SOC = 100 # value under which the battery should be considered empty
+
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -122,6 +124,13 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
+
+    def _set_empty_vehicles_per_episode(self):
+        self.empty_vehicles_per_episode = sum(
+            1 for vehicle in self.vehicles.values()
+            if vehicle.battery_soc is not None and vehicle.battery_soc <= EMPTY_SOC
+        )
+
 
     def _add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
@@ -324,6 +333,7 @@ class CircleEnv(gym.Env):
                 if terminated:
                     self._set_cumulated_waiting_time_per_episode_terminated()
                 self._set_charging_stops_per_episode_mean()
+                self._set_empty_vehicles_per_episode()
                 self._set_cumulated_waiting_time_per_episode()
                 self._set_global_ttt(self.simulation.get_current_time_step())
                 final_reward = self.reward_strategy.calculate_final_reward(self.global_ttt)

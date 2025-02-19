@@ -18,6 +18,7 @@ RED = [255, 0, 0]
 
 SUMO_CONFIG_PATH = "circle.sumocfg"
 CHARGING_DURATION = 5 # charging duration in seconds
+EMPTY_SOC = 100 # value under which the battery should be considered empty
 
 class Simulation():
 
@@ -88,7 +89,7 @@ class Simulation():
         for i in range(amount):
             vehID = "member_ev_" + str(i)
             traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
-            battery_min = 100
+            battery_min = 200
             battery_max = 500
             battery_soc = random.randint(battery_min, battery_max)
             traci.vehicle.setParameter(vehID, "device.battery.maximumBatteryCapacity", str(battery_max))
@@ -355,7 +356,7 @@ class Simulation():
             if self.gui:
                 self._adapt_vehicle_color(vehicle_id, battery_soc)
             # stop vehicle if battery is empty
-            if battery_soc <= 0:
+            if battery_soc <= EMPTY_SOC:
                 self._simulate_empty_battery(vehicle_id)
 
             try:
