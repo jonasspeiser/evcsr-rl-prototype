@@ -2,6 +2,7 @@
 import logging
 logger = logging.getLogger("rl.environment.rewards")
 
+MAX_ALLOWED_TTT = 100
 class RewardStrategy:
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
         """
@@ -141,9 +142,6 @@ class BasicRewardStrategy(RewardStrategy):
         return 0
 
 class RewardShapingStrategy(RewardStrategy):
-
-    MAX_ALLOWED_TTT = 100
-
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
         reward = 0
 
@@ -156,7 +154,7 @@ class RewardShapingStrategy(RewardStrategy):
                 reward += -100
             elif vehicle_has_just_reached_destination:
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
-                reward += self.MAX_ALLOWED_TTT - vehicle.get_total_travel_time()
+                reward += MAX_ALLOWED_TTT - vehicle.get_total_travel_time()
 
             if vehicle.vehicle_id in charging_ids:
                 # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
