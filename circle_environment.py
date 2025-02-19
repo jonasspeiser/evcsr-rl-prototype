@@ -73,21 +73,21 @@ class CircleEnv(gym.Env):
         # Instantiate the reward strategy based on env_version.
         if env_version == "basic":
             self.reward_strategy = BasicRewardStrategy()
-        elif env_version == "only_prevent_empty":
+        elif env_version == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif env_version == "shaping":
             self.reward_strategy = RewardShapingStrategy()
         else:
             raise ValueError(f"Unknown env_version: {env_version}")
 
-    def __log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination, battery_is_empty):
+    def __log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination):
         logger.debug(f"State: {simulation_state}, Step reward: {reward}")
         if terminated:
             logger.info("Episode terminated")
             if all_vehicles_at_destination:
                 logger.info("All vehicles arrived at their destination")
-            if battery_is_empty:
-                logger.info("One or more vehicles ran out of battery")
+            # if one_vehicle_is_empty:
+            #     logger.info("One or more vehicles ran out of battery")
         if truncated:
             logger.info("Episode truncated")
 
@@ -284,13 +284,14 @@ class CircleEnv(gym.Env):
                     accumulated_reward += action_penalty
 
             # Delegate reward calculation to the reward strategy.
-            temp_reward, one_vehicle_just_died, all_vehicles_at_destination = \
-                self.reward_strategy.calculate_step_reward(self.vehicles, newly_arrived_ids, charging_ids)
+            temp_reward = self.reward_strategy.calculate_step_reward(
+                self.vehicles, newly_arrived_ids, charging_ids)
             logger.debug(f"Step reward from simulation: {temp_reward}")
             accumulated_reward += temp_reward
 
             
             # Terminate only when ALL vehicles are at destination
+            all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = loop_counter > self.truncate_after_n_steps
@@ -310,6 +311,7 @@ class CircleEnv(gym.Env):
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
                 final_reward = self.reward_strategy.calculate_final_reward(self.vehicles, self.simulation.get_current_time_step())
+                accumulated_reward += final_reward
                 logger.info(f"Final reward: {final_reward}")
                 if terminated:
                     self.__set_cumulated_waiting_time_per_episode_terminated()
@@ -323,7 +325,7 @@ class CircleEnv(gym.Env):
         reward = accumulated_reward
         info = self.__get_info()
         self.__log_step_details(simulation_state, observation, reward, terminated, truncated,
-                                all_vehicles_at_destination, one_vehicle_just_died)
+                                all_vehicles_at_destination)
         return observation, reward, terminated, truncated, info
 
     def render(self, mode='human'):

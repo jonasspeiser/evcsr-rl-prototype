@@ -72,25 +72,17 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
     """
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
         reward = 0
-        one_vehicle_just_died = False
-        all_vehicles_at_destination = True
 
         for vehicle in vehicles.values():
-            vehicle_just_died = vehicle.battery_just_died()
             vehicle_is_at_destination = vehicle.arrived
             vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
             
-            if vehicle_just_died:
+            if vehicle.battery_just_died():
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
                 reward += -100
             elif vehicle_has_just_reached_destination:
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
                 reward += 10
-
-            if vehicle_just_died:
-                one_vehicle_just_died = True
-            if not vehicle_is_at_destination:
-                all_vehicles_at_destination = False
 
             if vehicle.vehicle_id in charging_ids:
                 # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
@@ -100,7 +92,7 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
                     logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
                     reward += 1
 
-        return reward, one_vehicle_just_died, all_vehicles_at_destination
+        return reward
 
     def calculate_final_reward(self, vehicles, current_time):
         return 0
@@ -144,7 +136,7 @@ class BasicRewardStrategy(RewardStrategy):
             if vehicle.arrival_time is None:
                 vehicle.arrival_time = current_time
             global_ttt += (vehicle.arrival_time - vehicle.departure_time)
-        return global_ttt
+        return -global_ttt
     
     def calculate_action_penalty(self, vehicle, context):
         return 0
