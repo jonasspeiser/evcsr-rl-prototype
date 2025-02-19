@@ -112,6 +112,17 @@ class CircleEnv(gym.Env):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
         self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
 
+    def _set_global_ttt(self, current_time):
+        """Used for tensorboard logging. Sums up the total travel times of all vehicles."""
+        global_ttt = 0
+        for vehicle in self.vehicles.values():
+            if vehicle.departure_time is None:
+                continue
+            if vehicle.arrival_time is None:
+                vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
+            global_ttt += vehicle.get_total_travel_time()
+        self.global_ttt = global_ttt
+
     def _add_non_member_vehicles(self):
         self.simulation.add_non_member_routes()
         vehicle_data = self.data_provider.get_non_member_vehicle_data()
@@ -310,13 +321,14 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
-                final_reward = self.reward_strategy.calculate_final_reward(self.vehicles, self.simulation.get_current_time_step())
-                accumulated_reward += final_reward
-                logger.info(f"Final reward: {final_reward}")
                 if terminated:
                     self._set_cumulated_waiting_time_per_episode_terminated()
                 self._set_charging_stops_per_episode_mean()
                 self._set_cumulated_waiting_time_per_episode()
+                self._set_global_ttt(self.simulation.get_current_time_step())
+                final_reward = self.reward_strategy.calculate_final_reward(self.global_ttt)
+                accumulated_reward += final_reward
+                logger.info(f"Final reward: {final_reward}")
                 break
 
             loop_counter += 1
