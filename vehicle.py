@@ -89,7 +89,7 @@ class Vehicle:
                 self.simulation.reroute_for_charging(self.vehicle_id, cs_id)
                 logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
                 context['reroute_successful'] = True
-                context['sufficient_range'] = self.remaining_range_is_sufficient(buffer=0)    
+                context['sufficient_range'] = self.is_remaining_range_sufficient(buffer=0)    
             except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
                 logger.error(e)
                 context['reroute_successful'] = False
@@ -120,7 +120,7 @@ class Vehicle:
             return True
         return False
     
-    def remaining_range_is_sufficient(self, buffer=0):
+    def is_remaining_range_sufficient(self, buffer=0):
         """ 
         Returns whether a vehicle's battery soc is enough to reach its destination.
         If the optional "buffer" parameter is set, it must have a battery soc higher than "buffer" when arriving, 
@@ -132,3 +132,8 @@ class Vehicle:
             return None
         distance_to_destination = self.simulation.get_distance_to_destination(self.vehicle_id)
         return remaining_range > (distance_to_destination + buffer)
+    
+    def get_total_travel_time(self):
+        if not self.arrival_time:
+            raise AttributeError(f"Arrival time not yet set for vehicle{self.vehicle_id}.")  
+        return self.arrival_time - self.departure_time

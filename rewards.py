@@ -87,7 +87,7 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             if vehicle.vehicle_id in charging_ids:
                 # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
                 # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
-                remaining_range_is_sufficient = vehicle.remaining_range_is_sufficient(buffer=0)
+                remaining_range_is_sufficient = vehicle.is_remaining_range_sufficient(buffer=0)
                 if not remaining_range_is_sufficient:
                     logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
                     reward += 1
@@ -120,8 +120,7 @@ class BasicRewardStrategy(RewardStrategy):
     Step reward: 0
 
     Final reward:
-    Calculate the final reward (total travel time) by summing differences
-    between each vehicle’s departure and arrival times.
+    The negative total travel time.
 
     Action penalties: 0
     """
@@ -134,16 +133,40 @@ class BasicRewardStrategy(RewardStrategy):
             if vehicle.departure_time is None:
                 continue
             if vehicle.arrival_time is None:
-                vehicle.arrival_time = current_time
-            global_ttt += (vehicle.arrival_time - vehicle.departure_time)
+                vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
+            global_ttt += vehicle.get_total_travel_time()
         return -global_ttt
     
     def calculate_action_penalty(self, vehicle, context):
         return 0
 
 class RewardShapingStrategy(RewardStrategy):
+
+    MAX_ALLOWED_TTT = 100
+
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        return NoTimeComponentRewardStrategy().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+        reward = 0
+
+        for vehicle in vehicles.values():
+            vehicle_is_at_destination = vehicle.arrived
+            vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
+            
+            if vehicle.battery_just_died():
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
+                reward += -100
+            elif vehicle_has_just_reached_destination:
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
+                reward += self.MAX_ALLOWED_TTT - vehicle.get_total_travel_time()
+
+            if vehicle.vehicle_id in charging_ids:
+                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
+                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
+                remaining_range_is_sufficient = vehicle.is_remaining_range_sufficient(buffer=0)
+                if not remaining_range_is_sufficient:
+                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+                    reward += 1
+
+        return reward
 
     def calculate_final_reward(self, vehicles, current_time):
         return BasicRewardStrategy().calculate_final_reward(vehicles, current_time)
