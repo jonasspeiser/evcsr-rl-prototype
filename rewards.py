@@ -108,7 +108,7 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             if context.get('sufficient_range', False):
                 logger.debug(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
                 return -1
-            if context.get('rerouting_exception_ocurred', False):
+            if context.get('rerouting_exception_occurred', False):
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
                 logger.debug(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -1)")
                 return -1
