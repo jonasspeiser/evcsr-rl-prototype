@@ -18,7 +18,7 @@ RED = [255, 0, 0]
 
 SUMO_CONFIG_PATH = "circle.sumocfg"
 CHARGING_DURATION = 5 # charging duration in seconds
-EMPTY_SOC = 100 # value under which the battery should be considered empty
+EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
 class Simulation():
 
@@ -46,8 +46,7 @@ class Simulation():
         self.added_vehicles = []
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
-
-
+    
     def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
         charging_stations = {}
@@ -326,6 +325,7 @@ class Simulation():
         """Returns the actual battery capacity of the vehicle."""
         try:
             battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+            logger.debug(f"Vehicle {vehicle_id}: SOC {battery_soc}")
             return battery_soc
         except traci.exceptions.TraCIException: 
             logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already.")

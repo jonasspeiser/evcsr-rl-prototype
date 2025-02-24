@@ -6,7 +6,7 @@ logger = logging.getLogger("rl.environment.vehicle")
 
 MAX_POSSIBLE_CAPACITY = 100000.0 # 100000 Wh is considered as max. possible battery capacity (used for normalization)
 MAX_POSSIBLE_DISTANCE = 2000.0 # 2000 km is considered as max. possible distance between a vehicles start and destination (used for normalization)
-EMPTY_SOC = 100 # value under which the battery should be considered empty
+EMPTY_SOC = 100 # value under which the battery should be considered empty by the environment 
 class Vehicle:
     def __init__(self, vehicle_id, simulation):
         self.vehicle_id = vehicle_id

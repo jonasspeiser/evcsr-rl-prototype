@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger("rl.environment") 
 # child logger of "rl", parent logger to "rl.environment.simulation", "rl.environment.vehicle", "rl.environment.rewards"
 
-EMPTY_SOC = 100 # value under which the battery should be considered empty
+EMPTY_SOC = 100 # value under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles)
 
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
@@ -42,12 +42,8 @@ class CircleEnv(gym.Env):
         if self.simulate_non_member_evs:
             self.data_provider = Obelis_Data_Provider()
 
-        self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
-
-        # Create Vehicle instances for each vehicle id
-        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
+        # # Create Vehicle instances for each vehicle id
+        # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
 
         # --- Define action space ---        
         # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
@@ -68,6 +64,9 @@ class CircleEnv(gym.Env):
             high=np.array([1, 1, 1, 1, 1, 4, 1, 1]),
             dtype=np.float32
         )
+        self.simulation.add_vehicles(self.vehicles_to_spawn)
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
@@ -130,6 +129,7 @@ class CircleEnv(gym.Env):
             1 for vehicle in self.vehicles.values()
             if vehicle.battery_soc is not None and vehicle.battery_soc <= EMPTY_SOC
         )
+        logger.debug(f"empty_vehicles_per_episode: {self.empty_vehicles_per_episode}")
 
 
     def _add_non_member_vehicles(self):
@@ -164,8 +164,15 @@ class CircleEnv(gym.Env):
         logger.debug("Resetting environment")
         super().reset(seed=seed) # needed for api compliance
 
-        # Reset logging and per-episode counters
-        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+
+        self.simulation.reset()
+        self.simulation.add_vehicles(amount=self.vehicles_to_spawn, random_seed=seed)
+        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
+        # Re-create the vehicles dictionary in case new vehicles were spawned.
+        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
+        self.active_charging_request_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
+        # Reset vehicle attributes
         for vehicle in self.vehicles.values():
             vehicle.waiting_time = 0
             vehicle.last_action = -1
@@ -175,18 +182,11 @@ class CircleEnv(gym.Env):
             vehicle.departure_time = None
             vehicle.arrival_time = None
 
-        self.simulation.reset()
-        self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
-        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
-        # Re-create the vehicles dictionary in case new vehicles were spawned.
-        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
-        self.active_charging_request_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
-
         # Additional attributes for managing charging requests and logging
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None
-        self.charging_stops_per_episode_counter = Counter()
+        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+        # self.charging_stops_per_episode_counter = Counter()
 
         if self.simulate_non_member_evs:
             self._add_non_member_vehicles()
@@ -284,6 +284,10 @@ class CircleEnv(gym.Env):
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
             charging_ids = self.simulation.get_charging_vehicle_ids()
+
+            # Update vehicles' battery soc
+            for vid, vehicle in self.vehicles.items():
+                vehicle.battery_soc = self.simulation.get_battery_soc(vid)
 
             # Update vehicles’ arrival status.
             for vid in newly_arrived_ids:
@@ -422,7 +426,7 @@ if __name__ == "__main__":
         env.action_space.seed(random_seed)
         # while env.simulation.active_vehicles_exist():
 
-        for _ in range(20):
+        for _ in range(50):
             #action = env.action_space.sample() # select a random action
             action = take_greedy_action(observation)
             observation, reward, terminated, truncated, info = env.step(action)
@@ -430,7 +434,23 @@ if __name__ == "__main__":
                 observation, info = env.reset()
         env.close()
 
-    configure_logging(log_file_path='logs/myapp.log')
+    def demo_single_vehicle(random_seed=None):
+        env = CircleEnv(render_mode="human", vehicles_to_spawn=1)
+        import random
+        random.seed(random_seed)
+        observation, info = env.reset(seed=random_seed)
+        env.action_space.seed(random_seed)
+        # while env.simulation.active_vehicles_exist():
+        for _ in range(20):
+            action = 0 # do nothing
+            observation, reward, terminated, truncated, info = env.step(action)
+            # if terminated or truncated:
+            #     observation, info = env.reset()
+            if terminated or truncated:
+                env.close()
+
+    configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
     # test_env()
     demo_env(random_seed=1)
+    # demo_single_vehicle(random_seed=1)
