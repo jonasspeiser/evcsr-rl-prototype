@@ -18,9 +18,19 @@ class Vehicle:
         self.departure_time = None
         self.arrival_time = None
         self.waiting_time = 0
+        self.max_battery_capacity = None
         self.battery_soc = None
+        self.relative_battery_soc = None
         self.distance_to_cs = None  # Expected to be a dict {cs_id: distance}
 
+    def fetch_and_update_battery_values(self): # TODO: mit dieser Funktion environment.get_new_low_batteries und _set_empty_vehicles_per_episode vereinfachen.
+        self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
+        if self.battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
+            return
+        self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)
+        self.relative_battery_soc = self.battery_soc / self.max_battery_capacity
+        # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
+    
     def update_from_state(self, state):
         """
         Update vehicle properties from the simulation-provided state.
@@ -55,6 +65,21 @@ class Vehicle:
         obs = [normalized_soc] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
         return np.array(obs, dtype=np.float32)
 
+    def get_info(self):
+        """
+        Get additional info for logging, such as a human readable version of the vehicle state.
+        """
+        state = {
+            "battery_soc": self.battery_soc, 
+            "max_battery_capacity": self.max_battery_capacity, 
+            "distance_to_cs": self.distance_to_cs, 
+            "arrival_time": self.arrival_time, 
+            "low_battery": self.low_battery, 
+            "empty": self.empty
+            }
+        # "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination
+        return state
+    
     def handle_action(self, action, reward_strategy):
         """
         Handle the action (e.g. rerouting, removing stops) and then delegate
@@ -71,7 +96,12 @@ class Vehicle:
             # If the vehicle already arrived, do nothing.
             return 0
 
-        next_charging_stop = self.simulation.get_next_charging_stop_id(self.vehicle_id)
+        try:
+            next_charging_stop = self.simulation.get_next_charging_stop_id(self.vehicle_id)
+        except ValueError as e:
+            logger.error(f"Handling action {action} for {self.vehicle_id} failed: {e}")
+            return 0
+        
         charging_stop_is_planned = next_charging_stop is not None
 
         if action in (1, 2, 3, 4): # action is "charge"

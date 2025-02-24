@@ -126,6 +126,10 @@ class BasicRewardStrategy(RewardStrategy):
     Action penalties: 0
     """
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+        # This is just here to trigger the vehicle.battery_jus_died() function and therefore get the info if a vehicle died during the current step
+        for vehicle in vehicles.values():
+            if vehicle.battery_just_died():
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died")
         return 0
 
     def calculate_final_reward(self, global_ttt):

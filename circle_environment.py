@@ -140,21 +140,28 @@ class CircleEnv(gym.Env):
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
     
-    def _get_observation(self, simulation_state):
+    def _update_and_get_observation(self):
         """
-        Build the observation dictionary by updating each vehicle from the simulation state.
+        Build the observation dictionary by updating and collecting each vehicle's observation.
         """
         observation = {}
         for vehicle_id, vehicle in self.vehicles.items():
-            vehicle_state = simulation_state.get(vehicle_id)
-            vehicle.update_from_state(vehicle_state)
+            if not vehicle.arrived and not vehicle.empty:
+                vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
+                vehicle.update_from_state(vehicle_state)
             # Mark the vehicle as active if it filed the current charging request.
             is_active = (vehicle_id == self.active_charging_request_vehicle_id)
             observation[vehicle_id] = vehicle.get_observation(is_active=is_active)
         return observation
     
     def _get_info(self):
-        return dict()
+        """
+        Get additional info for logging, such as a human readable version of the simulation state.
+        """
+        info = {}
+        for vehicle_id, vehicle in self.vehicles.items():
+            info[vehicle_id] = vehicle.get_info()
+        return info
 
     def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
         """
@@ -171,23 +178,13 @@ class CircleEnv(gym.Env):
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Re-create the vehicles dictionary in case new vehicles were spawned.
         self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
-        self.active_charging_request_vehicle_id = None # states the vehicle_id for which the agent has to select an action in the current step
-        # Reset vehicle attributes
-        for vehicle in self.vehicles.values():
-            vehicle.waiting_time = 0
-            vehicle.last_action = -1
-            vehicle.arrived = False
-            vehicle.empty = False
-            vehicle.low_battery = False
-            vehicle.departure_time = None
-            vehicle.arrival_time = None
 
         # Additional attributes for managing charging requests and logging
         self.charging_request_queue = deque()
-        self.active_charging_request_vehicle_id = None
+        self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        # self.charging_stops_per_episode_counter = Counter()
-
+        self.low_battery_ids = []
+        
         if self.simulate_non_member_evs:
             self._add_non_member_vehicles()
 
@@ -197,9 +194,8 @@ class CircleEnv(gym.Env):
             self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
             self._check_for_charging_request(newly_spawned_ids)
             self.simulation.step()
-
-        simulation_state = self.simulation.get_state()
-        observation = self._get_observation(simulation_state)
+        
+        observation = self._update_and_get_observation()
         info = self._get_info()
         logger.debug(f"Reset observation: {observation}")
         return observation, info
@@ -231,8 +227,7 @@ class CircleEnv(gym.Env):
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         # Find out if there are vehicles that just entered low battery status
-        self._update_low_battery_flags(just_charged_ids)
-        new_low_battery_ids = self._get_new_low_battery_ids()
+        new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
         charging_requests = (newly_spawned_ids or []) + just_charged_ids + new_low_battery_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
@@ -245,28 +240,19 @@ class CircleEnv(gym.Env):
             return True
         return False
 
-    def _update_low_battery_flags(self, just_charged_ids):
-        for vehicle in self.vehicles.values():
-            if vehicle.vehicle_id in just_charged_ids:
-                vehicle.low_battery = False
-
-    def _get_new_low_battery_ids(self):
+    def _get_new_low_battery_ids(self, just_charged_ids):
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         new_low_battery_ids = []
-        state = self.simulation.get_state()
         for vehicle_id, vehicle in self.vehicles.items():
-            vehicle_state = state.get(vehicle_id)
-            if vehicle_state is None:
+            relative_battery_soc = vehicle.relative_battery_soc
+            if relative_battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
                 continue
-            max_battery_capacity = vehicle_state.get("max_battery_capacity", 100000)
-            battery_soc = vehicle_state.get("battery_soc")
-            if battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
-                continue
-            relative_battery_soc = battery_soc / max_battery_capacity
+            if vehicle_id in self.low_battery_ids and vehicle_id in just_charged_ids:
+                self.low_battery_ids.remove(vehicle_id)
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
-            if relative_battery_soc < battery_threshold and not vehicle.low_battery:
+            if relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
                 new_low_battery_ids.append(vehicle_id)
-                vehicle.low_battery = True
+                self.low_battery_ids.append(vehicle_id)
         return new_low_battery_ids
 
     def step(self, action):
@@ -287,7 +273,8 @@ class CircleEnv(gym.Env):
 
             # Update vehicles' battery soc
             for vid, vehicle in self.vehicles.items():
-                vehicle.battery_soc = self.simulation.get_battery_soc(vid)
+                if not vehicle.arrived and not vehicle.empty:
+                    vehicle.fetch_and_update_battery_values()
 
             # Update vehicles’ arrival status.
             for vid in newly_arrived_ids:
@@ -328,9 +315,9 @@ class CircleEnv(gym.Env):
 
             # get observation (only every few simulation steps, for performance purposes)
             if loop_just_started or some_simulation_time_passed or important_event_happened:
-                simulation_state = self.simulation.get_state()
-                observation = self._get_observation(simulation_state)
-                logger.debug(f"Intermediate simulation state: {simulation_state}")
+                observation = self._update_and_get_observation()
+                info = self._get_info()
+                logger.debug(f"Intermediate simulation state: {info}")
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
@@ -350,7 +337,7 @@ class CircleEnv(gym.Env):
 
         reward = accumulated_reward
         info = self._get_info()
-        self._log_step_details(simulation_state, observation, reward, terminated, truncated,
+        self._log_step_details(info, observation, reward, terminated, truncated,
                                 all_vehicles_at_destination)
         return observation, reward, terminated, truncated, info
 
@@ -451,6 +438,6 @@ if __name__ == "__main__":
 
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
-    # test_env()
+    test_env()
     demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)
