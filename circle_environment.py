@@ -12,8 +12,6 @@ import logging
 logger = logging.getLogger("rl.environment") 
 # child logger of "rl", parent logger to "rl.environment.simulation", "rl.environment.vehicle", "rl.environment.rewards"
 
-EMPTY_SOC = 100 # value under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles)
-
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -127,7 +125,7 @@ class CircleEnv(gym.Env):
     def _set_empty_vehicles_per_episode(self):
         self.empty_vehicles_per_episode = sum(
             1 for vehicle in self.vehicles.values()
-            if vehicle.battery_soc is not None and vehicle.battery_soc <= EMPTY_SOC
+            if vehicle.empty
         )
         logger.debug(f"empty_vehicles_per_episode: {self.empty_vehicles_per_episode}")
 
