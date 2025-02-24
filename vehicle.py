@@ -14,7 +14,6 @@ class Vehicle:
         self.last_action = -1
         self.arrived = False
         self.empty = False
-        self.low_battery = False
         self.departure_time = None
         self.arrival_time = None
         self.waiting_time = 0
@@ -23,7 +22,7 @@ class Vehicle:
         self.relative_battery_soc = None
         self.distance_to_cs = None  # Expected to be a dict {cs_id: distance}
 
-    def fetch_and_update_battery_values(self): # TODO: mit dieser Funktion environment.get_new_low_batteries und _set_empty_vehicles_per_episode vereinfachen.
+    def fetch_and_update_battery_values(self):
         self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
         if self.battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
             return
@@ -74,7 +73,6 @@ class Vehicle:
             "max_battery_capacity": self.max_battery_capacity, 
             "distance_to_cs": self.distance_to_cs, 
             "arrival_time": self.arrival_time, 
-            "low_battery": self.low_battery, 
             "empty": self.empty
             }
         # "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination
