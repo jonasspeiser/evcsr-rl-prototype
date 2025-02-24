@@ -180,15 +180,20 @@ class Simulation():
         This is an approximation and may vary based on driving conditions.
         Returns None if remaining range can't be calculated.
         """
+        DISTANCE_THRESHOLD = 100 # the threshold under which the energy consumption calculation is deemed too unprecise
+        CONSUMPTION_DEFAULT = 0.24 # the default value for energy consumption, used until the live-calculation is deemed precise enough
         remaining_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
         energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.totalEnergyConsumed"))
         distance_travelled = float(traci.vehicle.getDistance(vehicle_id))
         # Return None if remaining range can't be calculated (-> division by zero)
         if distance_travelled == 0:
             return None
+        if distance_travelled < DISTANCE_THRESHOLD:
+            energy_consumption = CONSUMPTION_DEFAULT
+        else:
+            energy_consumption = energy_consumed / distance_travelled
         # Get the energy consumption in Wh/km
         try:
-            energy_consumption = energy_consumed / distance_travelled
             remaining_range_km = remaining_capacity / energy_consumption
             logger.info(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
             logger.debug(f"vehicle {vehicle_id}: Energy consumed: {energy_consumed}, distance travelled: {distance_travelled}, remaining capacity: {remaining_capacity}, energy consumption: {energy_consumption}")
