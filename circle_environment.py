@@ -208,13 +208,13 @@ class CircleEnv(gym.Env):
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle and vehicle.departure_time is None:
                 vehicle.departure_time = current_time
-                logger.debug(f"Vehicle {vehicle_id} departure time set to {current_time}")
+                logger.info(f"{vehicle_id} spawned at time {current_time}")
         for vehicle_id in newly_arrived_ids or []:
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.arrival_time = current_time
                 vehicle.arrived = True
-                logger.debug(f"Vehicle {vehicle_id} arrival time set to {current_time}")
+                logger.debug(f"{vehicle_id} arrived at time {current_time}")
 
     def _check_for_charging_request(self, newly_spawned_ids):
         """
@@ -224,6 +224,8 @@ class CircleEnv(gym.Env):
         """
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
+        for vid in just_charged_ids:
+            logger.info(f"{vid}: just finished charging")
         # Find out if there are vehicles that just entered low battery status
         new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
         charging_requests = (newly_spawned_ids or []) + just_charged_ids + new_low_battery_ids
@@ -234,7 +236,7 @@ class CircleEnv(gym.Env):
             self.charging_request_queue.extend(charging_requests)
         if self.charging_request_queue:
             self.active_charging_request_vehicle_id = self.charging_request_queue.popleft()
-            logger.debug(f"Active charging request: {self.active_charging_request_vehicle_id}")
+            logger.info(f"Active charging request for: {self.active_charging_request_vehicle_id}")
             return True
         return False
 
@@ -249,6 +251,7 @@ class CircleEnv(gym.Env):
                 self.low_battery_ids.remove(vehicle_id)
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
             if relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
+                logger.info(f"{vehicle_id}: low battery")
                 new_low_battery_ids.append(vehicle_id)
                 self.low_battery_ids.append(vehicle_id)
         return new_low_battery_ids
@@ -362,6 +365,9 @@ class CircleEnv(gym.Env):
 # ======================================
 if __name__ == "__main__":
 
+    from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
+    import random
+
     def configure_logging(log_file_path='logs/myapp.log'):
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -385,57 +391,41 @@ if __name__ == "__main__":
         print("CHECKS PASSED")
         env.close()
 
-    def take_greedy_action(observation):
-        """
-        For the vehicle with an active charging request, if battery SOC is above 0.2, do nothing.
-        Otherwise, send the vehicle to the nearest charging station.
-        """
-        for vehicle_obs in observation.values():
-            # find out which one is the active vehicle
-            active_charging_request_flag = vehicle_obs[7]
-            if active_charging_request_flag:
-                battery_soc = vehicle_obs[0]
-                station_distances = vehicle_obs[1:5]
-                break
-        if battery_soc > 0.2:
-            return 0 # "do nothing"
-        
-        closest_station = np.argmin(station_distances) # the index of the lowest distance
-        return closest_station + 1
-
     def demo_env(random_seed=None):
-        env = CircleEnv(render_mode="human", vehicles_to_spawn=15)
-        import random
+        env = CircleEnv(render_mode="human", vehicles_to_spawn=10)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
-        # while env.simulation.active_vehicles_exist():
+        model = RandomAlgorithm(env)
+        # model = GreedyAlgorithm(env)
 
-        for _ in range(50):
-            #action = env.action_space.sample() # select a random action
-            action = take_greedy_action(observation)
+        # while env.simulation.active_vehicles_exist():
+        # for _ in range(50):
+        done = False
+        while not done:
+            action = model.predict(observation)
             observation, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
-                observation, info = env.reset()
+                # observation, info = env.reset()
+                done = True
         env.close()
 
     def demo_single_vehicle(random_seed=None):
         env = CircleEnv(render_mode="human", vehicles_to_spawn=1)
-        import random
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
-        # while env.simulation.active_vehicles_exist():
-        for _ in range(20):
-            action = 0 # do nothing
+        model = NeverChargeAlgorithm(env)
+        done = False
+        while not done:
+            action = model.predict(observation)
             observation, reward, terminated, truncated, info = env.step(action)
-            # if terminated or truncated:
-            #     observation, info = env.reset()
             if terminated or truncated:
-                env.close()
+                done = True
+        env.close()
 
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
-    test_env()
+    # test_env()
     demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)

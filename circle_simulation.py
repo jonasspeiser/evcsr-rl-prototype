@@ -100,10 +100,10 @@ class Simulation():
         try:
             vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         except traci.exceptions.TraCIException: 
-            logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+            logger.error(f"get_vehicle_edge: {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
             return None       
         if str(vehicle_lane) == "":
-            logger.error(f"Vehicle {vehicle_id} is not on a lane")
+            logger.debug(f"{vehicle_id} is not on a lane. It probably didn't spawn yet.")
             return None
         vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
         return vehicle_edge
@@ -141,13 +141,13 @@ class Simulation():
         try:
             traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=CHARGING_DURATION)
         except traci.exceptions.TraCIException:
-            raise ValueError("Vehicle is past the charging station, rerouting not possible")
+            raise ValueError(f"{vehicle_id} is past the charging station, rerouting not possible")
 
     def remove_charging_stop(self, vehicle_id):
         try:
             traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="")
         except traci.exceptions.TraCIException:
-            logger.info("No charging stop to remove")
+            logger.info(f"{vehicle_id}: No charging stop to remove")
 
     def get_stops(self, vehicle_id):
         try:
@@ -195,7 +195,7 @@ class Simulation():
         # Get the energy consumption in Wh/km
         try:
             remaining_range_km = remaining_capacity / energy_consumption
-            logger.info(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
+            logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
             logger.debug(f"vehicle {vehicle_id}: Energy consumed: {energy_consumed}, distance travelled: {distance_travelled}, remaining capacity: {remaining_capacity}, energy consumption: {energy_consumption}")
         except ZeroDivisionError as e:
             raise ZeroDivisionError(f"Vehicle {vehicle_id} has not moved yet, can't calculate remaining range. energy_consumed: {energy_consumed}, distance_travelled: {distance_travelled}, remaining_capacity: {remaining_capacity}, energy_consumption: {energy_consumption}")
@@ -355,7 +355,7 @@ class Simulation():
                 self._simulate_empty_battery(vehicle_id)
             return battery_soc
         except traci.exceptions.TraCIException: 
-            logger.error(f"Vehicle {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+            logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
             return None
 
     def get_vehicle_state(self, vehicle_id): 

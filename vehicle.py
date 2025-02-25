@@ -84,7 +84,7 @@ class Vehicle:
         the penalty calculation to the reward strategy.
         Returns an action penalty (if any).
         """
-        logger.debug(f"Vehicle {self.vehicle_id}: handling action {action}")
+        logger.info(f"{self.vehicle_id}: handling action {action}")
         self.last_action = action
 
         # Build a context dictionary with information useful for penalty calculation.
@@ -144,6 +144,7 @@ class Vehicle:
         if self.empty:
             return False
         if self.is_battery_empty():
+            logger.info(f"{self.vehicle_id}: battery empty")
             self.empty = True
             return True
         return False
