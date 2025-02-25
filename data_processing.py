@@ -60,5 +60,5 @@ class Obelis_Data_Provider():
 
 
 if __name__ == "__main__":
-    vehicle_data = Obelis_Data_Processor().get_non_member_vehicle_data()
+    vehicle_data = Obelis_Data_Provider().get_non_member_vehicle_data()
     print(vehicle_data)
