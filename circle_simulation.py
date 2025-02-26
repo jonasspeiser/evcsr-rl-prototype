@@ -2,9 +2,9 @@ import os
 import sys
 if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
-import random
 import traci
 from sumolib import checkBinary
+from scenario_generator import ScenarioGenerator
 
 # configure logging
 import logging
@@ -47,7 +47,7 @@ class Simulation():
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
         self.max_capacities = {}
-    
+        
     def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
         charging_stations = {}
@@ -85,16 +85,21 @@ class Simulation():
         Adds the specified amount of vehicles to the simulation. 
         Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
         """
-        traci.route.add("trip", ["E0", "E19"])
-        for i in range(amount):
-            vehID = "member_ev_" + str(i)
-            traci.vehicle.add(vehID, "trip", typeID="DEFAULT_VEHTYPE")
-            battery_min = 200
-            battery_max = 500
-            battery_soc = random.randint(battery_min, battery_max)
-            traci.vehicle.setParameter(vehID, "device.battery.maximumBatteryCapacity", str(battery_max))
-            traci.vehicle.setParameter(vehID, "device.battery.actualBatteryCapacity", str(battery_soc))
-            self.added_vehicles.append(vehID)
+        scenario_generator = ScenarioGenerator(random_seed)
+        edge_list = [f"E{i}" for i in range(20)] # ["E0", "E1", ..., "E19"]
+        routes_dict = scenario_generator.generate_routes(amount, edge_list)
+        routes_list = list(routes_dict.keys())
+        vehicles_dict = scenario_generator.generate_vehicles(amount, routes_list)
+        logger.debug(f"adding vehicles: {vehicles_dict}")
+
+        for route_id, route in routes_dict.items():
+            traci.route.add(route_id, route)
+
+        for vehicle_id, vehicle in vehicles_dict.items():
+            traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"])
+            traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
+            traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
+            self.added_vehicles.append(vehicle_id)      
 
     def _get_vehicle_edge(self, vehicle_id):
         try:

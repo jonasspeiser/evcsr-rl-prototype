@@ -71,7 +71,7 @@ def setup_logging(algorithm, version, env_version, map, n_vehicles, training_or_
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
 
-def train_model(algorithm, policy, version, env_version, map, n_vehicles, n_steps, execution_context="local"):
+def train_model(algorithm, policy, version, env_version, map, n_vehicles, n_steps, execution_context="local", random_seed=None):
     # initiate environment
     env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles)
     # setup logging
@@ -79,11 +79,11 @@ def train_model(algorithm, policy, version, env_version, map, n_vehicles, n_step
     # Train the agent
     match algorithm:
         case "PPO":
-            model = PPO(policy, env, verbose=1, tensorboard_log=model_dir)
+            model = PPO(policy, env, seed=random_seed, verbose=1, tensorboard_log=model_dir)
         case "A2C":
-            model = A2C(policy, env, verbose=1, tensorboard_log=model_dir)
+            model = A2C(policy, env, seed=random_seed, verbose=1, tensorboard_log=model_dir)
         case "DQN":
-            model = DQN(policy, env, verbose=1, tensorboard_log=model_dir)
+            model = DQN(policy, env, seed=random_seed, verbose=1, tensorboard_log=model_dir)
         case _:
             raise ValueError("Invalid model type")
     tb_log_name = "tensorboard"
@@ -133,7 +133,7 @@ def further_train_model(algorithm, version, env_version, map, n_vehicles, n_step
         env.close()
         raise e    
 
-def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, execution_context="local", render_mode="human"):
+def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, execution_context="local", render_mode="human", random_seed=None):
     # initiate environment
     env = CircleEnv(render_mode=render_mode, env_version= env_version, vehicles_to_spawn=n_vehicles)
     # setup logging
@@ -145,7 +145,7 @@ def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes,
     custom_callback = CustomTensorboardCallback(writer)
     # Evaluate the agent
     try:
-        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=custom_callback, identifier=None)
+        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=custom_callback, identifier=None, random_seed=random_seed)
         print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
         env.close()
         writer.close()
@@ -153,13 +153,13 @@ def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes,
         env.close()
         writer.close()
 
-def evaluate_policy(model, env, n_eval_episodes, callback, identifier):
+def evaluate_policy(model, env, n_eval_episodes, callback, identifier, random_seed):
     ep_rewards = []
     ep_lengths = []
     total_step = 0
 
     for episode in range(n_eval_episodes):
-        observation, info = env.reset()
+        observation, info = env.reset(seed=random_seed)
         done = False
         episode_reward = 0.0
         episode_length = 0

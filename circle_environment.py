@@ -62,7 +62,7 @@ class CircleEnv(gym.Env):
             high=np.array([1, 1, 1, 1, 1, 4, 1, 1]),
             dtype=np.float32
         )
-        self.simulation.add_vehicles(self.vehicles_to_spawn)
+        self.simulation.add_vehicles(self.vehicles_to_spawn, random_seed=None)
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
         self.observation_space = spaces.Dict({
@@ -168,8 +168,9 @@ class CircleEnv(gym.Env):
         """
         logger.debug("Resetting environment")
         super().reset(seed=seed) # needed for api compliance
-
-
+        
+        if seed:
+            self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn, random_seed=seed)
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
