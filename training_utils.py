@@ -9,6 +9,7 @@ import logging
 from collections import deque
 import numpy as np
 from torch.utils.tensorboard import SummaryWriter
+import json
 
         
 def configure_logging(log_file_path, console_log_level=logging.INFO):
@@ -134,6 +135,17 @@ def further_train_model(algorithm, version, env_version, map, n_vehicles, n_step
         raise e    
 
 def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, execution_context="local", render_mode="human", random_seed=None):
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    metadata = {
+        "timestamp": current_time,
+        "algorithm": algorithm,
+        "version": version,
+        "env_version": env_version,
+        "map": map,
+        "n_vehicles": n_vehicles,
+        "n_episodes": n_episodes,
+        "random_seed": random_seed
+    }
     # initiate environment
     env = CircleEnv(render_mode=render_mode, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
@@ -145,18 +157,28 @@ def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes,
     custom_callback = CustomTensorboardCallback(writer)
     # Evaluate the agent
     try:
-        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=custom_callback, identifier=None, random_seed=random_seed)
-        print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
+        metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=custom_callback, metadata=metadata, random_seed=random_seed)
+        # print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
         env.close()
         writer.close()
+        dump_to_file(metrics_dict, f"{model_dir}/evaluation/metrics{current_time}.json")
+
     except KeyboardInterrupt:
         env.close()
         writer.close()
 
-def evaluate_policy(model, env, n_eval_episodes, callback, identifier, random_seed):
+def dump_to_file(content, filepath):
+    with open(filepath, 'w') as f:
+        json.dump(content, f, indent=2)
+
+def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed):
     ep_rewards = []
     ep_lengths = []
+    metrics_dict = {}
     total_step = 0
+
+    metrics_dict["metadata"] = metadata
+    identifier = None #TODO: generate identifier from metadata
 
     for episode in range(n_eval_episodes):
         observation, info = env.reset(seed=random_seed)
@@ -174,13 +196,13 @@ def evaluate_policy(model, env, n_eval_episodes, callback, identifier, random_se
         ep_rewards.append(episode_reward)
         ep_lengths.append(episode_length)
         # Retrieve metrics from the environment after an episode ends.
-        callback.log_evaluation(env, total_step)
+        metrics_dict[episode] = callback.log_evaluation(env, total_step)
         
         print(f"[{identifier}] Episode {episode + 1}: reward = {episode_reward:.2f}, length = {episode_length}")
     
     avg_reward = np.mean(ep_rewards)
     avg_length = np.mean(ep_lengths)
-    return avg_reward, avg_length
+    return metrics_dict
 
 
 class CustomTensorboardCallback(BaseCallback):
@@ -241,10 +263,13 @@ class CustomTensorboardCallback(BaseCallback):
 
     def log_evaluation(self, env, step):
         """Log evaluation metrics when running independently (e.g., for a random algorithm)."""
-        metrics = self.get_metrics(env)
+        metrics = self.get_metrics(env)        
         for metric_name, value in metrics.items():
-            self.buffers[metric_name].append(value)
-            rolling_mean = sum(self.buffers[metric_name]) / len(self.buffers[metric_name])
-            self.writer.add_scalar(metric_name, rolling_mean, step)
+            # self.buffers[metric_name].append(value)
+            # rolling_mean = sum(self.buffers[metric_name]) / len(self.buffers[metric_name])
+            # log in tensorboard
+            self.writer.add_scalar(metric_name, value, step)
         self.writer.flush()
         self.logger_rl.debug(f"Logged evaluation metrics at step {step}")
+        # For further use of logged values
+        return metrics

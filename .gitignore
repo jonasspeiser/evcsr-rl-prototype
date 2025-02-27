@@ -15,3 +15,5 @@ events.out.tfevents.*
 obelis_data
 # ASFINAG dataset
 asfinag_data
+# Logged metrics
+metrics*.json
