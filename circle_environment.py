@@ -16,7 +16,7 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, render_mode=None, env_version="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs: bool = False):
+                 observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs: bool = False, random_seed=None):
         """
         Initialize the environment and simulation.
         Define self.observation_space and self.action_space.
@@ -34,7 +34,7 @@ class CircleEnv(gym.Env):
         self.truncate_after_n_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
 
         gui = (self.render_mode == "human")
-        self.simulation = Simulation(gui=gui)
+        self.simulation = Simulation(gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
         self.simulate_non_member_evs = simulate_non_member_evs
         if self.simulate_non_member_evs:
@@ -62,7 +62,7 @@ class CircleEnv(gym.Env):
             high=np.array([1, 1, 1, 1, 1, 4, 1, 1]),
             dtype=np.float32
         )
-        self.simulation.add_vehicles(self.vehicles_to_spawn, random_seed=None)
+        self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
         self.observation_space = spaces.Dict({
@@ -172,7 +172,7 @@ class CircleEnv(gym.Env):
         if seed:
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
-        self.simulation.add_vehicles(amount=self.vehicles_to_spawn, random_seed=seed)
+        self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_vehicle_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Re-create the vehicles dictionary in case new vehicles were spawned.

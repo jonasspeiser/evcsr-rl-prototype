@@ -73,7 +73,7 @@ def setup_logging(algorithm, version, env_version, map, n_vehicles, training_or_
 
 def train_model(algorithm, policy, version, env_version, map, n_vehicles, n_steps, execution_context="local", random_seed=None):
     # initiate environment
-    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles)
+    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "training", execution_context=execution_context)
     # Train the agent
@@ -117,7 +117,7 @@ def load_model(model_path, algorithm, env):
 
 def further_train_model(algorithm, version, env_version, map, n_vehicles, n_steps, model_load_path, execution_context="local"):
     # initiate environment
-    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles)
+    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "training", model_load_path, execution_context=execution_context)
     # Train the agent
@@ -135,13 +135,13 @@ def further_train_model(algorithm, version, env_version, map, n_vehicles, n_step
 
 def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, execution_context="local", render_mode="human", random_seed=None):
     # initiate environment
-    env = CircleEnv(render_mode=render_mode, env_version= env_version, vehicles_to_spawn=n_vehicles)
+    env = CircleEnv(render_mode=render_mode, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "evaluation", model_load_path, execution_context=execution_context)
     # Load saved model or evaluation algorithm
     model = load_model(model_load_path, algorithm, env)
     # Set up TensorBoard writer and custom callback
-    writer = SummaryWriter(log_dir=model_dir)
+    writer = SummaryWriter(log_dir=f"{model_dir}/evaluation")
     custom_callback = CustomTensorboardCallback(writer)
     # Evaluate the agent
     try:
@@ -205,11 +205,7 @@ class CustomTensorboardCallback(BaseCallback):
             "env/empty_vehicles_per_episode": deque(maxlen=rtw_size),
         }
         self.logger_rl = logging.getLogger("rl")
-        # If no writer is passed (e.g., when running independently), create one.
-        if writer is None:
-            self.writer = SummaryWriter(log_dir="./tensorboard_logs/random_policy")
-        else:
-            self.writer = writer
+        self.writer = writer
 
     def get_metrics(self, env):
         metrics = {

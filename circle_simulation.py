@@ -22,7 +22,7 @@ EMPTY_SOC = 30 # value under which the battery should be considered empty by the
 
 class Simulation():
 
-    def __init__(self, gui:bool=False):
+    def __init__(self, gui:bool=False, random_seed = None):
         if type(gui) is not bool:
             raise ValueError("gui must be a boolean")
         self.gui = gui
@@ -47,6 +47,8 @@ class Simulation():
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
         self.max_capacities = {}
+        self.scenario_generator = ScenarioGenerator(random_seed)
+
         
     def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
@@ -80,16 +82,15 @@ class Simulation():
         traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=charge_duration)
 
 
-    def add_vehicles(self, amount = 1, random_seed = None):
+    def add_vehicles(self, amount = 1):
         """ 
         Adds the specified amount of vehicles to the simulation. 
         Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
         """
-        scenario_generator = ScenarioGenerator(random_seed)
         edge_list = [f"E{i}" for i in range(20)] # ["E0", "E1", ..., "E19"]
-        routes_dict = scenario_generator.generate_routes(amount, edge_list)
+        routes_dict = self.scenario_generator.generate_routes(amount, edge_list)
         routes_list = list(routes_dict.keys())
-        vehicles_dict = scenario_generator.generate_vehicles(amount, routes_list)
+        vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_list)
         logger.debug(f"adding vehicles: {vehicles_dict}")
 
         for route_id, route in routes_dict.items():
