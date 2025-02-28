@@ -217,29 +217,36 @@ class CustomTensorboardCallback(BaseCallback):
         buffers (Dict[str, Deque[float]]): Buffers to store recent metric values.
         logger_rl (logging.Logger): Logger for debugging RL steps.
     """
+
+    METRIC_NAMES = [
+        "charging_stops_per_episode_mean",
+        "global_ttt",
+        "ttt_per_ev_mean",
+        "cumulated_waiting_time",
+        "cumulated_waiting_time_only_terminated",
+        "empty_vehicles_per_episode",
+    ]
+
     def __init__(self, writer=None, verbose=0, rtw_size=100):
         # If used in training with SB3, the BaseCallback machinery will set up the logger.
         super(CustomTensorboardCallback, self).__init__(verbose)
         self.rtw_size = rtw_size
         self.buffers = {
-            "env/charging_stops_per_episode_mean": deque(maxlen=rtw_size),
-            "env/global_ttt": deque(maxlen=rtw_size),
-            "env/cumulated_waiting_time": deque(maxlen=rtw_size),
-            "env/cumulated_waiting_time_only_terminated": deque(maxlen=rtw_size),
-            "env/empty_vehicles_per_episode": deque(maxlen=rtw_size),
+            f"env/{name}": deque(maxlen=rtw_size)
+            for name in self.METRIC_NAMES
         }
         self.logger_rl = logging.getLogger("rl")
         self.writer = writer
 
     def get_metrics(self, env):
-        metrics = {
-            "env/charging_stops_per_episode_mean": env.charging_stops_per_episode_mean,
-            "env/global_ttt": env.global_ttt,
-            "env/cumulated_waiting_time": env.cumulated_waiting_time,
-            "env/empty_vehicles_per_episode": env.empty_vehicles_per_episode,
-        }
-        if hasattr(env, "cumulated_waiting_time_only_terminated"):
-            metrics["env/cumulated_waiting_time_only_terminated"] = env.cumulated_waiting_time_only_terminated
+        metrics = {}
+        for name in self.METRIC_NAMES:
+            key = f"env/{name}"
+            # Use getattr to dynamically fetch the attribute from env.
+            value = getattr(env, name, None)
+            # Only add the metric if it exists (important e.g. for cumulated_waiting_time_only_terminated)
+            if value is not None:
+                metrics[key] = value
         return metrics
     
     def _on_step(self):

@@ -121,6 +121,7 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
+        self.ttt_per_ev_mean = global_ttt / self.vehicles_to_spawn
 
     def _set_empty_vehicles_per_episode(self):
         self.empty_vehicles_per_episode = sum(
@@ -182,6 +183,8 @@ class CircleEnv(gym.Env):
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+        self.global_ttt = 0
+        self.ttt_per_ev_mean = 0
         self.low_battery_ids = []
         
         if self.simulate_non_member_evs:
@@ -329,7 +332,7 @@ class CircleEnv(gym.Env):
                 self._set_empty_vehicles_per_episode()
                 self._set_cumulated_waiting_time_per_episode()
                 self._set_global_ttt(self.simulation.get_current_time_step())
-                final_reward = self.reward_strategy.calculate_final_reward(self.global_ttt)
+                final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
                 accumulated_reward += final_reward
                 logger.info(f"Final reward: {final_reward}")
                 break
