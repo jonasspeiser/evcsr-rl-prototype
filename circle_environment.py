@@ -16,7 +16,7 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, render_mode=None, env_version="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=300, simulate_non_member_evs: bool = False, random_seed=None):
+                 observation_sampling_rate=30, truncate_after_n_steps=3000, simulate_non_member_evs: bool = False, random_seed=None):
         """
         Initialize the environment and simulation.
         Define self.observation_space and self.action_space.
@@ -183,8 +183,6 @@ class CircleEnv(gym.Env):
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        self.global_ttt = 0
-        self.ttt_per_ev_mean = 0
         self.low_battery_ids = []
         
         if self.simulate_non_member_evs:
@@ -310,7 +308,7 @@ class CircleEnv(gym.Env):
             all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
-            truncated = loop_counter > self.truncate_after_n_steps
+            truncated = self.simulation.get_current_time_step() > self.truncate_after_n_steps
             charging_request = self._check_for_charging_request(newly_spawned_ids)
 
             important_event_happened = charging_request or terminated or truncated
