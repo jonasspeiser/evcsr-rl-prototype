@@ -223,11 +223,12 @@ class Simulation():
             self.vehicle_destinations[vehicle_id] = destination
         return destination
 
-    def get_distance_to_destination(self, vehicle_id):
+    def get_distance_to_destination(self, vehicle_id, vehicle_edge):
         """ Returns the driving distance of given vehicles current position to its destination. """
-        current_vehicle_edge = self._get_vehicle_edge(vehicle_id)
+        if vehicle_edge is None:
+            return None
         destination = self.get_vehicle_destination(vehicle_id)
-        distance = self._calculate_distance(current_vehicle_edge, destination)
+        distance = self._calculate_distance(vehicle_edge, destination)
         return distance
 
     def step(self):
@@ -385,13 +386,15 @@ class Simulation():
             distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None
+            distance_to_destination = None
         else:
             vehicle_edge = self._get_vehicle_edge(vehicle_id) 
             distance_to_cs = self._get_distance_to_cs(vehicle_edge)
             vehicle_destination = self.get_vehicle_destination(vehicle_id)
             max_battery_capacity = self.get_max_battery_capacity(vehicle_id)
+            distance_to_destination = self.get_distance_to_destination(vehicle_id, vehicle_edge)
 
-        state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination}
+        state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination, "distance_to_destination": distance_to_destination}
         return state
 
     def get_departure_time_for_vehicle(self, vehicle_id):

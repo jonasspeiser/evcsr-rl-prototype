@@ -50,16 +50,16 @@ class CircleEnv(gym.Env):
 
 
         # --- Define observation space ---
-        # We have 4 types of observations per vehicle: the current state of the battery, the current distance to each charging station, the last selected action, arrived at destination, request pending
-        # battery soc is in between 0 and 100000 Wh, distance to each of the charging stations is in between 0 and 2000 meters
+        # Types of observations per vehicle: current state of the battery, current distance to destination, current distance to each charging station, last selected action, arrived at destination, request pending
+        # battery soc is in between 0 and 100000 Wh, distance to destination and distance to each of the charging stations is in between 0 and 2000 meters
         # These values are normalized.
         # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())
         # A binary value informs wether the vehicle has (1) or has not (0) reached its destination yet
         # A binary value signals the "active" vehicle which filed the current charging request (with a 1, otherwise 0)
         # -1 is used to signal that the vehicle is not spawned yet ("padding")
         single_vehicle_observation_space = spaces.Box(
-            low=np.array([-1, -1, -1, -1, -1, -1, 0, 0]),
-            high=np.array([1, 1, 1, 1, 1, 4, 1, 1]),
+            low=np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0]),
+            high=np.array([1, 1, 1, 1, 1, 1, 4, 1, 1]),
             dtype=np.float32
         )
         self.simulation.add_vehicles(self.vehicles_to_spawn)

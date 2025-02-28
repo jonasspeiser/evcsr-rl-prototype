@@ -21,6 +21,7 @@ class Vehicle:
         self.battery_soc = None
         self.relative_battery_soc = None
         self.distance_to_cs = None  # Expected to be a dict {cs_id: distance}
+        self.distance_to_destination = None
 
     def fetch_and_update_battery_values(self):
         self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
@@ -39,9 +40,11 @@ class Vehicle:
         if state is None or state.get("distance_to_cs") is None:
             self.battery_soc = None
             self.distance_to_cs = None
+            self.distance_to_destination = None
         else:
             self.battery_soc = state.get("battery_soc")
             self.distance_to_cs = state.get("distance_to_cs")
+            self.distance_to_destination = state.get("distance_to_destination")
 
     def get_observation(self, is_active=False):
         """
@@ -52,8 +55,9 @@ class Vehicle:
         """
         if self.distance_to_cs is None:
             # Use -1 as padding to indicate that the vehicle is not spawned.
-            return np.array([-1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
+            return np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
         normalized_soc = self.battery_soc / MAX_POSSIBLE_CAPACITY if self.battery_soc is not None else -1 
+        dist_destination = self.distance_to_destination / MAX_POSSIBLE_DISTANCE if self.distance_to_destination is not None else -1
         # Ensure a fixed order by sorting charging station ids; pad if needed.
         distances = [self.distance_to_cs[k] / MAX_POSSIBLE_DISTANCE for k in sorted(self.distance_to_cs.keys())]
         while len(distances) < 4:
@@ -61,7 +65,7 @@ class Vehicle:
         # destination_reached flag (1 if arrived, 0 otherwise)
         destination_reached = int(self.arrived)
         # active charging request flag is provided via the is_active parameter
-        obs = [normalized_soc] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
+        obs = [normalized_soc] + [dist_destination] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
         return np.array(obs, dtype=np.float32)
 
     def get_info(self):
@@ -159,7 +163,8 @@ class Vehicle:
         remaining_range = self.simulation.get_remaining_range(self.vehicle_id)
         if remaining_range is None:
             return None
-        distance_to_destination = self.simulation.get_distance_to_destination(self.vehicle_id)
+        vehicle_edge = self.simulation._get_vehicle_edge(self.vehicle_id)
+        distance_to_destination = self.simulation.get_distance_to_destination(self.vehicle_id, vehicle_edge)
         return remaining_range > (distance_to_destination + buffer)
     
     def get_total_travel_time(self):
