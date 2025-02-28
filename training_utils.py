@@ -174,10 +174,9 @@ def dump_to_file(content, filepath):
 def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed):
     ep_rewards = []
     ep_lengths = []
-    metrics_dict = {}
+    metrics_list = []
     total_step = 0
 
-    metrics_dict["metadata"] = metadata
     identifier = None #TODO: generate identifier from metadata
 
     for episode in range(n_eval_episodes):
@@ -196,13 +195,16 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
         ep_rewards.append(episode_reward)
         ep_lengths.append(episode_length)
         # Retrieve metrics from the environment after an episode ends.
-        metrics_dict[episode] = callback.log_evaluation(env, total_step)
+        episode_metrics_dict = callback.log_evaluation(env, total_step)
+        episode_metrics_dict.update({"episode": episode})
+        episode_metrics_dict.update(metadata)
+        metrics_list.append(episode_metrics_dict)
         
         print(f"[{identifier}] Episode {episode + 1}: reward = {episode_reward:.2f}, length = {episode_length}")
     
     avg_reward = np.mean(ep_rewards)
     avg_length = np.mean(ep_lengths)
-    return metrics_dict
+    return metrics_list
 
 
 class CustomTensorboardCallback(BaseCallback):
