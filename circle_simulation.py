@@ -20,6 +20,13 @@ SUMO_CONFIG_PATH = "circle.sumocfg"
 CHARGING_DURATION = 5 # charging duration in seconds
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
+class PointlessRecommendationError(ValueError):
+    """Raised when a vehicle's destination is closer than the recommended charging station."""
+    def __init__(self, dist_dest, dist_cs):
+        message = (f"Recommendation denied: Destination is {dist_dest} units away, "
+                   f"but the charging station is {dist_cs} units away.")
+        super().__init__(message)
+
 class Simulation():
 
     def __init__(self, gui:bool=False, random_seed = None):
@@ -138,6 +145,10 @@ class Simulation():
         v_type = traci.vehicle.getTypeID(vehicle_id)
         current_vehicle_edge, destination = self.get_position_and_destination(vehicle_id)
         cs_edge = self.charging_stations[cs_id]
+        dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
+        dist_dest = self._calculate_distance(current_vehicle_edge, destination)
+        if dist_cs > dist_dest:
+            raise PointlessRecommendationError(dist_dest, dist_cs)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
             # find route to charging station and from charging station to destination
             route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
@@ -146,8 +157,8 @@ class Simulation():
             traci.vehicle.setRoute(vehicle_id, new_route)
         try:
             traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=CHARGING_DURATION)
-        except traci.exceptions.TraCIException:
-            raise ValueError(f"{vehicle_id} is past the charging station, rerouting not possible")
+        except traci.exceptions.TraCIException as e:
+            raise ValueError(f"{vehicle_id} is past the charging station, rerouting not possible. TraCIException: {e}")
 
     def remove_charging_stop(self, vehicle_id):
         try:
@@ -339,7 +350,7 @@ class Simulation():
     def _calculate_distance(self, edgeID1, edgeID2):
         return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
 
-    def _get_distance_to_cs(self, vehicle_position) -> dict:
+    def _get_distances_to_all_cs(self, vehicle_position) -> dict:
         if vehicle_position is None:
             return None
         charging_stations = self.charging_stations
@@ -389,7 +400,7 @@ class Simulation():
             distance_to_destination = None
         else:
             vehicle_edge = self._get_vehicle_edge(vehicle_id) 
-            distance_to_cs = self._get_distance_to_cs(vehicle_edge)
+            distance_to_cs = self._get_distances_to_all_cs(vehicle_edge)
             vehicle_destination = self.get_vehicle_destination(vehicle_id)
             max_battery_capacity = self.get_max_battery_capacity(vehicle_id)
             distance_to_destination = self.get_distance_to_destination(vehicle_id, vehicle_edge)

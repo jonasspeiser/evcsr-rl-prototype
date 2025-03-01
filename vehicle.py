@@ -1,4 +1,5 @@
 import numpy as np
+from circle_simulation import Simulation, PointlessRecommendationError
 
 # configure logging
 import logging
@@ -8,7 +9,7 @@ MAX_POSSIBLE_CAPACITY = 100000.0 # 100000 Wh is considered as max. possible batt
 MAX_POSSIBLE_DISTANCE = 2000.0 # 2000 km is considered as max. possible distance between a vehicles start and destination (used for normalization)
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles) 
 class Vehicle:
-    def __init__(self, vehicle_id, simulation):
+    def __init__(self, vehicle_id, simulation:Simulation):
         self.vehicle_id = vehicle_id
         self.simulation = simulation
         self.last_action = -1
@@ -126,6 +127,10 @@ class Vehicle:
                 logger.error(e)
                 context['reroute_successful'] = False
                 context['rerouting_exception_occurred'] = True
+            except PointlessRecommendationError as e:
+                logger.error(e)
+                context['reroute_successful'] = False
+                context['recommendation_past_destination'] = True
 
 
         elif action == 0: # action is "do nothing"

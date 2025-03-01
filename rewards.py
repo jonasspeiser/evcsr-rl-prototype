@@ -47,6 +47,7 @@ class RewardStrategy:
                          - 'charging_stop_already_planned': whether a charging stop at the decided station was already planned in the last action
                          - 'sufficient_range': whether the vehicle has sufficient range
                          - 'rerouting_exception_occurred': whether an exception occurred during rerouting
+                         - 'recommendation_past_destination': whether the recommended cs is further away than the vehicles destination
         Returns:
             A numeric penalty (e.g., -1 for an undesired action, 0 for no penalty).
         """
