@@ -50,7 +50,7 @@ class CircleEnv(gym.Env):
 
 
         # --- Define observation space ---
-        # Types of observations per vehicle: current state of the battery, current distance to destination, current distance to each charging station, last selected action, arrived at destination, request pending
+        # Types of observations per vehicle: [0] current state of the battery, [1] current distance to destination, [2:6] current distance to each charging station, [6] last selected action, [7] arrived at destination, [8] request pending
         # battery soc is in between 0 and 100000 Wh, distance to destination and distance to each of the charging stations is in between 0 and 2000 meters
         # These values are normalized.
         # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())

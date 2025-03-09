@@ -30,13 +30,18 @@ class GreedyAlgorithm(EvaluationAlgorithm):
     """
     def predict(self, observation, deterministic):
         placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
-        for vehicle_obs in observation.values():
+        for vehicle_id, vehicle_obs in observation.items():
             # find out which one is the active vehicle
-            active_charging_request_flag = vehicle_obs[7]
+            active_charging_request_flag = vehicle_obs[8]
             if active_charging_request_flag:
+                active_vehicle = vehicle_id
                 battery_soc = vehicle_obs[0]
-                station_distances = vehicle_obs[1:5]
+                station_distances = vehicle_obs[2:6]
                 break
+        
+        if battery_soc is None:
+            raise UnboundLocalError(f"battery_soc is None for the vehicle with active_charging_request {active_vehicle}. This shouldn't be possible.")
+        
         if battery_soc > 0.2:
             return 0, placeholder # "do nothing"
         
