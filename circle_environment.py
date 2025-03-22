@@ -123,6 +123,18 @@ class CircleEnv(gym.Env):
         self.global_ttt = global_ttt
         self.ttt_per_ev_mean = global_ttt / self.vehicles_to_spawn
 
+    def _set_global_ttt_only_terminated(self, current_time):
+        """Used for tensorboard logging. Sums up the total travel times of all vehicles. Only tracks terminated episodes (not truncated ones)"""
+        global_ttt_only_terminated = 0
+        for vehicle in self.vehicles.values():
+            if vehicle.departure_time is None:
+                continue
+            if vehicle.arrival_time is None:
+                vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
+            global_ttt_only_terminated += vehicle.get_total_travel_time()
+        self.global_ttt_only_terminated = global_ttt_only_terminated
+        self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / self.vehicles_to_spawn
+
     def _set_empty_vehicles_per_episode(self):
         self.empty_vehicles_per_episode = sum(
             1 for vehicle in self.vehicles.values()
@@ -326,6 +338,7 @@ class CircleEnv(gym.Env):
             if terminated or truncated:
                 if terminated:
                     self._set_cumulated_waiting_time_per_episode_terminated()
+                    self._set_global_ttt_only_terminated(self.simulation.get_current_time_step())
                 self._set_charging_stops_per_episode_mean()
                 self._set_empty_vehicles_per_episode()
                 self._set_cumulated_waiting_time_per_episode()

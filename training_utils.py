@@ -193,9 +193,10 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
         # Retrieve metrics from the environment after an episode ends.
         episode_metrics_dict = callback.log_evaluation(env, total_step)
         episode_metrics_dict.update({
-            "reward": episode_reward,
+            "episode": episode,
             "episode_length": episode_length,
-            "episode": episode
+            "was_truncated": truncated,
+            "reward": episode_reward,
             })
         episode_metrics_dict.update(metadata)
         metrics_list.append(episode_metrics_dict)
@@ -219,7 +220,9 @@ class CustomTensorboardCallback(BaseCallback):
     METRIC_NAMES = [
         "charging_stops_per_episode_mean",
         "global_ttt",
+        "global_ttt_only_terminated",
         "ttt_per_ev_mean",
+        "ttt_per_ev_mean_only_terminated",
         "cumulated_waiting_time",
         "cumulated_waiting_time_only_terminated",
         "empty_vehicles_per_episode",
