@@ -17,7 +17,7 @@ YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
 SUMO_CONFIG_PATH = "circle.sumocfg"
-CHARGING_DURATION = 5 # charging duration in seconds
+CHARGING_DURATION = 30 # charging duration in seconds
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
 class PointlessRecommendationError(ValueError):
