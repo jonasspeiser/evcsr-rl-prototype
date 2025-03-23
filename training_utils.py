@@ -226,6 +226,7 @@ class CustomTensorboardCallback(BaseCallback):
         "cumulated_waiting_time",
         "cumulated_waiting_time_only_terminated",
         "empty_vehicles_per_episode",
+        "final_simulation_time",
     ]
 
     def __init__(self, writer=None, verbose=0, rtw_size=100):

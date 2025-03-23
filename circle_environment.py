@@ -111,6 +111,10 @@ class CircleEnv(gym.Env):
         """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
         self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
 
+    def _set_final_simulation_time(self, current_time):
+        """Used for tensorboard logging. Logs the last simulation time before the episode ended."""
+        self.final_simulation_time = current_time
+
     def _set_global_ttt(self, current_time):
         """Used for tensorboard logging. Sums up the total travel times of all vehicles."""
         global_ttt = 0
@@ -336,13 +340,15 @@ class CircleEnv(gym.Env):
 
             # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
             if terminated or truncated:
+                simulation_time = self.simulation.get_current_time_step()
                 if terminated:
                     self._set_cumulated_waiting_time_per_episode_terminated()
-                    self._set_global_ttt_only_terminated(self.simulation.get_current_time_step())
+                    self._set_global_ttt_only_terminated(simulation_time)
                 self._set_charging_stops_per_episode_mean()
                 self._set_empty_vehicles_per_episode()
                 self._set_cumulated_waiting_time_per_episode()
-                self._set_global_ttt(self.simulation.get_current_time_step())
+                self._set_final_simulation_time(simulation_time)
+                self._set_global_ttt(simulation_time)
                 final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
                 accumulated_reward += final_reward
                 logger.info(f"Final reward: {final_reward}")

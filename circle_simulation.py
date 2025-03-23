@@ -473,6 +473,15 @@ if __name__ == "__main__":
 
         simulation.close()
 
+    def test_simulation_end():
+        cs_id = "cs_0"
+        simulation.add_vehicles(1)
+        # while simulation_time < 24
+        for i in range(200):
+            simulation.step()
+        simulation.close()
+
+
     def test_non_member_vehicles():
         """Test whether non_member_vehicles are spawning and despawning as expected - compare console output of this function to data source."""
         from data_processing import Obelis_Data_Provider
@@ -517,5 +526,6 @@ if __name__ == "__main__":
         simulation.close()
     
     # driving_in_circles()
-    test_non_member_vehicles()
+    # test_non_member_vehicles()
+    test_simulation_end()
 
