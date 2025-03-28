@@ -21,6 +21,10 @@ class ScenarioGenerator():
             raise ValueError("edge_list must contain at least two elements.")
         return list(random.sample(edge_list, 2))
     
+    def _select_soc(self):
+        soc = random.randint(BATTERY_MIN, BATTERY_MAX)
+        return soc
+
     def generate_routes(self, n_routes, edge_list):
         """
         Params:
@@ -46,7 +50,7 @@ class ScenarioGenerator():
             vehicle_type = "DEFAULT_VEHTYPE"
             route_id = random.choice(routes_list)
             battery_capacity = BATTERY_MAX
-            start_soc = random.randint(BATTERY_MIN, BATTERY_MAX)
+            start_soc = self._select_soc()
             depart_time = None # Making use of depart time is not yet implemented
             
             vehicles_dict[vehicle_id] = {
@@ -70,3 +74,11 @@ class SameRouteScenario(ScenarioGenerator):
             raise ValueError("edge_list must not be empty.")
         return [edge_list[0], edge_list[-1]]
     
+class SameSOCSameRouteScenario(SameRouteScenario):
+    """
+    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other. Start battery values are equal for all vehicles (50 % of BATTERY_MAX).
+    """
+
+    def _select_soc(self):
+        soc = BATTERY_MAX / 2
+        return soc

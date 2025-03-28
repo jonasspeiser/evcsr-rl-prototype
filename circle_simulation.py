@@ -4,7 +4,7 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
 import traci
 from sumolib import checkBinary
-from scenario_generator import ScenarioGenerator
+from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario
 
 # configure logging
 import logging
@@ -54,7 +54,7 @@ class Simulation():
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
         self.max_capacities = {}
-        self.scenario_generator = ScenarioGenerator(random_seed)
+        self.scenario_generator = SameSOCSameRouteScenario(random_seed)# ScenarioGenerator(random_seed)
 
         
     def _fetch_charging_stations(self):
