@@ -135,6 +135,10 @@ def further_train_model(algorithm, version, env_version, map, n_vehicles, n_step
         raise e    
 
 def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, execution_context="local", render_mode="human", random_seed=None):
+    """
+    Returns:
+        The file path of the evaluation metrics file (str).
+    """
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     metadata = {
         "timestamp": current_time,
@@ -161,7 +165,9 @@ def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes,
         # print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
         env.close()
         writer.close()
-        dump_to_file(metrics_dict, f"{model_dir}/evaluation/metrics{current_time}.json")
+        evaluation_path = f"{model_dir}/evaluation/metrics{current_time}.json"
+        dump_to_file(metrics_dict, evaluation_path)
+        return evaluation_path
 
     except KeyboardInterrupt:
         env.close()
