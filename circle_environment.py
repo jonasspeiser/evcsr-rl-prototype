@@ -31,7 +31,7 @@ class CircleEnv(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
         self.observation_sampling_rate = observation_sampling_rate # only sample the observation every x simulation steps for performance reasons
-        self.truncate_after_n_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
+        self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
 
         gui = (self.render_mode == "human")
         self.simulation = Simulation(gui=gui, random_seed=random_seed)
@@ -324,7 +324,7 @@ class CircleEnv(gym.Env):
             all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
-            truncated = self.simulation.get_current_time_step() > self.truncate_after_n_steps
+            truncated = self.simulation.get_current_time_step() > self.truncate_after_n_simulation_steps
             charging_request = self._check_for_charging_request(newly_spawned_ids)
 
             important_event_happened = charging_request or terminated or truncated
