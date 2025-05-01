@@ -17,3 +17,5 @@ obelis_data
 asfinag_data
 # Logged metrics
 metrics*.json
+# Visuals
+visuals
