@@ -5,6 +5,7 @@ if 'SUMO_HOME' in os.environ:
 import traci
 from sumolib import checkBinary
 from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario
+from collections import Counter
 
 # configure logging
 import logging
@@ -83,7 +84,11 @@ class Simulation():
             depart_time (int): The time step at which the vehicle should enter the simulation (in seconds)
             charge_duration (int): The charging duraction in seconds
         """
-        vehicle_id = f"non_member_ev_{depart_time}"
+        count = self.departure_counts.get(depart_time, 0)
+        suffix = f"_{count}" if count else ""
+        vehicle_id = f"non_member_ev_t{depart_time}{suffix}"
+        self.departure_counts[depart_time] += 1
+
         route_id = f"{cs_id}_non_member_route"
         traci.vehicle.add(vehicle_id, route_id, depart=depart_time)
         traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=charge_duration)
@@ -253,6 +258,7 @@ class Simulation():
 
     def reset(self):
         self.added_vehicles = []
+        self.departure_counts = Counter()
         traci.simulation.loadState("initial_state")
 
     def get_all_charging_station_ids(self):

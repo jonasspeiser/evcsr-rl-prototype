@@ -5,7 +5,7 @@ from collections import deque, Counter
 from circle_simulation import Simulation
 from vehicle import Vehicle
 from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
-from data_processing import Obelis_Data_Provider
+from data_processing import Obelis_Data_Provider, Random_Data_Provider
 
 # configure logging
 import logging
@@ -16,7 +16,7 @@ class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, render_mode=None, env_version="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=3000, simulate_non_member_evs: bool = False, random_seed=None):
+                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_member_vehicles=None, random_seed=None):
         """
         Initialize the environment and simulation.
         Define self.observation_space and self.action_space.
@@ -26,7 +26,7 @@ class CircleEnv(gym.Env):
         - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation
         - observation_sampling_rate: int, the rate at which the observation is sampled (i.e. every x simulation steps)
         - truncate_after_n_steps: int, the number of simulation steps after which the episode is truncated if no charging request is triggered
-        - simulate_non_member_evs: bool, whether or not to spawn non-member EVs. Default: False
+        - non_member_vehicles: int, the number of non member vehicles (i.e. not observable by the agent) to spawn in the simulation
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -36,9 +36,10 @@ class CircleEnv(gym.Env):
         gui = (self.render_mode == "human")
         self.simulation = Simulation(gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
-        self.simulate_non_member_evs = simulate_non_member_evs
-        if self.simulate_non_member_evs:
-            self.data_provider = Obelis_Data_Provider()
+        self.non_member_vehicles = non_member_vehicles
+        if non_member_vehicles:
+            # self.data_provider = Obelis_Data_Provider()
+            self.data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=200)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
@@ -201,7 +202,7 @@ class CircleEnv(gym.Env):
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
         self.low_battery_ids = []
         
-        if self.simulate_non_member_evs:
+        if self.non_member_vehicles:
             self._add_non_member_vehicles()
 
         # Wait until a charging request is generated.
@@ -413,7 +414,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_env(random_seed=None):
-        env = CircleEnv(render_mode="human", vehicles_to_spawn=10)
+        env = CircleEnv(render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
@@ -424,7 +425,7 @@ if __name__ == "__main__":
         # for _ in range(50):
         done = False
         while not done:
-            action = model.predict(observation)
+            action = model.predict(observation, False)
             observation, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 # observation, info = env.reset()
@@ -439,7 +440,7 @@ if __name__ == "__main__":
         model = NeverChargeAlgorithm(env)
         done = False
         while not done:
-            action = model.predict(observation)
+            action = model.predict(observation, False)
             observation, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated:
                 done = True

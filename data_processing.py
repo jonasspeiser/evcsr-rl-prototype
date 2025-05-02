@@ -1,10 +1,18 @@
 import pandas as pd
+import random
 
 CSV_PATH="obelis_data/df_lv.csv"
 FEATHER_PATH="obelis_data/df_lv.feather"
 
-class Obelis_Data_Provider():
+class Data_Provider():
+    """Abstract class to allow implementation of different data provider strategies, providing the datasets for non member vehicle spawns and despawns."""
+    def get_non_member_vehicle_data(self):
+        raise NotImplementedError
 
+class Obelis_Data_Provider(Data_Provider):
+    """
+    Providing the OBELIS dataset (from Germany) to supply the data for non member vehicle spawns and despawns.
+    """
 
     def __init__(self) -> None:
         self.lp_ids = ['6804_shuffled', '6973_shuffled', '16564_shuffled', '6326_shuffled']
@@ -57,8 +65,38 @@ class Obelis_Data_Provider():
         df_filtered = self.__prepare_dataframe(df, filter_date)
         vehicle_data = self.extract_non_member_vehicle_data(df_filtered)
         return vehicle_data
+    
+class Random_Data_Provider(Data_Provider):
+    """
+    Providing random data to supply the data for non member vehicle spawns and despawns.
+    Params: 
+        n_nmevs (int): The amount of non member vehicles which should be simulated
+        n_cs (int): The amount of charging stations in the system
+        max_simulation_time (int): The expected max duration of the simulation in seconds
+    """
+    def __init__(self, n_nmevs, n_cs, max_simulation_time):
+        self.n_nmevs = n_nmevs
+        self.n_cs = n_cs
+        self.max_simulation_time = max_simulation_time
+        super().__init__()
+
+    def get_non_member_vehicle_data(self):
+        vehicle_data = [] 
+        for i in range(self.n_nmevs):
+            cs_id = f"cs_{random.randint(0, self.n_cs - 1)}"
+            begin = random.randint(0, self.max_simulation_time)# spawn time in seconds after simulation start
+            duration = random.randint(10, 200) # charge duration in seconds
+            entry_dict = {
+                "cs_id": cs_id,
+                "charge_begin_seconds": begin,
+                "charge_duration": duration
+            }
+            vehicle_data.append (entry_dict)
+        return vehicle_data
 
 
 if __name__ == "__main__":
-    vehicle_data = Obelis_Data_Provider().get_non_member_vehicle_data()
+    data_provider = Obelis_Data_Provider()
+    # data_provider = Random_Data_Provider(5, 4, 3000)
+    vehicle_data = data_provider.get_non_member_vehicle_data()
     print(vehicle_data)

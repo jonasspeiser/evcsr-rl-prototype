@@ -89,6 +89,10 @@ class Vehicle:
         the penalty calculation to the reward strategy.
         Returns an action penalty (if any).
         """
+        if isinstance(action, tuple):
+            # My evaluation algos return tuples. Only the first value is of interest.
+            action = action[0]
+        
         logger.info(f"{self.vehicle_id}: handling action {action}")
         self.last_action = action
 
