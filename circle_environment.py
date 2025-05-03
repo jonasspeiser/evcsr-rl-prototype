@@ -64,7 +64,7 @@ class CircleEnv(gym.Env):
             dtype=np.float32
         )
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        self.vehicle_ids = self.simulation.get_all_mev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
         self.observation_space = spaces.Dict({
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
@@ -191,7 +191,7 @@ class CircleEnv(gym.Env):
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_vehicle_ids()
+        self.vehicle_ids = self.simulation.get_all_mev_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Re-create the vehicles dictionary in case new vehicles were spawned.
         self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}

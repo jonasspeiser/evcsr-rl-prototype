@@ -271,6 +271,11 @@ class Simulation():
     def get_all_vehicle_ids(self):
         """ Returns a list of all vehicle ids that have been added to the simulation. """
         return self.added_vehicles
+    
+    def get_all_mev_ids(self):
+        """Returns a list of all member vehicle ids that have been added to the simulation."""
+        original_list = self.get_all_vehicle_ids()
+        return self._filter_list_for_member_evs(original_list)
 
     def get_online_vehicle_ids(self):
         """Returns a list of ids of all member vehicles currently running within the scenario"""
