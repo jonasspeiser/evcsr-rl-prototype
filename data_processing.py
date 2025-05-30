@@ -74,7 +74,8 @@ class Random_Data_Provider(Data_Provider):
         n_cs (int): The amount of charging stations in the system
         max_simulation_time (int): The expected max duration of the simulation in seconds
     """
-    def __init__(self, n_nmevs, n_cs, max_simulation_time):
+    def __init__(self, n_nmevs, n_cs, max_simulation_time, seed=None):
+        self.rng = random.Random(seed)
         self.n_nmevs = n_nmevs
         self.n_cs = n_cs
         self.max_simulation_time = max_simulation_time
@@ -83,9 +84,9 @@ class Random_Data_Provider(Data_Provider):
     def get_non_member_vehicle_data(self):
         vehicle_data = [] 
         for i in range(self.n_nmevs):
-            cs_id = f"cs_{random.randint(0, self.n_cs - 1)}"
-            begin = random.randint(0, self.max_simulation_time)# spawn time in seconds after simulation start
-            duration = random.randint(10, 200) # charge duration in seconds
+            cs_id = f"cs_{self.rng .randint(0, self.n_cs - 1)}"
+            begin = self.rng .randint(0, self.max_simulation_time)# spawn time in seconds after simulation start
+            duration = self.rng .randint(10, 200) # charge duration in seconds
             entry_dict = {
                 "cs_id": cs_id,
                 "charge_begin_seconds": begin,
