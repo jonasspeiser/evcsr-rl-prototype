@@ -4,6 +4,15 @@ This script generates a SUMO network for a highway with charging stations.
 
 import os
 from datetime import datetime
+import subprocess
+
+# === CONFIGURATION ===
+generate_routes = True  # Set to False to skip route generation
+launch_gui = True  # Set to False to skip launching SUMO
+
+maps_dir = "maps"  # Directory to store generated files
+map_name = "straight_100km"  # Base name for the map files
+
 
 # === GENERAL CONFIGURATION ===
 km_total = 100
@@ -12,21 +21,28 @@ lane_count = 3
 lane_speed = 33.33  # m/s ~120 km/h
 charging_speed = 8.33  # m/s ~30 km/h
 charging_spots = [25, 50, 75, 100]  # in km
-route_file = "autobahn.rou.xml"  # Optional
 
 # === CHARGING STATION CONFIGURATION ===
 charging_params = {
-    "startPos": 10.0,
-    "endPos": 40.0,
+    "startPos": 500.0, # Distance from the entry node in meters
+    "endPos": 540.0,
     "chargeDelay": 2,
     "chargeInTransit": 0,
     "power": 200_000,        # Watts
     "efficiency": 0.95
 }
 
+# === FILE PATH SETUP ===
+# Ensure the maps directory exists
+map_working_dir = os.path.join(".", maps_dir, map_name) # Directory for the current map
+if not os.path.exists(map_working_dir):
+    os.makedirs(map_working_dir)
+map_path_stub = os.path.join(map_working_dir, map_name) # map path without extension
+
+route_file = f"{map_path_stub}.rou.xml"  # Optional
 
 # === NODES ===
-with open("autobahn.nod.xml", "w") as f:
+with open(f"{map_path_stub}.nod.xml", "w") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n<nodes>\n')
 
     # Main highway nodes
@@ -36,13 +52,13 @@ with open("autobahn.nod.xml", "w") as f:
     # Charging station entry/exit nodes
     for cs in charging_spots:
         entry_x = cs * 1000
-        f.write(f'  <node id="cs{cs}_entry" x="{entry_x}" y="-10" type="priority"/>\n')
-        f.write(f'  <node id="cs{cs}_exit" x="{entry_x + 1000}" y="-10" type="priority"/>\n')
+        f.write(f'  <node id="cs{cs}_entry" x="{entry_x}" y="0" type="priority"/>\n')
+        f.write(f'  <node id="cs{cs}_exit" x="{entry_x + 1000}" y="0" type="priority"/>\n')
 
     f.write('</nodes>\n')
 
 # === EDGES ===
-with open("autobahn.edg.xml", "w") as f:
+with open(f"{map_path_stub}.edg.xml", "w") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n<edges>\n')
 
     # Main highway edges
@@ -53,15 +69,29 @@ with open("autobahn.edg.xml", "w") as f:
     for cs in charging_spots:
         entry = f"cs{cs}_entry"
         exit = f"cs{cs}_exit"
-        f.write(f'  <edge id="cs{cs}_entry_edge" from="n{cs}" to="{entry}" type="charging"/>\n')
-        f.write(f'  <edge id="cs{cs}_main" from="{entry}" to="{exit}" type="charging"/>\n')
+        entry_x = cs * 1000
+        exit_x  = entry_x + 1000
+        # branch down: highway y=0 -> station y=-10
+        f.write(
+            f'  <edge id="cs{cs}_entry_edge" from="n{cs}" to="{entry}" type="charging" '
+            f'shape="{entry_x},0 {entry_x},-10"/>\n'
+        )
+        # main station lane at y=-10
+        f.write(
+            f'  <edge id="cs{cs}_main" from="{entry}" to="{exit}" type="charging" '
+            f'shape="{entry_x},-10 {exit_x},-10"/>\n'
+        )
+        # branch up: station y=-10 -> highway y=0
         if cs + 1 <= km_total:
-            f.write(f'  <edge id="cs{cs}_exit_edge" from="{exit}" to="n{cs+1}" type="charging"/>\n')
+            f.write(
+                f'  <edge id="cs{cs}_exit_edge" from="{exit}" to="n{cs+1}" type="charging" '
+                f'shape="{exit_x},-10 {exit_x},0"/>\n'
+            )
 
     f.write('</edges>\n')
 
 # === TYPES ===
-with open("autobahn.typ.xml", "w") as f:
+with open(f"{map_path_stub}.typ.xml", "w") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n<types>\n')
     f.write(f'  <type id="highway" numLanes="{lane_count}" speed="{lane_speed}"/>\n')
     f.write(f'  <type id="charging" numLanes="1" speed="{charging_speed}"/>\n')
@@ -69,7 +99,7 @@ with open("autobahn.typ.xml", "w") as f:
 
 
 # === ADDITIONAL: Charging Stations ===
-with open("autobahn.add.xml", "w") as f:
+with open(f"{map_path_stub}.add.xml", "w") as f:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
     f.write(f'<!-- generated on {timestamp} by Python script -->\n\n')
@@ -88,29 +118,26 @@ with open("autobahn.add.xml", "w") as f:
 
     f.write('</additional>\n')
 
-# === MERGING TO NETWORK FILE ===
+# === GENERATE NETWORK ===
+print("✔ Generating SUMO network...")
+os.system(
+    f'netconvert -n {map_path_stub}.nod.xml '
+    f'-e {map_path_stub}.edg.xml '
+    f'-t {map_path_stub}.typ.xml '
+    f"--junctions.join true "  
+    f'-o {map_path_stub}.net.xml'
+)
 
-# Generate net.xml via netconvert
-print("XML data generated successfully:")
-print("  - autobahn.nod.xml")
-print("  - autobahn.edg.xml")
-print("  - autobahn.typ.xml")
-print("  - autobahn.add.xml")
 
-print("Now creating SUMO net file with:")
-print("\nnetconvert -n autobahn.nod.xml -e autobahn.edg.xml -t autobahn.typ.xml -o autobahn.net.xml\n")
-# auto-run netconvert if installed
-os.system("netconvert -n autobahn.nod.xml -e autobahn.edg.xml -t autobahn.typ.xml -o autobahn.net.xml")
-print("Network file 'autobahn.net.xml' created successfully.")
 
-# === SUMO CONFIGURATION ===
-with open("autobahn.sumocfg", "w") as f:
+# === GENERATE SUMOCFG ===
+with open(f"{map_path_stub}.sumocfg", "w") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
     f.write('<configuration>\n')
     f.write('    <input>\n')
-    f.write('        <net-file value="autobahn.net.xml"/>\n')
-    f.write(f'        <route-files value="{route_file}"/>\n')  # Optional file
-    f.write('        <additional-files value="autobahn.add.xml"/>\n')
+    f.write(f'        <net-file value="{map_name}.net.xml"/>\n')
+    f.write(f'        <route-files value="{map_name}.rou.xml"/>\n')  # Optional file
+    f.write(f'        <additional-files value="{map_name}.add.xml"/>\n')
     f.write('    </input>\n\n')
     f.write('    <time>\n')
     f.write('        <begin value="0"/>\n')
@@ -122,7 +149,63 @@ with open("autobahn.sumocfg", "w") as f:
     f.write('    </report>\n')
     f.write('</configuration>\n')
 
-print("SUMO configuration file 'autobahn.sumocfg' created.")
-print("Network generation complete. You can now run SUMO with the generated files.")
-print("\n🚦 Start the Simulation with:")
-print("  sumo-gui autobahn.sumocfg")
+# === (OPTIONAL) GENERATE ROUTES ===
+if generate_routes:
+    from sumolib.net import readNet
+
+    print("🧭 Generating routes with sumolib...")
+
+    # Load the generated network
+    net = readNet(f"{map_path_stub}.net.xml")
+
+    # Get all highway edges
+    edges = [e for e in net.getEdges() if e.getID().startswith("e")]
+    edge_dict = {e.getID(): e for e in edges}
+
+    with open(f"{map_path_stub}.rou.xml", "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8"?>\n<routes>\n')
+        f.write('  <vType id="car" accel="1.5" decel="4.5" sigma="0.5" length="5" minGap="2.5" maxSpeed="33.33"/>\n')
+
+        for i in range(5):
+            depart_time = i * 5
+            from_edge = edge_dict["e0"]
+            to_edge = edge_dict[f"e{km_total - 1}"]  # e99
+
+            # Get shortest path (list of edge objects)
+            path_edges = net.getShortestPath(from_edge, to_edge)[0]
+            edge_ids = [e.getID() for e in path_edges]
+
+            if i == 1:
+                # Insert charging station detour between e25 and e26
+                try:
+                    # find the position of the segment you want to replace
+                    idx = edge_ids.index("e25")
+                    # build a new list: everything *before* e25, then the 3 detour edges,
+                    # then everything *after* e25
+                    edge_ids = (
+                        edge_ids[:idx]
+                        + ["cs25_entry_edge", "cs25_main", "cs25_exit_edge"]
+                        + edge_ids[idx + 1:]
+                    )
+                except ValueError:
+                    print("⚠️ Warning: e25 not in shortest path — skipping detour for veh1")
+
+            # Write vehicle with optional stop
+            f.write(f'  <vehicle id="veh{i}" type="car" depart="{depart_time}">\n')
+            f.write(f'    <route edges="{" ".join(edge_ids)}"/>\n')
+
+            if i == 1:
+                f.write('    <stop lane="cs25_main_0" startPos="20.0" duration="30"/>\n')
+
+            f.write('  </vehicle>\n')
+
+        f.write('</routes>\n')
+
+    print("✅ Route file written.")
+
+
+
+# === (OPTIONAL) START SUMO-GUI ===
+if launch_gui:
+    print("🚦 Launching SUMO GUI...")
+    subprocess.run(["sumo-gui", f"{map_path_stub}.sumocfg"])
