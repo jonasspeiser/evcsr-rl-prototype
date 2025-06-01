@@ -5,6 +5,8 @@ This script generates a SUMO network for a highway with charging stations.
 import os
 from datetime import datetime
 import subprocess
+from sumolib.net import readNet
+import json
 
 # === CONFIGURATION ===
 generate_routes = True  # Set to False to skip route generation
@@ -129,7 +131,6 @@ os.system(
 )
 
 
-
 # === GENERATE SUMOCFG ===
 with open(f"{map_path_stub}.sumocfg", "w") as f:
     f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
@@ -149,11 +150,55 @@ with open(f"{map_path_stub}.sumocfg", "w") as f:
     f.write('    </report>\n')
     f.write('</configuration>\n')
 
-# === (OPTIONAL) GENERATE ROUTES ===
-if generate_routes:
-    from sumolib.net import readNet
 
-    print("🧭 Generating routes with sumolib...")
+# === WRITE ALL POSSIBLE ROUTES TO FILE ===
+def write_all_routes_json(net_file_path: str, output_path: str):
+    """
+    Writes all possible edge-to-edge routes in the network to a JSON file.
+    This includes all pairs of edges, excluding routes that start and end on the same edge.
+    """
+
+    print(f"Writing all edge-to-edge routes to JSON from {net_file_path}...")
+
+    net = readNet(net_file_path)
+    edges = net.getEdges()
+
+    all_routes = []
+    route_count = 0
+
+    for from_edge in edges:
+        for to_edge in edges:
+            if from_edge.getID() == to_edge.getID():
+                continue
+            try:
+                path_edges = net.getShortestPath(from_edge, to_edge)[0]
+                if not path_edges:
+                    continue
+                route_ids = [e.getID() for e in path_edges]
+                route_length = sum(e.getLength() for e in path_edges)
+                all_routes.append({
+                    "from": from_edge.getID(),
+                    "to": to_edge.getID(),
+                    "length": round(route_length, 2),
+                    "route": route_ids
+                })
+                route_count += 1
+            except Exception:
+                continue  # skip unreachable pairs
+
+    with open(output_path, "w") as f:
+        json.dump(all_routes, f, indent=2)
+
+    print(f"Wrote {route_count} valid routes to {output_path}")
+
+
+# === (OPTIONAL) GENERATE SOME ROUTES TO TEST THE NETWORK ===
+def generate_test_routes(map_path_stub: str):
+    """
+    Generates a simple set of test routes for the highway network.
+    This creates 5 vehicles with a detour for one vehicle at a charging station.
+    """
+    print("Generating test routes with sumolib...")
 
     # Load the generated network
     net = readNet(f"{map_path_stub}.net.xml")
@@ -204,8 +249,25 @@ if generate_routes:
     print("✅ Route file written.")
 
 
-
-# === (OPTIONAL) START SUMO-GUI ===
-if launch_gui:
+def start_sumo_gui(map_path_stub: str):
+    """
+    Launches the SUMO GUI with the specified map configuration.
+    """
     print("🚦 Launching SUMO GUI...")
     subprocess.run(["sumo-gui", f"{map_path_stub}.sumocfg"])
+
+
+if __name__ == "__main__":
+    # === GENERATE ROUTE MATRIX FOR ANALYSIS ===
+    write_all_routes_json(
+        net_file_path=f"{map_path_stub}.net.xml",
+        output_path=os.path.join(map_working_dir, "all_routes.json")
+    )
+
+    if generate_routes:
+        generate_test_routes(map_path_stub)
+
+    if launch_gui:
+        start_sumo_gui(map_path_stub)
+
+    print("Network generation complete. Check the 'maps' directory for files.")
