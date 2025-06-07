@@ -139,7 +139,7 @@ with open(f"{map_path_stub}.sumocfg", "w") as f:
     f.write('<configuration>\n')
     f.write('    <input>\n')
     f.write(f'        <net-file value="{map_name}.net.xml"/>\n')
-    f.write(f'        <additional-files value="{map_name}.add.xml"/>\n')
+    f.write(f'        <additional-files value="{map_name}.add.xml, ../../vehicle-models/soulEV65.add.xml"/>\n')
     f.write('    </input>\n\n')
     f.write('    <report>\n')
     f.write('        <verbose value="true"/>\n')

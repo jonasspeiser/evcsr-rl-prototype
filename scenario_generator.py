@@ -71,7 +71,7 @@ class ScenarioGenerator():
         vehicles_dict = {}
         for i in range(n_vehicles):
             vehicle_id = f"member_ev_{i}"
-            vehicle_type = "DEFAULT_VEHTYPE"
+            vehicle_type = "soulEV65"
             route_id = random.choice(routes_list)
             battery_capacity = start_soc_bounds[1]
             start_soc = self._select_soc(start_soc_bounds)
