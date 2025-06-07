@@ -1,5 +1,5 @@
 import numpy as np
-from circle_simulation import Simulation, PointlessRecommendationError
+from circle_simulation import Simulation, PointlessRecommendationError, BadTimingRoutingError, ImpossibleRoutingError
 
 # configure logging
 import logging
@@ -125,9 +125,11 @@ class Vehicle:
             try:
                 self.simulation.reroute_for_charging(self.vehicle_id, cs_id)
                 logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
-                context['reroute_successful'] = True
-                context['sufficient_range'] = self.is_remaining_range_sufficient(buffer=0)    
-            except ValueError as e: # if the vehicle is past the charging station and rerouting doesn't work
+                context.update({
+                    'reroute_successful': True,
+                    'sufficient_range': self.is_remaining_range_sufficient(buffer=0),
+                }) 
+            except (ImpossibleRoutingError, BadTimingRoutingError) as e:
                 logger.error(e)
                 context['reroute_successful'] = False
                 context['rerouting_exception_occurred'] = True

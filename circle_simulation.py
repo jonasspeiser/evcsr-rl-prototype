@@ -4,8 +4,10 @@ if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
 import traci
 from sumolib import checkBinary
-from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario
 from collections import Counter
+from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario
+import network_generator 
+
 
 # configure logging
 import logging
@@ -17,15 +19,31 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
-SUMO_CONFIG_PATH = "./maps/circle/circle.sumocfg"
+SUMO_CONFIG_STUB = "./maps/straight_100km/straight_100km"
+SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
 CHARGING_DURATION = 30 # charging duration in seconds
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
-class PointlessRecommendationError(ValueError):
+class RoutingError(Exception):
+    """Base class for routing errors in the simulation."""
+    def __init__(self, message):
+        super().__init__(message)
+
+class PointlessRecommendationError(RoutingError):
     """Raised when a vehicle's destination is closer than the recommended charging station."""
     def __init__(self, dist_dest, dist_cs):
         message = (f"Recommendation denied: Destination is {dist_dest} units away, "
                    f"but the charging station is {dist_cs} units away.")
+        super().__init__(message)
+
+class ImpossibleRoutingError(RoutingError):
+    """Raised when during route calculcation, no route can be found for a vehicle to a charging station."""
+    def __init__(self, message):
+        super().__init__(message)
+
+class BadTimingRoutingError(RoutingError):
+    """Raised when setting a valid charging stop but the vehicle is already on the cs edge but past the charging station, thus can't be rerouted."""
+    def __init__(self, message):
         super().__init__(message)
 
 class Simulation():
@@ -56,26 +74,12 @@ class Simulation():
         self.vehicle_destinations = {}
         self.max_capacities = {}
         self.scenario_generator = SameSOCSameRouteScenario(random_seed)# ScenarioGenerator(random_seed)
-
-        
-    def _fetch_charging_stations(self):
-        charging_station_ids = traci.chargingstation.getIDList()
-        charging_stations = {}
-        for cs_id in charging_station_ids:
-            cs_edge = self._get_cs_edge(cs_id)
-            charging_stations[cs_id] = cs_edge
-        return charging_stations
-
-    def _get_cs_edge(self, cs_id):
-        cs_lane = traci.chargingstation.getLaneID(cs_id)
-        cs_edge = traci.lane.getEdgeID(cs_lane)
-        return cs_edge
     
     def add_non_member_routes(self):
         """Add routes for charging station usage of non-member EVs"""
         for cs_id, cs_edge in self.charging_stations.items():
             traci.route.add(f"{cs_id}_non_member_route", [cs_edge])
-        
+
     def add_non_member_vehicle(self, cs_id, depart_time, charge_duration):
         """
         Add a vehicle with a specific departure time directly in front of specified charging station. The vehicle disappears shortly after charging has finished.
@@ -99,10 +103,12 @@ class Simulation():
         Adds the specified amount of vehicles to the simulation. 
         Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
         """
-        edge_list = [f"E{i}" for i in range(20)] # ["E0", "E1", ..., "E19"]
-        routes_dict = self.scenario_generator.generate_routes(amount, edge_list)
-        routes_list = list(routes_dict.keys())
-        vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_list)
+        # edge_list = traci.edge.getIDList()
+        all_routes = network_generator.get_all_routes(SUMO_CONFIG_STUB)
+        start_soc_bounds = network_generator.get_start_soc_bounds(SUMO_CONFIG_STUB) 
+        routes_dict = self.scenario_generator.generate_routes_from_routes_list(amount, all_routes)
+        routes_id_list = list(routes_dict.keys())
+        vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds)
         logger.debug(f"adding vehicles: {vehicles_dict}")
 
         for route_id, route in routes_dict.items():
@@ -113,6 +119,19 @@ class Simulation():
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
             self.added_vehicles.append(vehicle_id)      
+    
+    def _fetch_charging_stations(self):
+        charging_station_ids = traci.chargingstation.getIDList()
+        charging_stations = {}
+        for cs_id in charging_station_ids:
+            cs_edge = self._get_cs_edge(cs_id)
+            charging_stations[cs_id] = cs_edge
+        return charging_stations
+
+    def _get_cs_edge(self, cs_id):
+        cs_lane = traci.chargingstation.getLaneID(cs_id)
+        cs_edge = traci.lane.getEdgeID(cs_lane)
+        return cs_edge
 
     def _get_vehicle_edge(self, vehicle_id):
         try:
@@ -155,15 +174,27 @@ class Simulation():
         if dist_cs > dist_dest:
             raise PointlessRecommendationError(dist_dest, dist_cs)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
-            # find route to charging station and from charging station to destination
+            # find route from vehicle position to charging station and from charging station to destination
             route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)
+            if not route_to_cs or not route_to_cs.edges:
+                raise ImpossibleRoutingError(f"No route found from position {current_vehicle_edge} to cs {cs_edge} for vehicle {vehicle_id}.")
             route_from_cs = traci.simulation.findRoute(cs_edge, destination, v_type)
+            if not route_from_cs or not route_from_cs.edges:
+                raise ImpossibleRoutingError(f"No route found from cs {cs_edge} to destination {destination} for vehicle {vehicle_id}.")
             new_route = route_to_cs.edges + route_from_cs.edges[1:]
-            traci.vehicle.setRoute(vehicle_id, new_route)
+            logger.debug(f"Rerouting {vehicle_id} to charging station {cs_id} via route: {new_route}")
+            try:
+                traci.vehicle.setRoute(vehicle_id, new_route)
+            except traci.exceptions.TraCIException as e:
+                raise Exception(f"TraCIException: {e} \n\
+                                Route from position {current_vehicle_edge} to cs {cs_edge} to destination {destination}. \n\
+                                route_to_cs: {route_to_cs} \n\
+                                route_from_cs: {route_from_cs} \n\
+                                new_route: {new_route}")
         try:
             traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=CHARGING_DURATION)
         except traci.exceptions.TraCIException as e:
-            raise ValueError(f"{vehicle_id} is past the charging station, rerouting not possible. TraCIException: {e}")
+            raise BadTimingRoutingError(f"{vehicle_id} is past the charging station, rerouting not possible. TraCIException: {e}")
 
     def remove_charging_stop(self, vehicle_id):
         try:
