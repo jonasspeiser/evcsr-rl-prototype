@@ -23,8 +23,8 @@ highway_lane_speed = 33.33  # m/s ~120 km/h
 charging_lane_speed = 8.33  # m/s ~30 km/h
 charging_spots = [25, 50, 75, 100]  # the number marks the distance from the first node in km
 max_possible_distance = km_total  # Max possible distance between a vehicle's potential start and destination in km 
-max_battery_capacity = 100000.0  # Max battery capacity in Wh
-start_soc_bounds = (5000, max_battery_capacity)  # Start SOC bounds for vehicles in Wh (20% to 80% of max capacity)
+max_battery_capacity = 100_000.0  # Max battery capacity in Wh
+start_soc_bounds = (3880, 22_390)  # Start SOC bounds for vehicles in Wh (20% to 80% of max capacity)
 
 # === CHARGING STATION CONFIGURATION ===
 charging_params = {
