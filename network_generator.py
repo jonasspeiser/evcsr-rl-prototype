@@ -22,7 +22,7 @@ lane_count = 3
 highway_lane_speed = 33.33  # m/s ~120 km/h
 charging_lane_speed = 8.33  # m/s ~30 km/h
 charging_spots = [25, 50, 75, 100]  # the number marks the distance from the first node in km
-max_possible_distance = km_total  # Max possible distance between a vehicle's potential start and destination in km 
+max_possible_distance = float(km_total * 1000)  # Max possible distance between a vehicle's potential start and destination in meters 
 max_battery_capacity = 100_000.0  # Max battery capacity in Wh
 start_soc_bounds = (3880, 22_390)  # Start SOC bounds for vehicles in Wh (20% to 80% of max capacity)
 
@@ -92,7 +92,23 @@ def get_all_routes(sumo_config_path_stub: str) -> dict:
         with open(routes_file_path, "r") as f:
             all_routes = json.load(f)
     return all_routes
-   
+
+def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
+    """
+    Returns the maximum possible distance between a vehicle's potential start and destination in km.
+    Params:
+        SUMO_CONFIG_STUB (str): Path stub for the SUMO configuration files (without file extension). E.g. "maps/straight_100km/straight_100km"
+    """
+    config_file_path = f"{SUMO_CONFIG_STUB}.config.json"
+    if not os.path.exists(config_file_path):
+        raise FileNotFoundError(f"Configuration file {config_file_path} does not exist.")
+    
+    with open(config_file_path, "r") as f:
+        config = json.load(f)
+    
+    return config["max_possible_distance"]
+
+
 def get_start_soc_bounds(sumo_config_path_stub: str) -> tuple:
     """
     Returns the start SOC bounds for vehicles in the network.

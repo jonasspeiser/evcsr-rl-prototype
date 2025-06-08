@@ -52,7 +52,7 @@ class CircleEnv(gym.Env):
 
         # --- Define observation space ---
         # Types of observations per vehicle: [0] current state of the battery, [1] current distance to destination, [2:6] current distance to each charging station, [6] last selected action, [7] arrived at destination, [8] request pending
-        # battery soc is in between 0 and 100000 Wh, distance to destination and distance to each of the charging stations is in between 0 and 2000 meters
+        # battery soc is in between 0 and 100000 Wh, distance to destination and distance to each of the charging stations in meters is between 0 and the maximum drivable distance in the simulated network.
         # These values are normalized.
         # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())
         # A binary value informs wether the vehicle has (1) or has not (0) reached its destination yet
@@ -193,6 +193,8 @@ class CircleEnv(gym.Env):
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_mev_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
+        # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
+        Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
         # Re-create the vehicles dictionary in case new vehicles were spawned.
         self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
 
@@ -448,6 +450,6 @@ if __name__ == "__main__":
 
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
-    # test_env()
+    test_env()
     demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)

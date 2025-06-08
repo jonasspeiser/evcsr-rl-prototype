@@ -262,6 +262,10 @@ class Simulation():
             self.max_capacities[vehicle_id] = max_capacity
         return max_capacity
 
+    def get_max_possible_distance(self):
+        """" Returns the maximum possible distance between a vehicles start and destination within the currently loaded network in meters."""
+        return network_generator.get_max_possible_distance(SUMO_CONFIG_STUB)
+    
     def get_vehicle_destination(self, vehicle_id):
         """ Returns the destination of given vehicle. Caches the destination for each vehicle, so isn't aware if destination changes in SUMO. """
         destination = self.vehicle_destinations.get(vehicle_id)
