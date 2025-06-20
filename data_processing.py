@@ -1,8 +1,8 @@
 import pandas as pd
 import random
 
-CSV_PATH="obelis_data/df_lv.csv"
-FEATHER_PATH="obelis_data/df_lv.feather"
+CSV_PATH="datasets/obelis_data/df_lv.csv"
+FEATHER_PATH="datasets/obelis_data/df_lv.feather"
 
 class Data_Provider():
     """Abstract class to allow implementation of different data provider strategies, providing the datasets for non member vehicle spawns and despawns."""
