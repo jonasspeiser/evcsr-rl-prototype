@@ -39,7 +39,7 @@ class CircleEnv(gym.Env):
         self.non_member_vehicles = non_member_vehicles
         if non_member_vehicles:
             # self.data_provider = Obelis_Data_Provider()
-            self.data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=200)
+            self.data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
