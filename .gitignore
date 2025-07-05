@@ -11,7 +11,10 @@ events.out.tfevents.*
 *.pstats
 # python venvs
 .venv
-# OBELIS dataset
-obelis_data
-# ASFINAG dataset
-asfinag_data
+evcsr_rl_prototype
+# datasets
+datasets
+# Logged metrics
+metrics*.json
+# Visuals
+visuals
