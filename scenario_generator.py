@@ -124,8 +124,8 @@ class ScenarioGenerator():
         return None
     
     def _select_depart_time(self, depart_time_iter):
-        """The default implementation returns always None."""
-        return None
+        """The default implementation returns always 0."""
+        return 0
 
     def generate_vehicles(self, n_vehicles, routes_list, start_soc_bounds=(DEFAULT_BATTERY_MIN, DEFAULT_BATTERY_MAX), scenario_id=None):
         """
@@ -136,13 +136,18 @@ class ScenarioGenerator():
         depart_time_iter = iter(self._get_depart_time_list(n_vehicles, scenario_id)) # initialize an iterator for depart times
 
         vehicles_dict = {}
+
         for i in range(n_vehicles):
+            depart_time = self._select_depart_time( depart_time_iter) # TODO: Is depart_time already implemented in simulation? i.e. is the value we are passing here used?
+            
+            if depart_time is None:
+                print(f"Warning: No departure time available for vehicle {i}. Stopping vehicle generation.")
+                break
             vehicle_id = f"member_ev_{i}"
             vehicle_type = "soulEV65"
             route_id = random.choice(routes_list)
             battery_capacity = start_soc_bounds[1]
             start_soc = self._select_soc(start_soc_bounds)
-            depart_time = self._select_depart_time( depart_time_iter) # TODO: Is depart_time already implemented in simulaiton?
             
             vehicles_dict[vehicle_id] = {
                 "type": vehicle_type,
@@ -183,7 +188,7 @@ class SameSOCSameRouteScenario(SameRouteScenario):
 
 class CustomDistributionScenario(ScenarioGenerator):
     """
-    Vehicles have different routes, where start and endpoint are random. Vehicles are starting according to BASt data. Start battery values are variable.
+    Vehicles have different routes, where start and endpoint are random. Vehicles are starting according to a dataset which needs to be specified by subclassing and overriding '_get_depart_time_list'. Start battery values are variable.
     """
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
@@ -224,8 +229,8 @@ class CustomDistributionScenario(ScenarioGenerator):
         return depart_time_list
 
     def _select_depart_time(self, depart_time_iter):
-        """ Selects the next departure time from a predefined list of departure times."""
-        return next(depart_time_iter)
+        """ Selects the next departure time from a predefined list of departure times. Returns None if the list is exhausted. """
+        return next(depart_time_iter, None)
 
 class BAStDistributionScenario(CustomDistributionScenario):
     """
