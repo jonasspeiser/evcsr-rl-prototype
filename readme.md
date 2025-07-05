@@ -9,17 +9,21 @@
 #### Create new venv (optional but recommended)
 1. Run the venv creation command:
 
+   - On **Linux/macOS**:
+     ```bash
+     python3 -m venv evcsr-rl-prototype
+     ```
    - On **Windows**:
      ```bash
      python -m venv evcsr-rl-prototype
      ```
-   - On **macOS/Linux**:
-     ```bash
-     python3 -m venv evcsr-rl-prototype
-     ```
 
 1. Activate the virtual environment:
 
+   - On **Linux/macOS**:
+     ```bash
+     source evcsr-rl-prototype/bin/activate
+     ```
    - On **Windows** (cmd):
      ```cmd
      evcsr-rl-prototype\Scripts\activate
@@ -27,10 +31,6 @@
    - On **Windows** (PowerShell):
      ```powershell
      .\evcsr-rl-prototype\Scripts\Activate.ps1
-     ```
-   - On **macOS/Linux**:
-     ```bash
-     source evcsr-rl-prototype/bin/activate
      ```
    After activation, your command prompt will show the environment name, indicating it's active.  
 
