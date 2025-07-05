@@ -1,9 +1,6 @@
 traci
-sumolib
 stable-baselines3
 tensorboard
 gymnasium
-numpy
 pandas
 pyarrow
-jupyter
