@@ -12,8 +12,17 @@ events.out.tfevents.*
 # python venvs
 .venv
 evcsr_rl_prototype
+
 # datasets
-datasets
+datasets/asfinag_data/*
+!datasets/asfinag_data/data_exploration.ipynb
+!datasets/asfinag_data/Jahr23_ASFINAG_Verkehrsstatistik.xls
+
+datasets/bast_data/2022_A_S.*
+
+datasets/obelis_data/df_lv.*
+
+
 # Logged metrics
 metrics*.json
 # Visuals
