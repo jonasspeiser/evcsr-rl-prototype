@@ -59,15 +59,15 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
         return scenario_generator
     match str(scenario_generator).lower():
         case "all_random":
-            return ScenarioGenerator(random_seed=random_seed)
+            return ScenarioGenerator(seed=random_seed)
         case "same_route":
-            return SameRouteScenario(random_seed=random_seed)
+            return SameRouteScenario(seed=random_seed)
         case "same_soc_same_route":
-            return SameSOCSameRouteScenario(random_seed=random_seed)
+            return SameSOCSameRouteScenario(seed=random_seed)
         case "custom_distribution":
-            return CustomDistributionScenario(random_seed=random_seed)
+            return CustomDistributionScenario(seed=random_seed)
         case "bast":
-            return BAStDistributionScenario(random_seed=random_seed)
+            return BAStDistributionScenario(seed=random_seed)
         case _:
             raise ValueError(f"Unknown scenario generator: {scenario_generator}")
 

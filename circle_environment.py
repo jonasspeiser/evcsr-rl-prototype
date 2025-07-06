@@ -6,6 +6,7 @@ from circle_simulation import Simulation
 from vehicle import Vehicle
 from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider, Random_Data_Provider
+import os
 
 # configure logging
 import logging
@@ -408,6 +409,9 @@ if __name__ == "__main__":
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(formatter)
         # create file handler which logs even debug messages
+        log_dir = os.path.dirname(log_file_path)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
         file_handler = logging.FileHandler(log_file_path, mode="w")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
