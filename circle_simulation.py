@@ -5,7 +5,7 @@ if 'SUMO_HOME' in os.environ:
 import traci
 from sumolib import checkBinary
 from collections import Counter
-from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario
+from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
 import network_generator 
 
 
@@ -46,9 +46,34 @@ class BadTimingRoutingError(RoutingError):
     def __init__(self, message):
         super().__init__(message)
 
+def construct_scenario_generator(scenario_generator, random_seed=None):
+    """
+    Constructs a scenario generator based on the provided scenario_generator argument.
+    Args:
+        scenario_generator (str or ScenarioGenerator): The type of scenario generator to create.
+        random_seed (int, optional): The random seed to use for the scenario generator.
+    Returns:
+        ScenarioGenerator: An instance of the specified scenario generator.
+    """
+    if isinstance(scenario_generator, ScenarioGenerator):
+        return scenario_generator
+    match str(scenario_generator).lower():
+        case "all_random":
+            return ScenarioGenerator(random_seed=random_seed)
+        case "same_route":
+            return SameRouteScenario(random_seed=random_seed)
+        case "same_soc_same_route":
+            return SameSOCSameRouteScenario(random_seed=random_seed)
+        case "custom_distribution":
+            return CustomDistributionScenario(random_seed=random_seed)
+        case "bast":
+            return BAStDistributionScenario(random_seed=random_seed)
+        case _:
+            raise ValueError(f"Unknown scenario generator: {scenario_generator}")
+
 class Simulation():
 
-    def __init__(self, gui:bool=False, random_seed = None):
+    def __init__(self, scenario_generator, gui:bool=False, random_seed = None):
         if type(gui) is not bool:
             raise ValueError("gui must be a boolean")
         self.gui = gui
@@ -73,7 +98,7 @@ class Simulation():
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
         self.max_capacities = {}
-        self.scenario_generator = SameSOCSameRouteScenario(random_seed)# ScenarioGenerator(random_seed)
+        self.scenario_generator = construct_scenario_generator(scenario_generator, random_seed)
     
     def add_non_member_routes(self):
         """Add routes for charging station usage of non-member EVs"""
@@ -98,17 +123,19 @@ class Simulation():
         traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=charge_duration)
 
 
-    def add_vehicles(self, amount = 1):
+    def add_vehicles(self, amount = 1, scenario_id = None):
         """ 
         Adds the specified amount of vehicles to the simulation. 
-        Battery SOC is randomly chosen for each vehicle individually (between 50 and 500 Wh). 
+        Parameters:
+            amount (int): The number of vehicles to add.
+            scenario_id (str): optional, the id of the scenario to use for generating the vehicles. If None, the scenario is selected randomly.
         """
         # edge_list = traci.edge.getIDList()
         all_routes = network_generator.get_all_routes(SUMO_CONFIG_STUB)
         start_soc_bounds = network_generator.get_start_soc_bounds(SUMO_CONFIG_STUB) 
         routes_dict = self.scenario_generator.generate_routes_from_routes_list(amount, all_routes)
         routes_id_list = list(routes_dict.keys())
-        vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds)
+        vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds, scenario_id)
         logger.debug(f"adding vehicles: {vehicles_dict}")
 
         for route_id, route in routes_dict.items():
@@ -470,7 +497,7 @@ class Simulation():
 
 if __name__ == "__main__":
 
-    simulation = Simulation(gui=True)
+    simulation = Simulation(scenario_generator="BASt", gui=True)
 
     def _adapt_destination(vehicle_id, vehicle_state):
         """Routes the vehicles in circles"""
@@ -521,7 +548,7 @@ if __name__ == "__main__":
 
     def test_simulation_end():
         cs_id = "cs_0"
-        simulation.add_vehicles(1)
+        simulation.add_vehicles(50)
         # while simulation_time < 24
         for i in range(200):
             simulation.step()

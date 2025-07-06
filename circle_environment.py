@@ -15,18 +15,24 @@ logger = logging.getLogger("rl.environment")
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
-    def __init__(self, render_mode=None, env_version="basic", vehicles_to_spawn=1,
+    def __init__(self, scenario_generator, render_mode=None, env_version="basic", vehicles_to_spawn=1,
                  observation_sampling_rate=30, truncate_after_n_steps=3000, non_member_vehicles=None, random_seed=None):
         """
         Initialize the environment and simulation.
         Define self.observation_space and self.action_space.
 
         Parameters:
+        - scenario_generator: str or ScenarioGenerator, the scenario to use for the simulation. Can be a string like "bast", "all_random", or an instance of a ScenarioGenerator class
         - render_mode: str, the mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
-        - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation
+        - env_version: str, the version of the environment to use. Can be "basic", "noTime", or "shaping". 
+            - "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting.
+            - "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation.
+            - "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
+        - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation. This is the number of member vehicles (MEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
         - observation_sampling_rate: int, the rate at which the observation is sampled (i.e. every x simulation steps)
         - truncate_after_n_steps: int, the number of simulation steps after which the episode is truncated if no charging request is triggered
         - non_member_vehicles: int, the number of non member vehicles (i.e. not observable by the agent) to spawn in the simulation
+        - random_seed: int, the seed for the random number generator. Used for reproducibility of the environment.
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -34,7 +40,7 @@ class CircleEnv(gym.Env):
         self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
 
         gui = (self.render_mode == "human")
-        self.simulation = Simulation(gui=gui, random_seed=random_seed)
+        self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
         self.non_member_vehicles = non_member_vehicles
         if non_member_vehicles:
@@ -126,7 +132,7 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
-        self.ttt_per_ev_mean = global_ttt / self.vehicles_to_spawn
+        self.ttt_per_ev_mean = global_ttt / len(self.vehicle_ids)
 
     def _set_global_ttt_only_terminated(self, current_time):
         """Used for tensorboard logging. Sums up the total travel times of all vehicles. Only tracks terminated episodes (not truncated ones)"""
@@ -138,7 +144,7 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt_only_terminated += vehicle.get_total_travel_time()
         self.global_ttt_only_terminated = global_ttt_only_terminated
-        self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / self.vehicles_to_spawn
+        self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.vehicle_ids)
 
     def _set_empty_vehicles_per_episode(self):
         self.empty_vehicles_per_episode = sum(
@@ -410,13 +416,13 @@ if __name__ == "__main__":
 
     def test_env():
         from stable_baselines3.common.env_checker import check_env
-        env = CircleEnv()
+        env = CircleEnv(scenario_generator="bast")
         check_env(env, skip_render_check=True)
         print("CHECKS PASSED")
         env.close()
 
     def demo_env(random_seed=None):
-        env = CircleEnv(render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
+        env = CircleEnv(scenario_generator="bast", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
@@ -435,7 +441,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_single_vehicle(random_seed=None):
-        env = CircleEnv(render_mode="human", vehicles_to_spawn=1)
+        env = CircleEnv(cenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
