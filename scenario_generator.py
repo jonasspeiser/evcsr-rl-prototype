@@ -120,8 +120,8 @@ class ScenarioGenerator():
         return routes_dict
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
-        """The default implementation always returns None."""
-        return None
+        """The default implementation always returns an empty list."""
+        return []
     
     def _select_depart_time(self, depart_time_iter):
         """The default implementation returns always 0."""
