@@ -420,13 +420,13 @@ if __name__ == "__main__":
 
     def test_env():
         from stable_baselines3.common.env_checker import check_env
-        env = CircleEnv(scenario_generator="bast")
+        env = CircleEnv(scenario_generator="all_random")
         check_env(env, skip_render_check=True)
         print("CHECKS PASSED")
         env.close()
 
     def demo_env(random_seed=None):
-        env = CircleEnv(scenario_generator="bast", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
+        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
@@ -461,5 +461,5 @@ if __name__ == "__main__":
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
     test_env()
-    demo_env(random_seed=1)
+    # demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)

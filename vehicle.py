@@ -23,7 +23,7 @@ class Vehicle:
         self.max_battery_capacity = None
         self.battery_soc = None
         self.relative_battery_soc = None
-        self.distance_to_cs = None  # Expected to be a dict {cs_id: distance}
+        self.distance_to_cs_dict = None  # Expected to be a dict {cs_id: distance}
         self.distance_to_destination = None
 
     def fetch_and_update_battery_values(self):
@@ -42,11 +42,11 @@ class Vehicle:
         """
         if state is None or state.get("distance_to_cs") is None:
             self.battery_soc = None
-            self.distance_to_cs = None
+            self.distance_to_cs_dict = None
             self.distance_to_destination = None
         else:
             self.battery_soc = state.get("battery_soc")
-            self.distance_to_cs = state.get("distance_to_cs")
+            self.distance_to_cs_dict = state.get("distance_to_cs")
             self.distance_to_destination = state.get("distance_to_destination")
 
     def get_observation(self, is_active=False):
@@ -56,13 +56,17 @@ class Vehicle:
           [normalized_soc] + 4 normalized distances + [last_action] + [destination_reached] + [active_charging_request]
         If the vehicle is not spawned yet, a padded observation is returned.
         """
-        if self.distance_to_cs is None:
+        if self.distance_to_cs_dict is None:
             # Use -1 as padding to indicate that the vehicle is not spawned.
             return np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
         normalized_soc = self.battery_soc / self.MAX_POSSIBLE_CAPACITY if self.battery_soc is not None else -1 
         dist_destination = self.distance_to_destination / self.MAX_POSSIBLE_DISTANCE if self.distance_to_destination is not None else -1
         # Ensure a fixed order by sorting charging station ids; pad if needed.
-        distances = [self.distance_to_cs[k] / self.MAX_POSSIBLE_DISTANCE for k in sorted(self.distance_to_cs.keys())]
+        distances = [
+            -1 if self.distance_to_cs_dict[k] is None # if distance is None, the target is not reachable. Thus return -1
+            else self.distance_to_cs_dict[k] / self.MAX_POSSIBLE_DISTANCE # if reachable, normalise distance
+            for k in sorted(self.distance_to_cs_dict.keys())
+            ]
         while len(distances) < 4:
             distances.append(-1)
         # destination_reached flag (1 if arrived, 0 otherwise)
@@ -78,7 +82,7 @@ class Vehicle:
         state = {
             "battery_soc": self.battery_soc, 
             "max_battery_capacity": self.max_battery_capacity, 
-            "distance_to_cs": self.distance_to_cs, 
+            "distance_to_cs": self.distance_to_cs_dict, 
             "arrival_time": self.arrival_time, 
             "empty": self.empty
             }

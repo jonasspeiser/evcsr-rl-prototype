@@ -198,6 +198,8 @@ class Simulation():
         cs_edge = self.charging_stations[cs_id]
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
+        if dist_cs is None or dist_dest is None:
+            raise ImpossibleRoutingError(f"Cannot calculate route: dist_cs={dist_cs}, dist_dest={dist_dest}.")
         if dist_cs > dist_dest:
             raise PointlessRecommendationError(dist_dest, dist_cs)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
@@ -421,7 +423,9 @@ class Simulation():
         traci.vehicle.remove(vehicle_id)
 
     def _calculate_distance(self, edgeID1, edgeID2):
-        return traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
+        """ Returns the distance between the given edgeIDs. Returns None if edgeID2 is not reachable from edgeID1. """
+        distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
+        return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
 
     def _get_distances_to_all_cs(self, vehicle_position) -> dict:
         if vehicle_position is None:
@@ -431,7 +435,7 @@ class Simulation():
         for station_id in charging_stations.keys():
             charging_station_edge = charging_stations[station_id]
             distance = self._calculate_distance(vehicle_position, charging_station_edge)
-            distance_dict[station_id] = float(distance)
+            distance_dict[station_id] = float(distance) if distance is not None else None
         return distance_dict
 
     def get_battery_soc(self, vehicle_id):
@@ -477,6 +481,7 @@ class Simulation():
             vehicle_destination = self.get_vehicle_destination(vehicle_id)
             max_battery_capacity = self.get_max_battery_capacity(vehicle_id)
             distance_to_destination = self.get_distance_to_destination(vehicle_id, vehicle_edge)
+            assert distance_to_destination is not None, f"destination not reachable for vehicle {vehicle_id}, position {vehicle_edge}, destination {vehicle_destination}"
 
         state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination, "distance_to_destination": distance_to_destination}
         return state
@@ -549,9 +554,11 @@ if __name__ == "__main__":
     def test_simulation_end():
         cs_id = "cs_0"
         simulation.add_vehicles(50)
+        print("vehicles added")
         # while simulation_time < 24
         for i in range(200):
             simulation.step()
+            print(f"simulation step {i}")
         simulation.close()
 
 

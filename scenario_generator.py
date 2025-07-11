@@ -132,6 +132,8 @@ class ScenarioGenerator():
         Params:
             n_vehicles (int): The amount of vehicles that should be generated
             routes_list (List): A list including all available route ids
+        Returns:
+            vehicles_dict (dict): A dictionary with all generated vehicles and their attributes.
         """
         depart_time_iter = iter(self._get_depart_time_list(n_vehicles, scenario_id)) # initialize an iterator for depart times
 
