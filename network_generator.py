@@ -40,6 +40,7 @@ def write_all_routes_json(net_file_path: str, output_path: str):
     """
     Writes all possible edge-to-edge routes in the network to a JSON file.
     This includes all pairs of edges, excluding routes that start and end on the same edge.
+    Only includes routes that are actually reachable.
     """
 
     print(f"Writing all edge-to-edge routes to JSON from {net_file_path}...")
@@ -55,20 +56,28 @@ def write_all_routes_json(net_file_path: str, output_path: str):
             if from_edge.getID() == to_edge.getID():
                 continue
             try:
-                path_edges = net.getShortestPath(from_edge, to_edge)[0]
-                if not path_edges:
+                # Use getShortestPath to check if route is reachable
+                path_result = net.getShortestPath(from_edge, to_edge)
+                if not path_result or not path_result[0]:
                     continue
+                    
+                path_edges = path_result[0]
                 route_ids = [e.getID() for e in path_edges]
                 route_length = sum(e.getLength() for e in path_edges)
-                all_routes.append({
-                    "from": from_edge.getID(),
-                    "to": to_edge.getID(),
-                    "length": round(route_length, 2),
-                    "route": route_ids
-                })
-                route_count += 1
-            except Exception:
-                continue  # skip unreachable pairs
+                
+                # Additional validation: ensure the route is actually valid
+                if route_length > 0:
+                    all_routes.append({
+                        "from": from_edge.getID(),
+                        "to": to_edge.getID(),
+                        "length": round(route_length, 2),
+                        "route": route_ids
+                    })
+                    route_count += 1
+            except Exception as e:
+                # Skip unreachable pairs
+                print(f"Skipping route from {from_edge.getID()} to {to_edge.getID()}: {e}")
+                continue
 
     with open(output_path, "w") as f:
         json.dump(all_routes, f, indent=2)
