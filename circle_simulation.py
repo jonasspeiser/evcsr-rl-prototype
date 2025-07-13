@@ -93,13 +93,18 @@ class Simulation():
 
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
+        self.scenario_generator = construct_scenario_generator(scenario_generator, random_seed)
         self.charging_stations = self._fetch_charging_stations()
+        self.reset()
+
+    def reset(self):
         self.added_vehicles = []
         self.charging_vehicle_ids = []
         self.vehicle_destinations = {}
         self.max_capacities = {}
-        self.scenario_generator = construct_scenario_generator(scenario_generator, random_seed)
-    
+        self.departure_counts = Counter()
+        traci.simulation.loadState("initial_state")
+
     def add_non_member_routes(self):
         """Add routes for charging station usage of non-member EVs"""
         for cs_id, cs_edge in self.charging_stations.items():
@@ -145,6 +150,7 @@ class Simulation():
             traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"])
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
+            logger.info(f"Vehicle {vehicle_id} spawned with initial route: {vehicle['route']}")
             self.added_vehicles.append(vehicle_id)      
     
     def _fetch_charging_stations(self):
@@ -198,6 +204,8 @@ class Simulation():
         cs_edge = self.charging_stations[cs_id]
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
+        logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
+
         if dist_cs is None or dist_dest is None:
             raise ImpossibleRoutingError(f"Cannot calculate route: dist_cs={dist_cs}, dist_dest={dist_dest}.")
         if dist_cs > dist_dest:
@@ -313,17 +321,14 @@ class Simulation():
 
     def step(self):
         traci.simulationStep()
+        logger.debug(f"{self.get_vehicle_state("member_ev_0")}")
+        logger.debug(f"{traci.vehicle.getRoute("member_ev_0")}")
 
     def active_vehicles_exist(self):
         return traci.simulation.getMinExpectedNumber() > 0
 
     def close(self):
         traci.close()
-
-    def reset(self):
-        self.added_vehicles = []
-        self.departure_counts = Counter()
-        traci.simulation.loadState("initial_state")
 
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
@@ -482,6 +487,16 @@ class Simulation():
             max_battery_capacity = self.get_max_battery_capacity(vehicle_id)
             distance_to_destination = self.get_distance_to_destination(vehicle_id, vehicle_edge)
             assert distance_to_destination is not None, f"destination not reachable for vehicle {vehicle_id}, position {vehicle_edge}, destination {vehicle_destination}"
+            # For "production": Option to assert to handle this gracefully:
+            # if distance_to_destination is None:
+            #     logger.error(f"Destination not reachable for vehicle {vehicle_id}, position {vehicle_edge}, destination {vehicle_destination}. Removing vehicle from simulation.")
+            #     # Remove the vehicle from simulation as its destination is unreachable
+            #     try:
+            #         traci.vehicle.remove(vehicle_id)
+            #     except traci.exceptions.TraCIException:
+            #         logger.warning(f"Could not remove vehicle {vehicle_id} - it may have already been removed.")
+            #     # Return None state to indicate this vehicle should be ignored
+            #     return {"battery_soc": None, "max_battery_capacity": None, "distance_to_cs": None, "vehicle_position": None, "vehicle_destination": None, "distance_to_destination": None}
 
         state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination, "distance_to_destination": distance_to_destination}
         return state
