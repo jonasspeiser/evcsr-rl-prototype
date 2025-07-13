@@ -321,8 +321,6 @@ class Simulation():
 
     def step(self):
         traci.simulationStep()
-        logger.debug(f"{self.get_vehicle_state("member_ev_0")}")
-        logger.debug(f"{traci.vehicle.getRoute("member_ev_0")}")
 
     def active_vehicles_exist(self):
         return traci.simulation.getMinExpectedNumber() > 0
