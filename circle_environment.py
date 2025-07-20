@@ -19,21 +19,17 @@ class CircleEnv(gym.Env):
     def __init__(self, scenario_generator, render_mode=None, env_version="basic", vehicles_to_spawn=1,
                  observation_sampling_rate=30, truncate_after_n_steps=3000, non_member_vehicles=None, random_seed=None):
         """
-        Initialize the environment and simulation.
-        Define self.observation_space and self.action_space.
+        Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
-        Parameters:
-        - scenario_generator: str or ScenarioGenerator, the scenario to use for the simulation. Can be a string like "bast", "all_random", or an instance of a ScenarioGenerator class
-        - render_mode: str, the mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
-        - env_version: str, the version of the environment to use. Can be "basic", "noTime", or "shaping". 
-            - "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting.
-            - "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation.
-            - "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
-        - vehicles_to_spawn: int, the number of vehicles to spawn in the simulation. This is the number of member vehicles (MEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
-        - observation_sampling_rate: int, the rate at which the observation is sampled (i.e. every x simulation steps)
-        - truncate_after_n_steps: int, the number of simulation steps after which the episode is truncated if no charging request is triggered
-        - non_member_vehicles: int, the number of non member vehicles (i.e. not observable by the agent) to spawn in the simulation
-        - random_seed: int, the seed for the random number generator. Used for reproducibility of the environment.
+        Args:
+            scenario_generator (str or ScenarioGenerator): The scenario to use for the simulation. Can be a string like "bast", "all_random", or an instance of a ScenarioGenerator class.
+            render_mode (str, optional): The mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
+            env_version (str, optional): The version of the environment to use. Can be "basic", "noTime", or "shaping". "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting. "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation. "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
+            vehicles_to_spawn (int, optional): The number of vehicles to spawn in the simulation. This is the number of member vehicles (MEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
+            observation_sampling_rate (int, optional): The rate at which the observation is sampled (i.e. every x simulation steps).
+            truncate_after_n_steps (int, optional): The number of simulation steps after which the episode is truncated if no charging request is triggered.
+            non_member_vehicles (int, optional): The number of non-member vehicles (i.e. not observable by the agent) to spawn in the simulation.
+            random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -99,32 +95,60 @@ class CircleEnv(gym.Env):
             logger.info("Episode truncated")
 
     def _set_charging_stops_per_episode_mean(self):
-        """Used for tensorboard logging. Calculates the global average for number of charging stops per vehicle."""
+        """
+        Calculates the global average for number of charging stops per vehicle.
+
+        Used for tensorboard logging.
+        """
         total = sum(self.charging_stops_per_episode_counter.values())
         count = len(self.charging_stops_per_episode_counter) if self.charging_stops_per_episode_counter else 1
         self.charging_stops_per_episode_mean = total / count
 
     def _update_accumulated_waiting_times(self):
-        """Get the waiting times for each vehicle out of the simulation. This is only possible as long as a vehicle is still online."""
+        """
+        Get the waiting times for each vehicle out of the simulation.
+
+        This is only possible as long as a vehicle is still online.
+        """
         for vehicle_id in self.simulation.get_online_vehicle_ids():
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.waiting_time = self.simulation.get_vehicle_waiting_time(vehicle_id)
     
     def _set_cumulated_waiting_time_per_episode(self):
-        """Used for tensorboard logging. Sums up the individual waiting times to get one global value."""
+        """
+        Sums up the individual waiting times to get one global value.
+
+        Used for tensorboard logging.
+        """
         self.cumulated_waiting_time = sum(v.waiting_time for v in self.vehicles.values())
     
     def _set_cumulated_waiting_time_per_episode_terminated(self):
-        """Used for tensorboard logging. Sums up the individual waiting times to get one global value. Only tracks terminated episodes (not truncated ones)"""
+        """
+        Sums up the individual waiting times to get one global value.
+
+        Only tracks terminated episodes (not truncated ones). Used for tensorboard logging.
+        """
         self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
 
     def _set_final_simulation_time(self, current_time):
-        """Used for tensorboard logging. Logs the last simulation time before the episode ended."""
+        """
+        Logs the last simulation time before the episode ended.
+
+        Used for tensorboard logging.
+        Args:
+            current_time (float): The last simulation time before the episode ended.
+        """
         self.final_simulation_time = current_time
 
     def _set_global_ttt(self, current_time):
-        """Used for tensorboard logging. Sums up the total travel times of all vehicles."""
+        """
+        Sums up the total travel times of all vehicles.
+
+        Used for tensorboard logging.
+        Args:
+            current_time (float): The current simulation time.
+        """
         global_ttt = 0
         for vehicle in self.vehicles.values():
             if vehicle.departure_time is None:
@@ -136,7 +160,13 @@ class CircleEnv(gym.Env):
         self.ttt_per_ev_mean = global_ttt / len(self.vehicle_ids)
 
     def _set_global_ttt_only_terminated(self, current_time):
-        """Used for tensorboard logging. Sums up the total travel times of all vehicles. Only tracks terminated episodes (not truncated ones)"""
+        """
+        Sums up the total travel times of all vehicles. Only tracks terminated episodes (not truncated ones).
+
+        Used for tensorboard logging.
+        Args:
+            current_time (float): The current simulation time.
+        """
         global_ttt_only_terminated = 0
         for vehicle in self.vehicles.values():
             if vehicle.departure_time is None:
@@ -148,6 +178,9 @@ class CircleEnv(gym.Env):
         self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.vehicle_ids)
 
     def _set_empty_vehicles_per_episode(self):
+        """
+        Calculates the number of empty vehicles per episode.
+        """
         self.empty_vehicles_per_episode = sum(
             1 for vehicle in self.vehicles.values()
             if vehicle.empty
@@ -156,6 +189,9 @@ class CircleEnv(gym.Env):
 
 
     def _add_non_member_vehicles(self):
+        """
+        Adds non-member vehicles to the simulation using the data provider.
+        """
         self.simulation.add_non_member_routes()
         vehicle_data = self.data_provider.get_non_member_vehicle_data()
         for entry in vehicle_data:
@@ -166,6 +202,9 @@ class CircleEnv(gym.Env):
     def _update_and_get_observation(self):
         """
         Build the observation dictionary by updating and collecting each vehicle's observation.
+
+        Returns:
+            dict: The observation dictionary for all vehicles.
         """
         observation = {}
         for vehicle_id, vehicle in self.vehicles.items():
@@ -180,6 +219,9 @@ class CircleEnv(gym.Env):
     def _get_info(self):
         """
         Get additional info for logging, such as a human readable version of the simulation state.
+
+        Returns:
+            dict: Additional info for each vehicle.
         """
         info = {}
         for vehicle_id, vehicle in self.vehicles.items():
@@ -189,7 +231,13 @@ class CircleEnv(gym.Env):
     def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
         """
         Reset the environment and simulation for a new episode.
-        Returns: The observation of the initial state
+
+        Args:
+            seed (int, optional): The random seed to use for reproducibility.
+            options (dict, optional): Additional options for reset.
+
+        Returns:
+            tuple: The observation of the initial state and additional info.
         """
         logger.debug("Resetting environment")
         super().reset(seed=seed) # needed for api compliance
@@ -227,7 +275,13 @@ class CircleEnv(gym.Env):
         return observation, info
 
     def _update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
-        """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
+        """
+        Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step.
+
+        Args:
+            newly_spawned_ids (list): List of newly spawned vehicle IDs.
+            newly_arrived_ids (list): List of newly arrived vehicle IDs.
+        """
         if not (newly_spawned_ids or newly_arrived_ids):
             return
         
@@ -246,9 +300,14 @@ class CircleEnv(gym.Env):
 
     def _check_for_charging_request(self, newly_spawned_ids):
         """
-        Checks for charging requests based on newly spawned, just-charged,
-        and low-battery vehicles. If any exist, the first in the queue becomes active.
-        Returns: True if there is an active charging request, False otherwise.
+        Checks for charging requests based on newly spawned, just-charged, and low-battery vehicles.
+        If any exist, the first in the queue becomes active.
+
+        Args:
+            newly_spawned_ids (list): List of newly spawned vehicle IDs.
+
+        Returns:
+            bool: True if there is an active charging request, False otherwise.
         """
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
@@ -269,6 +328,15 @@ class CircleEnv(gym.Env):
         return False
 
     def _get_new_low_battery_ids(self, just_charged_ids):
+        """
+        Get the IDs of vehicles that just entered low battery status.
+
+        Args:
+            just_charged_ids (list): List of vehicle IDs that just finished charging.
+
+        Returns:
+            list: List of new low battery vehicle IDs.
+        """
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         new_low_battery_ids = []
         for vehicle_id, vehicle in self.vehicles.items():
@@ -287,7 +355,12 @@ class CircleEnv(gym.Env):
     def step(self, action):
         """
         Executes simulation steps until the next charging request (or termination/truncation).
-        Returns: The next observation, reward, done flags, and additional info.
+
+        Args:
+            action (int): The action to take for the active charging request vehicle.
+
+        Returns:
+            tuple: The next observation, reward, terminated flag, truncated flag, and additional info.
         """
         charging_request = False
         accumulated_reward = 0
@@ -375,17 +448,23 @@ class CircleEnv(gym.Env):
 
     def render(self, mode='human'):
         """
-        Returns: None
-        Show the current environment state e.g. the graphical window in 'CartPole-v1'
-        This method must be implemented, but it is OK to have an empty implementation if rendering is not important
+        Show the current environment state, e.g., the graphical window in 'CartPole-v1'.
+
+        Args:
+            mode (str): The render mode. Default is 'human'.
+
+        Returns:
+            None
         """
         logger.debug("Render called")
         pass
 
     def close(self):
         """
-        Returns: None
-        This is optional. Used to cleanup all resources (threads, graphical windows, etc)
+        Cleanup all resources (threads, graphical windows, etc).
+
+        Returns:
+            None
         """
         logger.debug("Closing environment")
         self.simulation.close()
@@ -400,6 +479,12 @@ if __name__ == "__main__":
     import random
 
     def configure_logging(log_file_path='logs/myapp.log'):
+        """
+        Configure logging for the application.
+
+        Args:
+            log_file_path (str): Path to the log file.
+        """
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
@@ -419,6 +504,9 @@ if __name__ == "__main__":
         logging.basicConfig(level=logging.DEBUG, handlers=[console_handler, file_handler])
 
     def test_env():
+        """
+        Test the CircleEnv environment using the stable_baselines3 environment checker.
+        """
         from stable_baselines3.common.env_checker import check_env
         env = CircleEnv(scenario_generator="all_random")
         check_env(env, skip_render_check=True)
@@ -426,6 +514,12 @@ if __name__ == "__main__":
         env.close()
 
     def demo_env(random_seed=None):
+        """
+        Run a demo of the environment with a random or greedy algorithm.
+
+        Args:
+            random_seed (int, optional): The random seed for reproducibility.
+        """
         env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
@@ -445,6 +539,12 @@ if __name__ == "__main__":
         env.close()
 
     def demo_single_vehicle(random_seed=None):
+        """
+        Run a demo of the environment with a single vehicle and the NeverChargeAlgorithm.
+
+        Args:
+            random_seed (int, optional): The random seed for reproducibility.
+        """
         env = CircleEnv(cenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
@@ -460,6 +560,6 @@ if __name__ == "__main__":
 
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
-    # test_env()
-    demo_env(random_seed=1)
+    test_env()
+    # demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)
