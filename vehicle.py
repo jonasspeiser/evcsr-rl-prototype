@@ -4,6 +4,13 @@ from circle_simulation import Simulation, PointlessRecommendationError, BadTimin
 # configure logging
 import logging
 logger = logging.getLogger("rl.environment.vehicle")
+
+def get_padded_observation():
+    """
+    Returns a padded observation for vehicles that are not present in the current observation.
+    """
+    return np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
+
 class Vehicle:
 
     EMPTY_SOC = 30 # value under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles) 
@@ -58,9 +65,10 @@ class Vehicle:
           [normalized_soc] + 4 normalized distances + [last_action] + [destination_reached] + [active_charging_request]
         If the vehicle is not spawned yet, a padded observation is returned.
         """
-        if self.distance_to_cs_dict is None:
+        vehicle_is_offline = self.distance_to_cs_dict is None
+        if vehicle_is_offline:
             # Use -1 as padding to indicate that the vehicle is not spawned.
-            return np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
+            return get_padded_observation()
         normalized_soc = self.battery_soc / self.MAX_POSSIBLE_CAPACITY if self.battery_soc is not None else -1 
         dist_destination = self.distance_to_destination / self.MAX_POSSIBLE_DISTANCE if self.distance_to_destination is not None else -1
         # Ensure a fixed order by sorting charging station ids; pad if needed.

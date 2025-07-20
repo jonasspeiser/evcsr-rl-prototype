@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from collections import deque, Counter
 from circle_simulation import Simulation
-from vehicle import Vehicle
+from vehicle import Vehicle, get_padded_observation
 from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider, Random_Data_Provider
 import os
@@ -13,6 +13,8 @@ import logging
 logger = logging.getLogger("rl.environment") 
 # child logger of "rl", parent logger to "rl.environment.simulation", "rl.environment.vehicle", "rl.environment.rewards"
 
+OBSERVATION_SPACE_SIZE = 5000 # The number of vehicles in the observation space. This is used to create a fixed-size observation space for all environments.
+# This allows for a consistent observation space size across different environment instances, even if the number of vehicles varies.
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -39,6 +41,7 @@ class CircleEnv(gym.Env):
         gui = (self.render_mode == "human")
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
+
         self.non_member_vehicles = non_member_vehicles
         if non_member_vehicles:
             # self.data_provider = Obelis_Data_Provider()
@@ -69,8 +72,10 @@ class CircleEnv(gym.Env):
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_mev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
+
+        self.observation_space_ids = [f"member_ev_{i}" for i in range(OBSERVATION_SPACE_SIZE)] # used to create a fixed-size observation space for all environments, even if the number of vehicles varies
         self.observation_space = spaces.Dict({
-            str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
+            vehicle_id: single_vehicle_observation_space for vehicle_id in self.observation_space_ids
         })
 
         # Instantiate the reward strategy based on env_version.
@@ -198,7 +203,7 @@ class CircleEnv(gym.Env):
             self.simulation.add_non_member_vehicle(cs_id=entry["cs_id"],
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
-    
+
     def _update_and_get_observation(self):
         """
         Build the observation dictionary by updating and collecting each vehicle's observation.
@@ -207,6 +212,7 @@ class CircleEnv(gym.Env):
             dict: The observation dictionary for all vehicles.
         """
         observation = {}
+        # Actual vehicle state updates
         for vehicle_id, vehicle in self.vehicles.items():
             if not vehicle.arrived and not vehicle.empty:
                 vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
@@ -214,6 +220,10 @@ class CircleEnv(gym.Env):
             # Mark the vehicle as active if it filed the current charging request.
             is_active = (vehicle_id == self.active_charging_request_vehicle_id)
             observation[vehicle_id] = vehicle.get_observation(is_active=is_active)
+        # Pad the the remaining observation space to ensure it has a fixed size.
+        for vehicle_id in self.observation_space_ids:
+            if vehicle_id not in observation:
+                observation[vehicle_id] = get_padded_observation()
         return observation
     
     def _get_info(self):
