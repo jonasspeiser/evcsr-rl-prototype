@@ -658,7 +658,9 @@ class Simulation():
                 - distance_to_destination (float): The distance to the destination.
         """
         vehicle_edge = self._get_vehicle_edge(vehicle_id)
-        if vehicle_edge is None: # if vehicle_edge is not returned by TraCI, signalling that the vehicle has not been spawned yet or has already been removed
+
+        vehicle_is_offline = vehicle_edge is None # if vehicle_edge is not returned by TraCI, signalling that the vehicle has not been spawned yet or has already been removed
+        if vehicle_is_offline: 
             battery_soc = None
             max_battery_capacity = None
             distance_to_cs = None
