@@ -15,6 +15,7 @@ class Vehicle:
         self.vehicle_id = vehicle_id
         self.simulation = simulation
         self.last_action = -1
+        self.spawned = False
         self.arrived = False
         self.empty = False
         self.departure_time = None
@@ -45,6 +46,7 @@ class Vehicle:
             self.distance_to_cs_dict = None
             self.distance_to_destination = None
         else:
+            self.spawned = True
             self.battery_soc = state.get("battery_soc")
             self.distance_to_cs_dict = state.get("distance_to_cs")
             self.distance_to_destination = state.get("distance_to_destination")

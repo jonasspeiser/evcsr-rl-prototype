@@ -167,6 +167,7 @@ class Simulation():
         return cs_edge
 
     def _get_vehicle_edge(self, vehicle_id):
+        """ Returns the edge of the vehicle with given id. Returns None if vehicle is not found in simulation or not on a lane. """
         try:
             vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
         except traci.exceptions.TraCIException: 
@@ -445,7 +446,7 @@ class Simulation():
         """Returns the actual battery capacity of the vehicle."""
         try:
             battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-            logger.debug(f"Vehicle {vehicle_id}: SOC {battery_soc}")
+            logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
             if self.gui:
                 self._adapt_vehicle_color(vehicle_id, battery_soc)
             # stop vehicle if battery is empty
@@ -471,15 +472,16 @@ class Simulation():
             - vehicle_position (str): The current position of the vehicle.
             - vehicle_destination (str): The destination of the vehicle.
         """
-        battery_soc = self.get_battery_soc(vehicle_id)
-        if battery_soc is None: # if battery_soc is not returned by TraCI
+        vehicle_edge = self._get_vehicle_edge(vehicle_id)
+        if vehicle_edge is None: # if vehicle_edge is not returned by TraCI, signalling that the vehicle has not been spawned yet or has already been removed
+            battery_soc = None
             max_battery_capacity = None
             distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None
             distance_to_destination = None
         else:
-            vehicle_edge = self._get_vehicle_edge(vehicle_id) 
+            battery_soc = self.get_battery_soc(vehicle_id)
             distance_to_cs = self._get_distances_to_all_cs(vehicle_edge)
             vehicle_destination = self.get_vehicle_destination(vehicle_id)
             max_battery_capacity = self.get_max_battery_capacity(vehicle_id)

@@ -460,6 +460,6 @@ if __name__ == "__main__":
 
     configure_logging(log_file_path='testlogs/myapp.log')
     # Uncomment one of the following to test the environment:
-    test_env()
-    # demo_env(random_seed=1)
+    # test_env()
+    demo_env(random_seed=1)
     # demo_single_vehicle(random_seed=1)
