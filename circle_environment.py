@@ -333,10 +333,17 @@ class CircleEnv(gym.Env):
         
         # Remove despawned vehicles from the charging request queue and update the low battery ids
         if newly_despawned_ids:
-            logger.debug(f"Removing despawned vehicles from charging request queue: {newly_despawned_ids}")
-            self.charging_request_queue = deque(
-                vid for vid in self.charging_request_queue if vid not in newly_despawned_ids
-            )
+            new_queue = deque()
+            removed_ids = []
+            for vid in self.charging_request_queue:
+                if vid in newly_despawned_ids:
+                    removed_ids.append(vid)
+                else:
+                    new_queue.append(vid)
+            self.charging_request_queue = new_queue
+            if removed_ids:
+                logger.debug(f"Removing despawned vehicles from charging request queue: {removed_ids}")
+                
             # If the active vehicle just despawned, reset the active vehicle id
             if self.active_charging_request_vehicle_id in newly_despawned_ids:
                 self.active_charging_request_vehicle_id = None
