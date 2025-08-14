@@ -1,17 +1,14 @@
 __pycache__
 initial_state
-# map files
+# large map files
 map_data_aut_highway
-# tensorboard log files
-events.out.tfevents.*
-*.log
-# model dumps
-*.zip
+# model dumps and log files
+models
+testlogs
 # benchmark files
 *.pstats
 # python venvs
 .venv
-evcsr_rl_prototype
 
 # datasets
 datasets/asfinag_data/*

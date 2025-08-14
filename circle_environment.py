@@ -267,7 +267,7 @@ class CircleEnv(gym.Env):
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        self.low_battery_ids = []
+        self.low_battery_ids = set()
         
         if self.non_member_vehicles:
             self._add_non_member_vehicles()
@@ -308,13 +308,15 @@ class CircleEnv(gym.Env):
                 vehicle.arrived = True
                 logger.debug(f"{vehicle_id} arrived at time {current_time}")
 
-    def _check_for_charging_request(self, newly_spawned_ids):
+    def _check_for_charging_request(self, newly_spawned_ids, newly_despawned_ids=None):
         """
+        Removes despawned vehicles from the charging request queue and checks for new charging requests.
         Checks for charging requests based on newly spawned, just-charged, and low-battery vehicles.
         If any exist, the first in the queue becomes active.
 
         Args:
-            newly_spawned_ids (list): List of newly spawned vehicle IDs.
+            newly_spawned_ids (set): Set of newly spawned vehicle IDs.
+            newly_despawned_ids (set): Set of vehicle IDs that have just despawned.
 
         Returns:
             bool: True if there is an active charging request, False otherwise.
@@ -325,16 +327,34 @@ class CircleEnv(gym.Env):
             logger.info(f"{vid}: just finished charging")
         # Find out if there are vehicles that just entered low battery status
         new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
-        charging_requests = (newly_spawned_ids or []) + just_charged_ids + new_low_battery_ids
+        charging_requests = (newly_spawned_ids or set()) | just_charged_ids | new_low_battery_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
+        
+        # Remove despawned vehicles from the charging request queue and update the low battery ids
+        if newly_despawned_ids:
+            logger.debug(f"Removing despawned vehicles from charging request queue: {newly_despawned_ids}")
+            self.charging_request_queue = deque(
+                vid for vid in self.charging_request_queue if vid not in newly_despawned_ids
+            )
+            # If the active vehicle just despawned, reset the active vehicle id
+            if self.active_charging_request_vehicle_id in newly_despawned_ids:
+                self.active_charging_request_vehicle_id = None
+            # Remove despawned vehicles from the low battery ids
+            self.low_battery_ids.difference_update(newly_despawned_ids)
+
+        # add charging requests to the queue (if any)
         if charging_requests:
             logger.debug(f"New charging requests: spawned={newly_spawned_ids}, just charged={just_charged_ids}, low battery={new_low_battery_ids}")
             self.charging_request_queue.extend(charging_requests)
+        
+        # set active charging request vehicle id (if any)
         if self.charging_request_queue:
+            logger.debug(f"Charging request queue: {self.charging_request_queue}")
             self.active_charging_request_vehicle_id = self.charging_request_queue.popleft()
             logger.info(f"Active charging request for: {self.active_charging_request_vehicle_id}")
             return True
+        
         return False
 
     def _get_new_low_battery_ids(self, just_charged_ids):
@@ -342,13 +362,13 @@ class CircleEnv(gym.Env):
         Get the IDs of vehicles that just entered low battery status.
 
         Args:
-            just_charged_ids (list): List of vehicle IDs that just finished charging.
+            just_charged_ids (set): Set of vehicle IDs that just finished charging.
 
         Returns:
-            list: List of new low battery vehicle IDs.
+            set: Set of new low battery vehicle IDs.
         """
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
-        new_low_battery_ids = []
+        new_low_battery_ids = set()
         for vehicle_id, vehicle in self.vehicles.items():
             relative_battery_soc = vehicle.relative_battery_soc
             if relative_battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
@@ -358,8 +378,8 @@ class CircleEnv(gym.Env):
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
             if relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
                 logger.info(f"{vehicle_id}: low battery")
-                new_low_battery_ids.append(vehicle_id)
-                self.low_battery_ids.append(vehicle_id)
+                new_low_battery_ids.add(vehicle_id)
+                self.low_battery_ids.add(vehicle_id)
         return new_low_battery_ids
 
     def step(self, action):
@@ -381,7 +401,11 @@ class CircleEnv(gym.Env):
             logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
             newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
             newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
+            newly_removed_ids = self.simulation.get_removed_vehicle_ids()
+            newly_despawned_ids = newly_arrived_ids | newly_removed_ids
             charging_ids = self.simulation.get_charging_vehicle_ids()
+            if newly_despawned_ids:
+                logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
 
             # Update vehicles' battery soc
             for vid, vehicle in self.vehicles.items():
@@ -418,7 +442,8 @@ class CircleEnv(gym.Env):
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
             truncated = self.simulation.get_current_time_step() > self.truncate_after_n_simulation_steps
-            charging_request = self._check_for_charging_request(newly_spawned_ids)
+            # Remove despawned vehicles from charging request queue and check for new charging requests
+            charging_request = self._check_for_charging_request(newly_spawned_ids, newly_despawned_ids)
 
             important_event_happened = charging_request or terminated or truncated
             some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
@@ -449,6 +474,9 @@ class CircleEnv(gym.Env):
 
             loop_counter += 1
             self.simulation.step()
+            # If the active vehicle just despawned, continue the loop to find the next active vehicle
+            if self.active_charging_request_vehicle_id in newly_despawned_ids:
+                charging_request = False
 
         reward = accumulated_reward
         info = self._get_info()

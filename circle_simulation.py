@@ -121,11 +121,12 @@ class Simulation():
         self.reset()
 
     def reset(self):
-        self.added_vehicles = []
-        self.charging_vehicle_ids = []
+        self.added_vehicles = set()
+        self.charging_vehicle_ids = set()
         self.vehicle_destinations = {}
         self.max_capacities = {}
         self.departure_counts = Counter()
+        self.just_removed_vehicle_ids = set()
         traci.simulation.loadState("initial_state")
 
     def add_non_member_routes(self):
@@ -178,7 +179,7 @@ class Simulation():
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
             logger.info(f"Vehicle {vehicle_id} spawned with initial route: {vehicle['route']}")
-            self.added_vehicles.append(vehicle_id)      
+            self.added_vehicles.add(vehicle_id)      
     
     def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
@@ -431,6 +432,8 @@ class Simulation():
 
     def step(self):
         traci.simulationStep()
+        self.just_removed_vehicle_ids = set()
+
 
     def active_vehicles_exist(self):
         return traci.simulation.getMinExpectedNumber() > 0
@@ -441,104 +444,112 @@ class Simulation():
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
     
-    def _filter_list_for_member_evs(self, original_list):
-        filtered_list = [item for item in original_list if item.startswith("member_ev")]
-        return filtered_list
+    def _filter_set_for_member_evs(self, original_collection):
+        return {item for item in original_collection if item.startswith("member_ev")}
 
     def get_all_vehicle_ids(self):
         """
-        Returns a list of all vehicle ids that have been added to the simulation.
+        Returns a set of all vehicle ids that have been added to the simulation.
 
         Returns:
-            list: List of vehicle IDs.
+            set: Set of vehicle IDs.
         """
         return self.added_vehicles
     
     def get_all_mev_ids(self):
         """
-        Returns a list of all member vehicle ids that have been added to the simulation.
+        Returns a set of all member vehicle ids that have been added to the simulation.
 
         Returns:
-            list: List of member vehicle IDs.
+            set: Set of member vehicle IDs.
         """
-        original_list = self.get_all_vehicle_ids()
-        return self._filter_list_for_member_evs(original_list)
+        original_set = self.get_all_vehicle_ids()
+        return self._filter_set_for_member_evs(original_set)
 
     def get_online_vehicle_ids(self):
         """
-        Returns a list of ids of all member vehicles currently running within the scenario.
+        Returns a set of ids of all member vehicles currently running within the scenario.
 
         Returns:
-            list: List of online member vehicle IDs.
+            set: Set of online member vehicle IDs.
         """
-        original_list= traci.vehicle.getIDList()
-        return self._filter_list_for_member_evs(original_list)
+        original_set = set(traci.vehicle.getIDList())
+        return self._filter_set_for_member_evs(original_set)
 
     def get_loaded_vehicle_ids(self):
         """
-        Returns a list of all loaded vehicle ids that have not yet arrived. This includes vehicles that are meant to depart in the future.
+        Returns a set of all loaded vehicle ids that have not yet arrived. This includes vehicles that are meant to depart in the future.
 
         Remark:
             Sumo does not load all vehicle definitions in advance but only when they are needed. If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define individual vehicles not with flows.
 
         Returns:
-            list: List of loaded member vehicle IDs.
+            set: Set of loaded member vehicle IDs.
         """
-        original_list = traci.simulation.getLoadedIDList()
-        return self._filter_list_for_member_evs(original_list)
+        original_set = set(traci.simulation.getLoadedIDList())
+        return self._filter_set_for_member_evs(original_set)
 
 
     def get_spawned_vehicle_ids(self):
         """
-        Returns a list of ids of all member vehicles that have spawned during the current time step.
+        Returns a set of ids of all member vehicles that have spawned during the current time step.
 
         Returns:
-            list: List of spawned member vehicle IDs.
+            set: Set of spawned member vehicle IDs.
         """
-        original_list = traci.simulation.getDepartedIDList()
-        return self._filter_list_for_member_evs(original_list)
+        original_set = set(traci.simulation.getDepartedIDList())
+        return self._filter_set_for_member_evs(original_set)
 
 
     def get_arrived_vehicle_ids(self):
         """
-        Returns a list of ids of all member vehicles that have arrived at their destination during the current time step.
+        Returns a set of ids of all member vehicles that have arrived at their destination during the current time step.
 
         Returns:
-            list: List of arrived member vehicle IDs.
+            set: Set of arrived member vehicle IDs.
         """
-        original_list = traci.simulation.getArrivedIDList()
-        return self._filter_list_for_member_evs(original_list)
+        original_set = set(traci.simulation.getArrivedIDList())
+        return self._filter_set_for_member_evs(original_set)
 
+    def get_removed_vehicle_ids(self):
+        """
+        Returns a set of ids of all member vehicles that have been manually removed from the simulation during the current time step.
+        (E.g. because their battery is empty)
+
+        Returns:
+            set: Set of removed member vehicle IDs.
+        """
+        return self.just_removed_vehicle_ids
 
     def get_charging_vehicle_ids(self):
         """
-        Returns a list of ids of member vehicles currently charging at any charging station.
+        Returns a set of ids of member vehicles currently charging at any charging station.
 
         Returns:
-            list: List of charging member vehicle IDs.
+            set: Set of charging member vehicle IDs.
         """
-        charging_vehicles = []
+        charging_vehicles = set()
         charging_stations_ids = self.get_all_charging_station_ids()
 
         for station in charging_stations_ids:
             # Get vehicles stopped at this charging station
             vehicles = traci.chargingstation.getVehicleIDs(station)
-            charging_vehicles.extend(vehicles)
+            charging_vehicles.update(vehicles)
 
-        original_list = charging_vehicles
-        return self._filter_list_for_member_evs(original_list)
+        original_set = charging_vehicles
+        return self._filter_set_for_member_evs(original_set)
 
 
     def get_charging_stop_ending_vehicle_ids(self):
         """
-        Returns a list of ids of member vehicles that begin to continue their journey, leaving a scheduled stop in this time step.
+        Returns a set of ids of member vehicles that begin to continue their journey, leaving a scheduled stop in this time step.
 
         Returns:
-            list: List of member vehicle IDs leaving a charging stop.
+            set: Set of member vehicle IDs leaving a charging stop.
         """
-        original_list = traci.simulation.getStopEndingVehiclesIDList()
-        return self._filter_list_for_member_evs(original_list)
-    
+        original_set = set(traci.simulation.getStopEndingVehiclesIDList())
+        return self._filter_set_for_member_evs(original_set)
+
     def get_vehicle_waiting_time(self, vehicle_id):
         """
         Return the accumulated waiting time for the vehicle. Due to traci limitations, this is only possible for online vehicles.
@@ -583,6 +594,7 @@ class Simulation():
         """
         logger.info(f"Battery empty, vehicle {vehicle_id} will be removed from simulation")
         traci.vehicle.remove(vehicle_id)
+        self.just_removed_vehicle_ids.add(vehicle_id)
 
     def _calculate_distance(self, edgeID1, edgeID2):
         """
