@@ -35,9 +35,10 @@ class Vehicle:
         self.distance_to_destination = None
 
     def fetch_and_update_battery_values(self):
-        self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
-        if self.battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
+        # Ignore if the vehicle did not spawn in the simulation yet or despawned already
+        if not self.spawned or self.arrived or self.empty:
             return
+        self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
         self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)
         self.relative_battery_soc = self.battery_soc / self.max_battery_capacity
         # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
