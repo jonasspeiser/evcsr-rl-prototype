@@ -37,6 +37,7 @@ class Vehicle:
     def fetch_and_update_battery_values(self):
         # Ignore if the vehicle did not spawn in the simulation yet or despawned already
         if not self.spawned or self.arrived or self.empty:
+            self.battery_soc = None
             return
         self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
         self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)

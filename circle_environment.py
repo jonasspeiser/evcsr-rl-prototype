@@ -162,7 +162,10 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
-        self.ttt_per_ev_mean = global_ttt / len(self.vehicle_ids)
+        if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
+            self.ttt_per_ev_mean = 0
+        else:
+            self.ttt_per_ev_mean = global_ttt / len(self.vehicle_ids)
 
     def _set_global_ttt_only_terminated(self, current_time):
         """
@@ -180,7 +183,10 @@ class CircleEnv(gym.Env):
                 vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
             global_ttt_only_terminated += vehicle.get_total_travel_time()
         self.global_ttt_only_terminated = global_ttt_only_terminated
-        self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.vehicle_ids)
+        if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
+            self.ttt_per_ev_mean_only_terminated = 0
+        else:
+            self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.vehicle_ids)
 
     def _set_empty_vehicles_per_episode(self):
         """
@@ -238,6 +244,9 @@ class CircleEnv(gym.Env):
             info[vehicle_id] = vehicle.get_info()
         return info
 
+    def _reached_max_simulation_steps(self):
+        return self.simulation.get_current_time_step() > self.truncate_after_n_simulation_steps
+
     def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
         """
         Reset the environment and simulation for a new episode.
@@ -278,6 +287,9 @@ class CircleEnv(gym.Env):
             self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
             self._check_for_charging_request(newly_spawned_ids)
             self.simulation.step()
+            if self._reached_max_simulation_steps():
+                logger.warning("Reached maximum simulation steps without a charging request being generated. Truncating episode.")
+                break
         
         observation = self._update_and_get_observation()
         info = self._get_info()
@@ -414,15 +426,15 @@ class CircleEnv(gym.Env):
             if newly_despawned_ids:
                 logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
 
-            # Update vehicles' battery soc
-            for vid, vehicle in self.vehicles.items():
-                if not vehicle.arrived and not vehicle.empty:
-                    vehicle.fetch_and_update_battery_values()
-
             # Update vehicles’ arrival status.
             for vid in newly_arrived_ids:
                 if vid in self.vehicles:
                     self.vehicles[vid].arrived = True
+
+            # Update vehicles' battery soc
+            for vid, vehicle in self.vehicles.items():
+                if not vehicle.arrived and not vehicle.empty:
+                    vehicle.fetch_and_update_battery_values()
 
             if newly_spawned_ids or newly_arrived_ids:
                 self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
@@ -448,7 +460,7 @@ class CircleEnv(gym.Env):
             all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
             terminated = all_vehicles_at_destination
             # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
-            truncated = self.simulation.get_current_time_step() > self.truncate_after_n_simulation_steps
+            truncated = self._reached_max_simulation_steps()
             # Remove despawned vehicles from charging request queue and check for new charging requests
             charging_request = self._check_for_charging_request(newly_spawned_ids, newly_despawned_ids)
 

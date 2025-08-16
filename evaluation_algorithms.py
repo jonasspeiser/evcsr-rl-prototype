@@ -1,5 +1,11 @@
 import numpy as np
 
+# configure logging
+import logging
+logger = logging.getLogger("rl.evaluation_algorithms")  
+# child logger of "rl"
+
+
 class EvaluationAlgorithm():
     def __init__(self, environment):
         self.env = environment
@@ -31,6 +37,8 @@ class GreedyAlgorithm(EvaluationAlgorithm):
     def predict(self, observation, deterministic):
         placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
         
+        print("Observation:", observation)
+
         for vehicle_id, vehicle_obs in observation.items():
             # find out which one is the active vehicle
             active_charging_request_flag = vehicle_obs[8]
@@ -39,8 +47,9 @@ class GreedyAlgorithm(EvaluationAlgorithm):
                 battery_soc = vehicle_obs[0]
                 station_distances = vehicle_obs[2:6]
                 break
-        else: # hint: only executed if the for loop did not break (for...else)
-            raise UnboundLocalError("No vehicle with an active charging request found in the observation.")
+        else: # for...else
+            logger.warning("No vehicle with an active charging request found in the observation.")
+            return 0, placeholder # "do nothing"
         
         if battery_soc is None:
             raise UnboundLocalError(f"battery_soc is None for the vehicle with active_charging_request {active_vehicle}. This shouldn't be possible.")
