@@ -36,8 +36,11 @@ class CircleEnv(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
         self.observation_sampling_rate = observation_sampling_rate # only sample the observation every x simulation steps for performance reasons
-        self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
-
+        if str(scenario_generator).lower() == "bast":
+            self.truncate_after_n_simulation_steps = 24 * 3600 # set timeout to 24 h if BASt scenario is used
+        else:
+            self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
+        
         gui = (self.render_mode == "human")
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
