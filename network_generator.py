@@ -114,7 +114,7 @@ def write_all_distances_json(net_file_path: str, output_path: str):
     net = readNet(net_file_path)
     edges = net.getEdges()
 
-    all_distances = []
+    all_distances = {}
     distance_count = 0
 
     for from_edge in edges:
@@ -132,11 +132,9 @@ def write_all_distances_json(net_file_path: str, output_path: str):
 
                 # Additional validation: ensure the distance is actually valid
                 if route_length > 0:
-                    all_distances.append({
-                        "from": from_edge.getID(),
-                        "to": to_edge.getID(),
-                        "length": round(route_length, 2)
-                    })
+                    if from_edge.getID() not in all_distances:
+                        all_distances[from_edge.getID()] = {}
+                    all_distances[from_edge.getID()][to_edge.getID()] = round(route_length, 2)
                     distance_count += 1
             except Exception as e:
                 # Skip unreachable pairs

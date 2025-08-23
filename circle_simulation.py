@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 if 'SUMO_HOME' in os.environ:
@@ -607,6 +608,15 @@ class Simulation():
         Returns:
             float or None: Distance in meters, or None if unreachable.
         """
+        # get distance from .all_distances.json if said file exists
+        distances_file = f"{SUMO_CONFIG_STUB}.all_distances.json"
+        if os.path.exists(distances_file):
+            with open(distances_file, "r") as f:
+                all_distances = json.load(f)
+                if edgeID1 in all_distances and edgeID2 in all_distances[edgeID1]:
+                    return all_distances[edgeID1][edgeID2]
+        # If not found, fall back to SUMO's distance calculation (slow!)
+        logger.warning(f"Distance from {edgeID1} to {edgeID2} not found in {distances_file}, falling back to SUMO's distance calculation (slow!)")  
         distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
         return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
 
