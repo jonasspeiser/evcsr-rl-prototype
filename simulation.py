@@ -732,7 +732,7 @@ class Simulation():
     
     def get_state(self):
         """
-        Returns the state of all vehicles in the simulation.
+        Get the current simulation state. Returns the state of all vehicles in the simulation.
 
         Returns:
             dict: Mapping from vehicle ID to vehicle state dict.
