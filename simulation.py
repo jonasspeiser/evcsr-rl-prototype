@@ -22,6 +22,7 @@ RED = [255, 0, 0]
 
 SUMO_CONFIG_STUB = "./maps/straight_100km/straight_100km"
 SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
+DISTANCES_FILE = f"{SUMO_CONFIG_STUB}.all_distances.json"
 CHARGING_DURATION = 30 # charging duration in seconds
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
@@ -98,6 +99,10 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 class Simulation():
 
     def __init__(self, scenario_generator, gui:bool=False, random_seed = None):
+        
+        with open(DISTANCES_FILE, "r") as f:
+            self.all_distances = json.load(f)
+
         if type(gui) is not bool:
             raise ValueError("gui must be a boolean")
         self.gui = gui
@@ -603,7 +608,7 @@ class Simulation():
 
     def _calculate_distance(self, edgeID1, edgeID2):
         """
-        Returns the distance between the given edgeIDs. Returns None if edgeID2 is not reachable from edgeID1.
+        Returns the distance between the given edgeIDs. Returns 0 if edgeID1 == edgeID2, Returns None if edgeID2 is not reachable from edgeID1.
 
         Args:
             edgeID1 (str): The starting edge ID.
@@ -612,17 +617,16 @@ class Simulation():
         Returns:
             float or None: Distance in meters, or None if unreachable.
         """
-        # get distance from .all_distances.json if said file exists
-        distances_file = f"{SUMO_CONFIG_STUB}.all_distances.json"
-        if os.path.exists(distances_file):
-            with open(distances_file, "r") as f:
-                all_distances = json.load(f)
-                if edgeID1 in all_distances and edgeID2 in all_distances[edgeID1]:
-                    return all_distances[edgeID1][edgeID2]
-        # If not found, fall back to SUMO's distance calculation (slow!)
-        logger.warning(f"Distance from {edgeID1} to {edgeID2} not found in {distances_file}, falling back to SUMO's distance calculation (slow!)")  
-        distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
-        return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
+          
+        # Old way: Request distance from TraCI:
+        # distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
+        # return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
+        
+        if edgeID1 == edgeID2:
+            return 0
+        if edgeID1 in self.all_distances and edgeID2 in self.all_distances[edgeID1]:
+            return self.all_distances[edgeID1][edgeID2]
+        return None # if not found in precomputed distances, return None to indicate unreachable
 
     def _get_distances_to_all_cs(self, vehicle_position) -> dict:
         """
