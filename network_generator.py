@@ -111,8 +111,8 @@ def write_all_distances_json(net_file_path: str, output_path: str):
 
     print(f"Writing all edge-to-edge distances to JSON from {net_file_path}...")
 
-    net = readNet(net_file_path)
-    edges = net.getEdges()
+    net = readNet(net_file_path, withInternal=True)
+    edges = net.getEdges(withInternal=True)
 
     all_distances = {}
     distance_count = 0
@@ -121,26 +121,19 @@ def write_all_distances_json(net_file_path: str, output_path: str):
         for to_edge in edges:
             if from_edge.getID() == to_edge.getID():
                 continue
-            try:
-                # Use getShortestPath to check if distance is reachable
-                path_result = net.getShortestPath(from_edge, to_edge)
-                if not path_result or not path_result[0]:
-                    continue
-
-                path_edges = path_result[0]
-                route_length = sum(e.getLength() for e in path_edges)
-
-                # Additional validation: ensure the distance is actually valid
-                if route_length > 0:
-                    if from_edge.getID() not in all_distances:
-                        all_distances[from_edge.getID()] = {}
-                    all_distances[from_edge.getID()][to_edge.getID()] = round(route_length, 2)
-                    distance_count += 1
-            except Exception as e:
-                # Skip unreachable pairs
-                print(f"Skipping distance from {from_edge.getID()} to {to_edge.getID()}: {e}")
+            # Use getShortestPath to check if distance is reachable
+            path_result = net.getShortestPath(from_edge, to_edge)
+            if not path_result or not path_result[0]:
                 continue
-
+            path_edges = path_result[0]
+            route_length = sum(e.getLength() for e in path_edges)
+            # Additional validation: ensure the distance is actually valid
+            if route_length > 0:
+                if from_edge.getID() not in all_distances: # Initialize sub-dict if not present
+                    all_distances[from_edge.getID()] = {}
+                all_distances[from_edge.getID()][to_edge.getID()] = round(route_length, 2)
+                distance_count += 1
+            
     with open(output_path, "w") as f:
         json.dump(all_distances, f, indent=2)
 
