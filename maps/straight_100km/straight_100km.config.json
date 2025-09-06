@@ -1,7 +1,7 @@
 {
   "map_name": "straight_100km",
   "km_total": 100,
-  "max_possible_distance": 100000.0,
+  "max_possible_distance": 101000.0,
   "max_battery_capacity": 100000.0,
   "start_soc_bounds": [
     3880,

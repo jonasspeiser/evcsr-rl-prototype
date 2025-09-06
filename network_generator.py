@@ -22,7 +22,7 @@ lane_count = 3
 highway_lane_speed = 33.33  # m/s ~120 km/h
 charging_lane_speed = 8.33  # m/s ~30 km/h
 charging_spots = [25, 50, 75, 100]  # the number marks the distance from the first node in km
-max_possible_distance = float(km_total * 1000)  # Max possible distance between a vehicle's potential start and destination in meters 
+max_possible_distance = float((km_total * 1000) + (km_total * 0.01))  # Max possible distance between a vehicle's potential start and destination in meters, adding some margin as buffer 
 max_battery_capacity = 100_000.0  # Max battery capacity in Wh
 start_soc_bounds = (3880, 22_390)  # Start SOC bounds for vehicles in Wh (20% to 80% of max capacity)
 
