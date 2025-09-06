@@ -37,8 +37,6 @@ class GreedyAlgorithm(EvaluationAlgorithm):
     def predict(self, observation, deterministic):
         placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
         
-        print("Observation:", observation)
-
         for vehicle_id, vehicle_obs in observation.items():
             # find out which one is the active vehicle
             active_charging_request_flag = vehicle_obs[8]
