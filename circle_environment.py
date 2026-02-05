@@ -16,7 +16,7 @@ logger = logging.getLogger("rl.environment")
 class CircleEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
-    def __init__(self, scenario_generator, render_mode=None, env_version="basic", vehicles_to_spawn=1,
+    def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
                  observation_sampling_rate=30, truncate_after_n_steps=3000, non_member_vehicles=None, random_seed=None):
         """
         Initialize the environment and simulation.
@@ -25,7 +25,7 @@ class CircleEnv(gym.Env):
         Parameters:
         - scenario_generator: str or ScenarioGenerator, the scenario to use for the simulation. Can be a string like "bast", "all_random", or an instance of a ScenarioGenerator class
         - render_mode: str, the mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
-        - env_version: str, the version of the environment to use. Can be "basic", "noTime", or "shaping". 
+        - reward_strategy: str, the version of the environment to use. Can be "basic", "noTime", or "shaping". 
             - "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting.
             - "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation.
             - "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
@@ -77,15 +77,15 @@ class CircleEnv(gym.Env):
             str(vehicle_id): single_vehicle_observation_space for vehicle_id in self.vehicle_ids
         })
 
-        # Instantiate the reward strategy based on env_version.
-        if env_version == "basic":
+        # Instantiate the reward strategy based on reward_strategy.
+        if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
-        elif env_version == "noTime":
+        elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
-        elif env_version == "shaping":
+        elif reward_strategy == "shaping":
             self.reward_strategy = RewardShapingStrategy()
         else:
-            raise ValueError(f"Unknown env_version: {env_version}")
+            raise ValueError(f"Unknown reward_strategy: {reward_strategy}")
 
     def _log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination):
         logger.debug(f"State: {simulation_state}, Step reward: {reward}")

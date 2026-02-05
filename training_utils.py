@@ -41,11 +41,11 @@ def get_log_level(training_or_evaluation):
         case _:
             return None
 
-def setup_logging(algorithm, version, env_version, map, n_vehicles, training_or_evaluation, model_load_path=None, execution_context="local"):
+def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, training_or_evaluation, model_load_path=None, execution_context="local"):
     # Create a unique identifier for this training run
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_id = f"{current_time}_{version}_{env_version}_{map}_{algorithm}_{n_vehicles}vehicles_{training_or_evaluation}"    
-    new_model_id = f"{current_time}_{version}_{env_version}_{map}_{algorithm}"
+    log_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}_{n_vehicles}vehicles_{training_or_evaluation}"    
+    new_model_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}"
     # if a model path is given, i.e. an existing model is evaluated or trained further
     if model_load_path is not None:
         current_model_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
@@ -72,11 +72,11 @@ def setup_logging(algorithm, version, env_version, map, n_vehicles, training_or_
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
 
-def train_model(algorithm, policy, version, env_version, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None):
+def train_model(algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None):
     # initiate environment
-    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CircleEnv(render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
-    model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "training", execution_context=execution_context)
+    model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", execution_context=execution_context)
     # Train the agent
     match algorithm:
         case "PPO":
@@ -116,11 +116,11 @@ def load_model(model_path, algorithm, env):
             raise ValueError("Invalid model type")
     return model
 
-def further_train_model(algorithm, version, env_version, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local"):
+def further_train_model(algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local"):
     # initiate environment
-    env = CircleEnv(render_mode=None, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CircleEnv(render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
-    model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "training", model_load_path, execution_context=execution_context)
+    model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", model_load_path, execution_context=execution_context)
     # Train the agent
     model = load_model(model_load_path, algorithm, env)
     tb_log_name = "tensorboard"
@@ -134,7 +134,7 @@ def further_train_model(algorithm, version, env_version, map, n_vehicles, n_step
         env.close()
         raise e    
 
-def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None):
+def evaluate_model(algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None):
     """
     Returns:
         The file path of the evaluation metrics file (str).
@@ -143,17 +143,17 @@ def evaluate_model(algorithm, version, env_version, map, n_vehicles, n_episodes,
     metadata = {
         "timestamp": current_time,
         "algorithm": algorithm,
-        "version": version,
-        "env_version": env_version,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
         "map": map,
         "n_vehicles": n_vehicles,
         "n_episodes": n_episodes,
         "random_seed": random_seed
     }
     # initiate environment
-    env = CircleEnv(render_mode=render_mode, env_version= env_version, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
+    env = CircleEnv(render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
-    model_dir, model_save_path = setup_logging(algorithm, version, env_version, map, n_vehicles, "evaluation", model_load_path, execution_context=execution_context)
+    model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "evaluation", model_load_path, execution_context=execution_context)
     # Load saved model or evaluation algorithm
     model = load_model(model_load_path, algorithm, env)
     # Set up TensorBoard writer and custom callback
