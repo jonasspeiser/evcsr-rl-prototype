@@ -90,7 +90,11 @@ class Simulation():
             '--device.battery.probability', '1', # sets all vehicles to be EVs instead of combustion engine
             # '--device.stationfinder.probability', '1' # remove vehicle if it runs out of battery
             ]
-
+        # close any existing traci connection (e.g. from previous simulation runs) before starting a new one
+        try:
+            traci.close()
+        except:
+            pass
         traci.start(sumoCmd)
         traci.simulation.saveState("initial_state") # needed for reset
         self.charging_stations = self._fetch_charging_stations()
