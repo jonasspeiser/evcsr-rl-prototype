@@ -120,12 +120,12 @@ class ScenarioGenerator():
         return routes_dict
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
-        """The default implementation always returns None."""
-        return None
+        """The default implementation returns a list of 0s for each vehicle, meaning all vehicles start at time 0."""
+        return [0] * n_vehicles
     
     def _select_depart_time(self, depart_time_iter):
-        """The default implementation returns always 0."""
-        return 0
+        """ Selects the next departure time from a predefined list of departure times. Returns None if the list is exhausted. """
+        return next(depart_time_iter, None)
 
     def generate_vehicles(self, n_vehicles, routes_list, start_soc_bounds=(DEFAULT_BATTERY_MIN, DEFAULT_BATTERY_MAX), scenario_id=None):
         """
@@ -227,10 +227,6 @@ class CustomDistributionScenario(ScenarioGenerator):
                 minutes_in_seconds = random.randint(0, 59) * 60
                 depart_time_list.append(hour_in_seconds + minutes_in_seconds)
         return depart_time_list
-
-    def _select_depart_time(self, depart_time_iter):
-        """ Selects the next departure time from a predefined list of departure times. Returns None if the list is exhausted. """
-        return next(depart_time_iter, None)
 
 class BAStDistributionScenario(CustomDistributionScenario):
     """
