@@ -18,8 +18,30 @@
 ## Installation
 ### SUMO setup
  - Ubuntu: install from apt
- - else: refer to https://sumo.dlr.de/docs/Downloads.php
+ -  Fedora 43:
+    ```bash
+    dnf config-manager addrepo --from-repofile=https://download.opensuse.org/repositories/science:dlr/Fedora_43/science:dlr.repo
+    dnf install sumo
+    ```
+ - Other Linux distros: https://software.opensuse.org//download.html?project=science%3Adlr&package=sumo
+ - else refer to https://sumo.dlr.de/docs/Installing/index.html
+    - or https://sumo.dlr.de/docs/Downloads.php
+ 
+Hint: SUMO is also available as a flatpak (flathub) for many linux distros. The use of flatpak is possible but disencouraged as it involves several manual steps for a working setup (configuring SUMO_HOME and PATH in bashrc, manually starting SUMO on a fixed exposed TCP port, configuring TraCi to connect to said port).
 
+
+<!-- 
+SUMO is also available as a flatpak (flathub) for many linux distros. When installing as a flatpack, make sure the Path-Variable for SUMO_HOME is set. Otherwise you will get a `FileNotFound Exception` when trying to start the simulation.
+  1. Find out your flatpak installation path  
+      * typically `~/.local/share/flatpak/app/org.eclipse.sumo/...` (user install) or `/var/lib/flatpak/app/org.eclipse.sumo/...` (system-wide)
+  1. Find exact path: `flatpak info org.eclipse.sumo`
+      * typically `.../org.eclipse.sumo/x86_64/stable/active/files` (adjust based on your install; verify it contains `bin/`)
+  1. Add to `~/.bashrc` file: `export SUMO_HOME=/path/to/flatpak/sumo` and `export PATH="$SUMO_HOME/bin:$PATH"`
+  1. Reload your session via `source ~/.bashrc`
+
+Furthermore, when using flatpak, you will have to explicitely start SUMO on a certain TCP port and tell TraCi to connect to it -> not recommended for comfort. 
+-->
+ 
  <!-- TODO: supply Docker container for easy Testing for Prof. -->
 
 ### Python setup
