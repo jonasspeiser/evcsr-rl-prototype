@@ -27,3 +27,5 @@ datasets/obelis_data/df_lv.*
 metrics*.json
 # Visuals
 visuals
+# wandb log files
+wandb

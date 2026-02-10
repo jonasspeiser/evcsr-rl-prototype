@@ -106,6 +106,16 @@ evaluation_algorithms.py
 * Greedy
 * Never charge
 
+## Usage
+
+#### Experiment Tracking
+Experiments can optionally be tracked using Weights & Biases.
+This is not required to run the code or reproduce results.
+When disabled, all results are written to local files (JSON, TensorBoard logs, model checkpoints).
+To enable W&B tracking, call `train_model(...)` and `evaluate_model(...)` with the parameter `use_wandb=True`.
+
+### Loggers
+
 #### Interpreting tensorboard values
 * `env/charging_stops_per_episode_mean`:
 * `env/global_ttt`: The cumulated total travel time of all member vehicles, in seconds.
@@ -116,8 +126,6 @@ evaluation_algorithms.py
 * `env/cumulated_waiting_time_only_terminated`:
 * `env/empty_vehicles_per_episode`: How many vehicles went completely empty
 * `env/final_simulation_time`: The value of the final SUMO-timestep when the episode ended
-
-## Usage
 
 ## Data
 

@@ -72,12 +72,49 @@ def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, trai
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
 
+def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, training_or_evaluation, model_load_path=None):
+    import wandb
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False):
+    config = {
+        "algorithm": algorithm,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "map": map,
+        "n_vehicles": n_vehicles,
+        "training_or_evaluation": training_or_evaluation,
+        "model_load_path": model_load_path
+    }
+    run = wandb.init(
+        # Set the wandb entity where the project will be logged (e.g. team name).
+        entity=wandb_entity,
+        # Set the wandb project where this run will be logged.
+        project=wandb_project,
+        config=config,
+        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+    )
+    return run
+
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
     env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", execution_context=execution_context)
+    callback = CustomTensorboardCallback()
+    # Setup WandB tracking (optional)
+    if use_wandb:
+        if wandb_entity is None or wandb_project is None:
+            raise ValueError("WandB entity and project must be provided if use_wandb is True.")
+        from stable_baselines3.common.callbacks import CallbackList
+        from wandb.integration.sb3 import WandbCallback
+        run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, "training")
+        callback = CallbackList([
+            callback, 
+            WandbCallback(
+                model_save_path=f"{model_dir}/wandb_models",
+                verbose=2,
+            )
+        ])
+    
     # Train the agent
     match algorithm:
         case "PPO":
@@ -90,14 +127,26 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
             raise ValueError("Invalid model type")
     tb_log_name = "tensorboard"
     try:
-        model.learn(n_steps, tb_log_name=tb_log_name, callback=CustomTensorboardCallback())
+        model.learn(n_steps, tb_log_name=tb_log_name, callback=callback)
         model.save(model_save_path)
-        env.close()
         return model_save_path
     except Exception as e:
-        model.save(model_save_path)
-        env.close()
+        # Ensure that the model is saved even if an error occurs during training
+        try:
+            model.save(model_save_path)
+        except Exception:
+            # If saving fails, skip it to avoid masking the original exception
+            pass
+        if use_wandb:
+            # Log the exception to WandB if it's being used
+            run.summary["status"] = "failed"
+            run.summary["exception"] = str(e)
         raise e
+    finally:
+        # Clean up resources
+        env.close()
+        if use_wandb:
+            run.finish()
     
 def load_model(model_path, algorithm, env):
     match algorithm:
@@ -117,25 +166,53 @@ def load_model(model_path, algorithm, env):
             raise ValueError("Invalid model type")
     return model
 
-def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False):
+def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
     env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", model_load_path, execution_context=execution_context)
+    callback = CustomTensorboardCallback()
+    # Setup WandB tracking (optional)
+    if use_wandb:
+        if wandb_entity is None or wandb_project is None:
+            raise ValueError("WandB entity and project must be provided if use_wandb is True.")
+        from stable_baselines3.common.callbacks import CallbackList
+        from wandb.integration.sb3 import WandbCallback
+        run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, "training", model_load_path)
+        callback = CallbackList([
+            callback, 
+            WandbCallback(
+                model_save_path=f"{model_dir}/wandb_models",
+                verbose=2,
+            )
+        ])
+
     # Train the agent
     model = load_model(model_load_path, algorithm, env)
     tb_log_name = "tensorboard"
     try:
-        model.learn(n_steps, tb_log_name=tb_log_name, callback=CustomTensorboardCallback())
+        model.learn(n_steps, tb_log_name=tb_log_name, callback=callback)
         model.save(model_save_path)
-        env.close()
         return model_save_path
     except Exception as e:
-        model.save(model_save_path)
-        env.close()
+        # Ensure that the model is saved even if an error occurs during training
+        try:
+            model.save(model_save_path)
+        except Exception:
+            # If saving fails, skip it to avoid masking the original exception
+            pass
+        if use_wandb:
+            # Log the exception to WandB if it's being used
+            run.summary["status"] = "failed"
+            run.summary["exception"] = str(e)
         raise e    
+    finally:
+        # Clean up resources
+        env.close()
+        if use_wandb:
+            run.finish()
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
     """
     Returns:
         The file path of the evaluation metrics file (str).
@@ -155,24 +232,45 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_veh
     env = CircleEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "evaluation", model_load_path, execution_context=execution_context)
+
     # Load saved model or evaluation algorithm
     model = load_model(model_load_path, algorithm, env)
     # Set up TensorBoard writer and custom callback
     writer = SummaryWriter(log_dir=f"{model_dir}/evaluation")
-    custom_callback = CustomTensorboardCallback(writer)
+    callback = CustomTensorboardCallback(writer)
+    # Set up WandB tracking (optional)
+    if use_wandb:
+        if wandb_entity is None or wandb_project is None:
+            raise ValueError("WandB entity and project must be provided if use_wandb is True.")
+        from stable_baselines3.common.callbacks import CallbackList
+        from wandb.integration.sb3 import WandbCallback
+        run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, "evaluation", model_load_path)
+        callback = CallbackList([
+            callback, 
+            WandbCallback(
+                model_save_path=f"{model_dir}/wandb_models",
+                verbose=2,            
+            )
+        ])
+
     # Evaluate the agent
     try:
-        metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=custom_callback, metadata=metadata, random_seed=random_seed)
+        metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=callback, metadata=metadata, random_seed=random_seed)
         # print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
-        env.close()
-        writer.close()
         evaluation_path = f"{model_dir}/evaluation/metrics{current_time}.json"
         dump_to_file(metrics_dict, evaluation_path)
         return evaluation_path
 
-    except KeyboardInterrupt:
+    except KeyboardInterrupt as e:
+        if use_wandb:
+            # Log the exception to WandB if it's being used
+            run.summary["status"] = "interrupted"
+            run.summary["exception"] = str(e)
+    finally:
         env.close()
         writer.close()
+        if use_wandb:
+            run.finish()
 
 def dump_to_file(content, filepath):
     with open(filepath, 'w') as f:
