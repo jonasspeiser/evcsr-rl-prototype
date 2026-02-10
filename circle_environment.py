@@ -445,7 +445,7 @@ if __name__ == "__main__":
         env.close()
 
     def demo_single_vehicle(random_seed=None):
-        env = CircleEnv(cenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
+        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)

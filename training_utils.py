@@ -72,9 +72,10 @@ def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, trai
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
 
-def train_model(algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None):
+
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False):
     # initiate environment
-    env = CircleEnv(render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", execution_context=execution_context)
     # Train the agent
@@ -116,9 +117,9 @@ def load_model(model_path, algorithm, env):
             raise ValueError("Invalid model type")
     return model
 
-def further_train_model(algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local"):
+def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False):
     # initiate environment
-    env = CircleEnv(render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "training", model_load_path, execution_context=execution_context)
     # Train the agent
@@ -134,7 +135,7 @@ def further_train_model(algorithm, version_tag, reward_strategy, map, n_vehicles
         env.close()
         raise e    
 
-def evaluate_model(algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False):
     """
     Returns:
         The file path of the evaluation metrics file (str).
@@ -151,7 +152,7 @@ def evaluate_model(algorithm, version_tag, reward_strategy, map, n_vehicles, n_e
         "random_seed": random_seed
     }
     # initiate environment
-    env = CircleEnv(render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
+    env = CircleEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
     model_dir, model_save_path = setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, "evaluation", model_load_path, execution_context=execution_context)
     # Load saved model or evaluation algorithm
