@@ -8,3 +8,4 @@ pandas
 pyarrow
 jupyter
 seaborn
+wandb
