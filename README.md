@@ -16,19 +16,30 @@
 ---
 
 ## Installation
-### SUMO setup
- - Ubuntu: install from apt
- -  Fedora 43:
+### Install SUMO (External Dependency)
+
+This project requires **SUMO ≥ 1.26**.
+
+Official installation instructions:
+
+https://sumo.dlr.de/docs/Installing/index.html
+
+Linux users may install SUMO via their package manager (see https://software.opensuse.org//download.html?project=science%3Adlr&package=sumo)
+
+Example (Fedora 43):
     ```bash
     dnf config-manager addrepo --from-repofile=https://download.opensuse.org/repositories/science:dlr/Fedora_43/science:dlr.repo
     dnf install sumo
     ```
- - Other Linux distros: https://software.opensuse.org//download.html?project=science%3Adlr&package=sumo
- - else refer to https://sumo.dlr.de/docs/Installing/index.html
-    - or https://sumo.dlr.de/docs/Downloads.php
- 
-Hint: SUMO is also available as a flatpak (flathub) for many linux distros. The use of flatpak is possible but disencouraged as it involves several manual steps for a working setup (configuring SUMO_HOME and PATH in bashrc, manually starting SUMO on a fixed exposed TCP port, configuring TraCi to connect to said port).
 
+After installation, verify:
+```bash
+sumo --version
+```
+ > If that doesn't work: Depending on your system, `SUMO_HOME` may need to be set correctly.
+
+
+Flatpak installation is possible but discouraged due to additional manual configuration steps (PATH configuration, `SUMO_HOME`, and manual TCP port exposure for TraCI).
 
 <!-- 
 SUMO is also available as a flatpak (flathub) for many linux distros. When installing as a flatpack, make sure the Path-Variable for SUMO_HOME is set. Otherwise you will get a `FileNotFound Exception` when trying to start the simulation.
@@ -46,16 +57,51 @@ Furthermore, when using flatpak, you will have to explicitely start SUMO on a ce
 
 ### Python setup
 
+This project uses **uv** for a fully reproducible Python environment.
 
-Create a virtual environment and install dependencies:
-  ```bash
-  python -m venv .venv
-  source .venv/bin/activate        # On Windows: .venv\Scripts\activate
-  pip install -r requirements.txt
-  ```
+1. If not already installed, install `uv` via your preferred package manager or:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+1. `uv` then installs all dependencies and the correct python version automatically into a virtual environment:
+    ``` bash
+    uv sync
+    ```
+
+1. You can now run the project via
+    ```bash
+    uv run python main.py
+    ```
+
+---
+
+#### Notes
+* Python 3.11 is automatically managed by uv.
+* All dependencies are locked via uv.lock for reproducibility.
+* No manual virtual environment creation is required.
+
+---
+
+### Optional: Install Development Tools
+
+* To install additional development tool (e.g. Jupyter, W&B):
+    ```bash
+    uv sync --extra dev
+    ```
+
+* To manually activate the virtual environment:
+    ```bash
+    source .venv/bin/activate        # On Windows: .venv\Scripts\activate
+    ```
+
+<!-- Hint: Sobald ich ein einzelnes .py file habe, kann ich das mit der venv activation rausnehmen und stattdessen
+```bash
+uv run python main.py
+``` -->
 
 
-
+---
 
 ### Editing or changing the simulation map or scenario
 The underlying map and the simulated scenarios can be easily customized and switched out. This can be done by replacing the correspondant SUMO files (circle.net.xml, circle.add.xml, circle.sumocfg).
