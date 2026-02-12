@@ -334,7 +334,7 @@ class CustomTensorboardCallback(BaseCallback):
         "final_simulation_time",
     ]
 
-    def __init__(self, writer=None, verbose=0, rtw_size=100):
+    def __init__(self, writer=None, verbose=0, rtw_size=100, wandb_run=None, wandb_prefix=""):
         # If used in training with SB3, the BaseCallback machinery will set up the logger.
         super(CustomTensorboardCallback, self).__init__(verbose)
         self.rtw_size = rtw_size
@@ -344,6 +344,8 @@ class CustomTensorboardCallback(BaseCallback):
         }
         self.logger_rl = logging.getLogger("rl")
         self.writer = writer
+        self.wandb_run = wandb_run  
+        self.wandb_prefix = wandb_prefix
 
     def get_metrics(self, env):
         metrics = {}
@@ -366,26 +368,42 @@ class CustomTensorboardCallback(BaseCallback):
         if self.locals['dones'][0]:  # If an episode ended ("done")
             # Gather metrics from the environment
             metrics = self.get_metrics(env)
+            wandb_payload = {}
 
             # Update each metric's buffer, calculate and record each metric's mean over a rolling time window (rtw) 
             for metric_name, value in metrics.items():
                 self.buffers[metric_name].append(value)
                 rolling_mean = sum(self.buffers[metric_name]) / len(self.buffers[metric_name])
+
+                # SB3 logger (TensorBoard)
                 self.logger.record(metric_name, rolling_mean)
 
+                # W&B logger (optional)
+                if self.wandb_run is not None:
+                    key = f"{self.wandb_prefix}{metric_name}"
+                    wandb_payload[key] = rolling_mean
+
+            # on step end, dump all recorded metrics to Tensorboard and log to W&B if applicable
             self.logger.dump(step=self.num_timesteps)
+            if self.wandb_run is not None and wandb_payload:
+                self.wandb_run.log(wandb_payload, step=self.num_timesteps)
 
         return True
 
     def log_evaluation(self, env, step):
         """Log evaluation metrics when running independently (e.g., for a random algorithm)."""
-        metrics = self.get_metrics(env)        
-        for metric_name, value in metrics.items():
-            # self.buffers[metric_name].append(value)
-            # rolling_mean = sum(self.buffers[metric_name]) / len(self.buffers[metric_name])
-            # log in tensorboard
-            self.writer.add_scalar(metric_name, value, step)
-        self.writer.flush()
+        metrics = self.get_metrics(env)
+
+        # logging to TensorBoard
+        if self.writer is not None:
+            for metric_name, value in metrics.items():
+                self.writer.add_scalar(metric_name, value, step)
+            self.writer.flush()
+
+        # logging to W&B (optional)
+        if self.wandb_run is not None:
+            self.wandb_run.log({f"eval/{k}": v for k, v in metrics.items()}, step=step)
+            
         self.logger_rl.debug(f"Logged evaluation metrics at step {step}")
         # For further use of logged values
         return metrics
