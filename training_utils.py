@@ -104,16 +104,18 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
     if use_wandb:
         if wandb_entity is None or wandb_project is None:
             raise ValueError("WandB entity and project must be provided if use_wandb is True.")
-        from stable_baselines3.common.callbacks import CallbackList
-        from wandb.integration.sb3 import WandbCallback
+        # from stable_baselines3.common.callbacks import CallbackList
+        # from wandb.integration.sb3 import WandbCallback
         run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, "training")
-        callback = CallbackList([
-            callback, 
-            WandbCallback(
-                model_save_path=f"{model_dir}/wandb_models",
-                verbose=2,
-            )
-        ])
+        callback = CustomTensorboardCallback(wandb_run=run, wandb_prefix="train/")
+        # callback = CallbackList([
+        #     callback, 
+        #     WandbCallback(
+        #         model_save_path=f"{model_dir}/wandb_models",
+        #         verbose=2,
+        #     )
+        # ])
+
     
     # Train the agent
     match algorithm:
@@ -403,7 +405,7 @@ class CustomTensorboardCallback(BaseCallback):
         # logging to W&B (optional)
         if self.wandb_run is not None:
             self.wandb_run.log({f"eval/{k}": v for k, v in metrics.items()}, step=step)
-            
+
         self.logger_rl.debug(f"Logged evaluation metrics at step {step}")
         # For further use of logged values
         return metrics
