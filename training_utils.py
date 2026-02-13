@@ -72,7 +72,7 @@ def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, trai
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
 
-def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, training_or_evaluation, model_load_path=None):
+def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
     import wandb
 
     config = {
@@ -81,6 +81,7 @@ def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_stra
         "reward_strategy": reward_strategy,
         "map": map,
         "n_vehicles": n_vehicles,
+        "n_steps": n_steps,
         "training_or_evaluation": training_or_evaluation,
         "model_load_path": model_load_path
     }
@@ -106,7 +107,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
             raise ValueError("WandB entity and project must be provided if use_wandb is True.")
         # from stable_baselines3.common.callbacks import CallbackList
         # from wandb.integration.sb3 import WandbCallback
-        run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, "training")
+        run = setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, "training")
         callback = CustomTensorboardCallback(wandb_run=run, wandb_prefix="train/")
         # callback = CallbackList([
         #     callback, 
