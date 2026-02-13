@@ -42,6 +42,7 @@ def main() -> int:
                 n_steps=1,
                 execution_context="local",
                 random_seed=None,
+                use_wandb=True, wandb_entity="evcs-rl", wandb_project="v0.7.9_straight100Test_PPO"
             )
         except TypeError as e:
             # if not is_signature_typeerror(e):

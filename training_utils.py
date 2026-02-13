@@ -1,3 +1,5 @@
+"""Script containing utility functions for training and evaluating RL models, including logging configuration."""
+
 from circle_environment import CircleEnv
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
 from stable_baselines3 import PPO, A2C, DQN
@@ -11,6 +13,34 @@ import numpy as np
 from torch.utils.tensorboard import SummaryWriter
 import json
 
+class JsonlFileHandler(logging.Handler):
+    """
+    Logging handler that writes one JSON object per line (JSONL format).
+    """
+    def __init__(self, filepath, mode="a"):
+        super().__init__()
+        self.file = open(filepath, mode, encoding="utf-8")
+
+    def emit(self, record):
+        log_entry = {
+            "timestamp": self.formatTime(record),
+            "logger": record.name,
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+        }
+        self.file.write(json.dumps(log_entry) + "\n")
+        self.file.flush()
+
+    def formatTime(self, record):
+        return datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+
+    def close(self):
+        self.file.close()
+        super().close()
+
         
 def configure_logging(log_file_path, console_log_level=logging.INFO):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -22,11 +52,15 @@ def configure_logging(log_file_path, console_log_level=logging.INFO):
         console_handler.setFormatter(formatter)
         handlers.append(console_handler)
     if log_file_path is not None:
-        # create file handler which logs even debug messages
-        file_handler = logging.FileHandler(log_file_path, mode="a")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        handlers.append(file_handler)
+        # create file handler which logs DEBUG messages to a log file
+        if log_file_path.endswith(".log"):
+            # Replace .log with .jsonl automatically (for compatibility with existing code)
+            log_file_path = log_file_path.replace(".log", ".jsonl")
+    
+        json_handler = JsonlFileHandler(log_file_path, mode="a")
+        json_handler.setLevel(logging.DEBUG)
+        handlers.append(json_handler)
+    
     # add the handlers to the (root) logger
     logging.basicConfig(level=logging.DEBUG, 
                     handlers=handlers,
@@ -67,7 +101,7 @@ def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, trai
     os.makedirs(log_dir, exist_ok=True)
     
     model_save_path = f"{model_dir}/{new_model_id}.zip"
-    py_log_path = f"{log_dir}/{log_id}.log"
+    py_log_path = f"{log_dir}/{log_id}.jsonl"
     console_log_level = get_log_level(training_or_evaluation)
     configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
     return model_dir, model_save_path
