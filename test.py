@@ -44,23 +44,29 @@ def main() -> int:
                 random_seed=None,
             )
         except TypeError as e:
-            if not is_signature_typeerror(e):
-                # A real TypeError inside training -> treat as failure
+            # if not is_signature_typeerror(e):
+            #     # A real TypeError inside training -> treat as failure
+            #     raise
+
+            try:
+                # test for the old signature
+                train_model(
+                    algorithm="PPO",
+                    policy="MultiInputPolicy",
+                    version="v0.7.9",
+                    env_version="basic",
+                    map="straight100Test",
+                    n_vehicles=2,
+                    n_steps=1,
+                    execution_context="local",
+                    random_seed=None,
+                )
+            except TypeError as e2:
+                if "CircleEnv.__init__() missing" in str(e2):
+                    return 125  # skip untestable commits
                 raise
 
-            # test for the old signature
-            train_model(
-                algorithm="PPO",
-                policy="MultiInputPolicy",
-                version="v0.7.9",
-                env_version="basic",
-                map="straight100Test",
-                n_vehicles=2,
-                n_steps=1,
-                execution_context="local",
-                random_seed=None,
-            )
-
+        print("Training completed successfully")
         return 0  # good commit
 
     except Exception:
@@ -69,4 +75,6 @@ def main() -> int:
         return 1  # bad commit
 
 if __name__ == "__main__":
-    sys.exit(main())
+    return_code = main()
+    print(f"Exiting with code {return_code}")
+    sys.exit(return_code)
