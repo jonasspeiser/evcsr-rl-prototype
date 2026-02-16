@@ -6,30 +6,33 @@ import os
 import logging
 from collections import deque
 import json
+from dataclasses import dataclass
+from typing import Optional, Literal
 
-def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
-    import wandb
+@dataclass
+class RunLogging:
+    """Orchestrator and Data class to hold logging-related objects for a training or evaluation run."""
+    model_dir: str
+    model_save_path: str
+    callback: object                 # SB3 callback (BaseCallback or CallbackList)
+    writer: Optional[object] = None  # SummaryWriter when evaluating
+    wandb_run: Optional[object] = None
 
-    config = {
-        "algorithm": algorithm,
-        "version_tag": version_tag,
-        "reward_strategy": reward_strategy,
-        "map": map,
-        "n_vehicles": n_vehicles,
-        "n_steps": n_steps,
-        "training_or_evaluation": training_or_evaluation,
-        "model_load_path": model_load_path
-    }
-    run = wandb.init(
-        # Set the wandb entity where the project will be logged (e.g. team name).
-        entity=wandb_entity,
-        # Set the wandb project where this run will be logged.
-        project=wandb_project,
-        config=config,
-        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
-    )
-    return run
+    def mark_failed(self, exc: Exception):
+        if self.wandb_run is not None:
+            self.wandb_run.summary["status"] = "failed"
+            self.wandb_run.summary["exception"] = str(exc)
 
+    def mark_interrupted(self, exc: Exception):
+        if self.wandb_run is not None:
+            self.wandb_run.summary["status"] = "interrupted"
+            self.wandb_run.summary["exception"] = str(exc)
+
+    def close(self):
+        if self.writer is not None:
+            self.writer.close()
+        if self.wandb_run is not None:
+            self.wandb_run.finish()
 class JsonlFileHandler(logging.Handler):
     """
     Logging handler that writes one JSON object per line (JSONL format).
@@ -57,76 +60,10 @@ class JsonlFileHandler(logging.Handler):
     def close(self):
         self.file.close()
         super().close()
-
-        
-def configure_logging(log_file_path, console_log_level=logging.INFO):
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-    handlers = []
-    if console_log_level is not None:
-        # define a Handler which writes INFO messages or higher to the sys.stderr
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(console_log_level)
-        console_handler.setFormatter(formatter)
-        handlers.append(console_handler)
-    if log_file_path is not None:
-        # create file handler which logs DEBUG messages to a log file
-        if log_file_path.endswith(".log"):
-            # Replace .log with .jsonl automatically (for compatibility with existing code)
-            log_file_path = log_file_path.replace(".log", ".jsonl")
-    
-        json_handler = JsonlFileHandler(log_file_path, mode="a")
-        json_handler.setLevel(logging.DEBUG)
-        handlers.append(json_handler)
-    
-    # add the handlers to the (root) logger
-    logging.basicConfig(level=logging.DEBUG, 
-                    handlers=handlers,
-                    force=True) # force=True overwrites the logging configuration so that we can change the logfile name
-
-def get_log_level(training_or_evaluation):
-    match training_or_evaluation:
-        case "training":
-            return None
-        case "evaluation":
-            return logging.INFO
-        case _:
-            return None
-
-def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, training_or_evaluation, model_load_path=None, execution_context="local"):
-    # Create a unique identifier for this training run
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}_{n_vehicles}vehicles_{training_or_evaluation}"    
-    new_model_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}"
-    # if a model path is given, i.e. an existing model is evaluated or trained further
-    if model_load_path is not None:
-        current_model_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
-    else:
-        current_model_dir = new_model_id
-    
-    # Set up non existing directories
-    match execution_context:
-        case "local":
-            root = "."
-        case "colab":
-            root = "/content/drive/MyDrive/Colab Notebooks/rl-charging-allocation"
-        case _:
-            raise ValueError(f"Invalid execution context {execution_context}. Must be 'local' or 'colab'.")
-
-    model_dir = f"{root}/models/{current_model_dir}"
-    log_dir = f"{model_dir}/{training_or_evaluation}"
-    os.makedirs(model_dir, exist_ok=True)
-    os.makedirs(log_dir, exist_ok=True)
-    
-    model_save_path = f"{model_dir}/{new_model_id}.zip"
-    py_log_path = f"{log_dir}/{log_id}.jsonl"
-    console_log_level = get_log_level(training_or_evaluation)
-    configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
-    return model_dir, model_save_path
-
-
+ 
 class CustomTensorboardCallback(BaseCallback):
     """
-    Custom callback for logging rolling mean of environment metrics to Tensorboard.
+    Custom sb3 callback for logging rolling mean of environment metrics to Tensorboard.
     This version can be used both during training and for independent evaluation.
     
     Attributes:
@@ -221,3 +158,153 @@ class CustomTensorboardCallback(BaseCallback):
         # For further use of logged values
         return metrics
 
+
+def configure_logging(log_file_path, console_log_level=logging.INFO):
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    handlers = []
+    if console_log_level is not None:
+        # define a Handler which writes INFO messages or higher to the sys.stderr
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(console_log_level)
+        console_handler.setFormatter(formatter)
+        handlers.append(console_handler)
+    if log_file_path is not None:
+        # create file handler which logs DEBUG messages to a log file
+        if log_file_path.endswith(".log"):
+            # Replace .log with .jsonl automatically (for compatibility with existing code)
+            log_file_path = log_file_path.replace(".log", ".jsonl")
+    
+        json_handler = JsonlFileHandler(log_file_path, mode="a")
+        json_handler.setLevel(logging.DEBUG)
+        handlers.append(json_handler)
+    
+    # add the handlers to the (root) logger
+    logging.basicConfig(level=logging.DEBUG, 
+                    handlers=handlers,
+                    force=True) # force=True overwrites the logging configuration so that we can change the logfile name
+
+def get_log_level(training_or_evaluation):
+    match training_or_evaluation:
+        case "training":
+            return None
+        case "evaluation":
+            return logging.INFO
+        case _:
+            return None
+
+def setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, training_or_evaluation, model_load_path=None, execution_context="local"):
+    # Create a unique identifier for this training run
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    log_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}_{n_vehicles}vehicles_{training_or_evaluation}"    
+    new_model_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}"
+    # if a model path is given, i.e. an existing model is evaluated or trained further
+    if model_load_path is not None:
+        current_model_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
+    else:
+        current_model_dir = new_model_id
+    
+    # Set up non existing directories
+    match execution_context:
+        case "local":
+            root = "."
+        case "colab":
+            root = "/content/drive/MyDrive/Colab Notebooks/rl-charging-allocation"
+        case _:
+            raise ValueError(f"Invalid execution context {execution_context}. Must be 'local' or 'colab'.")
+
+    model_dir = f"{root}/models/{current_model_dir}"
+    log_dir = f"{model_dir}/{training_or_evaluation}"
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(log_dir, exist_ok=True)
+    
+    model_save_path = f"{model_dir}/{new_model_id}.zip"
+    py_log_path = f"{log_dir}/{log_id}.jsonl"
+    console_log_level = get_log_level(training_or_evaluation)
+    configure_logging(log_file_path=py_log_path, console_log_level=console_log_level)
+    return model_dir, model_save_path
+
+def setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
+    import wandb
+
+    config = {
+        "algorithm": algorithm,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "map": map,
+        "n_vehicles": n_vehicles,
+        "n_steps": n_steps,
+        "training_or_evaluation": training_or_evaluation,
+        "model_load_path": model_load_path
+    }
+    run = wandb.init(
+        # Set the wandb entity where the project will be logged (e.g. team name).
+        entity=wandb_entity,
+        # Set the wandb project where this run will be logged.
+        project=wandb_project,
+        config=config,
+        sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
+    )
+    return run
+
+
+def setup_run_logging(
+    *,
+    algorithm: str,
+    version_tag: str,
+    reward_strategy: str,
+    map: str,
+    n_vehicles: int,
+    mode: Literal["training", "evaluation"],
+    execution_context: str = "local",
+    model_load_path: str | None = None,
+    n_steps: int | None = None,
+    use_wandb: bool = False,
+    wandb_entity: str | None = None,
+    wandb_project: str | None = None,
+):
+    # path + python logging setup
+    model_dir, model_save_path = setup_logging(
+        algorithm, version_tag, reward_strategy, map, n_vehicles,
+        mode, model_load_path, execution_context=execution_context
+    )
+
+    # sb3 callback (tensorboard + optional wandb logging inside it)
+    run = None
+    callback = CustomTensorboardCallback()
+
+    # evaluation-specific setup 
+    writer = None
+    if mode == "evaluation":
+        from torch.utils.tensorboard import SummaryWriter
+        writer = SummaryWriter(log_dir=f"{model_dir}/evaluation")
+        callback = CustomTensorboardCallback(writer=writer)
+
+    # wandb setup (optional)
+    if use_wandb:
+        if wandb_entity is None or wandb_project is None:
+            raise ValueError("WandB entity and project must be provided if use_wandb is True.")
+
+        run = setup_wandb(
+            wandb_entity, wandb_project,
+            algorithm, version_tag, reward_strategy, map, n_vehicles,
+            n_steps, mode, model_load_path
+        )
+
+        # internal wandb logging in CustomTensorboardCallback:
+        # - training: prefix "train/"
+        # - eval: prefix "" (log_evaluation already prefixes eval/)
+        if mode == "training":
+            callback = CustomTensorboardCallback(wandb_run=run, wandb_prefix="train/")
+
+        # ALTERNATIVE WandbCallback instead of CustomTensorboardCallback's internal logging (commented out since it doesn't support my custom metrics and would require more refactoring):
+        # from stable_baselines3.common.callbacks import CallbackList
+        # from wandb.integration.sb3 import WandbCallback
+        # callback = CallbackList([callback, WandbCallback(model_save_path=f"{model_dir}/wandb_models", verbose=2)])
+
+    return RunLogging(
+        model_dir=model_dir,
+        model_save_path=model_save_path,
+        callback=callback,
+        writer=writer,
+        wandb_run=run,
+    )
