@@ -5,7 +5,7 @@ from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeA
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime
 import json
-from logging_utils import setup_run_logging
+from logging_utils import RunLogging, setup_run_logging
 
 SB3_ALGOS = {
     "PPO": PPO,
@@ -32,7 +32,7 @@ def _dump_to_file(content, filepath):
     with open(filepath, 'w') as f:
         json.dump(content, f, indent=2)
 
-def _run_training(*, env, log, model, n_steps):
+def _run_training(*, env, log: RunLogging, model, n_steps):
     try:
         model.learn(n_steps, tb_log_name="tensorboard", callback=log.callback)
         model.save(log.model_save_path)
@@ -46,22 +46,7 @@ def _run_training(*, env, log, model, n_steps):
             print(f"Error saving model after exception: {e2}")
             
         # dump crash bundle for debugging (ring buffer log + environment snapshot)
-        try:
-            bundle = log.dump_crash_bundle(
-                env_snapshot=env.get_snapshot(), # TODO: implement
-                exc=e,
-                context={"n_steps": n_steps}
-            )
-            if bundle and log.wandb_run is not None:
-                import wandb
-                art = wandb.Artifact(name=f"crash_bundle_{log.wandb_run.id}", type="debug")
-                art.add_file(bundle["logs"])
-                art.add_file(bundle["snapshot"])
-                art.add_file(bundle["error"])
-                log.wandb_run.log_artifact(art)
-        except Exception as e3:
-            # If saving fails, skip it to avoid masking the original exception
-            print(f"Error dumping crash bundle: {e3}")
+        log.dump_and_log_crash_bundle(env_snapshot=env.get_snapshot(),exc=e,context={"n_steps": n_steps})
 
         log.mark_failed(e)
         raise
@@ -203,7 +188,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_veh
         return evaluation_path
 
     except KeyboardInterrupt as e:
-        log.mark_interrupted()
+        log.mark_interrupted(e)
         raise
 
     finally:

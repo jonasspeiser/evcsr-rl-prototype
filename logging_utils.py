@@ -1,17 +1,15 @@
 """Script containing logging utilities."""
 
-from stable_baselines3.common.callbacks import BaseCallback
-from datetime import datetime
 import os
 import logging
-from collections import deque
 import json
-from dataclasses import dataclass
-from typing import Optional, Literal
 import gzip
 import traceback
 from collections import deque
-from typing import Any, Deque, Dict
+from datetime import datetime
+from typing import Any, Deque, Dict, Optional, Literal
+from dataclasses import dataclass
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList
 
 
 class JsonlFileHandler(logging.Handler):
@@ -153,12 +151,25 @@ class RunLogging:
     """Orchestrator and Data class to hold logging-related objects for a training or evaluation run."""
     model_dir: str
     model_save_path: str
-    callback: object                 # SB3 callback (BaseCallback or CallbackList)
+    callback: BaseCallback | CallbackList  # SB3 callback (BaseCallback or CallbackList)
     writer: Optional[object] = None  # SummaryWriter when evaluating
     wandb_run: Optional[object] = None
     ring: Optional[RingBufferHandler] = None
     py_log_path: Optional[str] = None  # where JsonlFileHandler writes (optional)
     mode: Optional[str] = None         # "training"/"evaluation" (optional)
+
+    def _dump_crash_bundle(self, env_snapshot: dict, exc: BaseException, context: dict | None = None) -> Optional[dict]:
+        if self.ring is None:
+            return None
+        out_dir = os.path.join(self.model_dir, "debug")
+        return _dump_crash_bundle_from_ring(
+            ring=self.ring,
+            out_dir=out_dir,
+            env_snapshot=env_snapshot,
+            exc=exc,
+            context=context,
+            compress=False,
+        )
 
     def mark_failed(self, exc: Exception):
         if self.wandb_run is not None:
@@ -169,19 +180,46 @@ class RunLogging:
         if self.wandb_run is not None:
             self.wandb_run.summary["status"] = "interrupted"
             self.wandb_run.summary["exception"] = str(exc)
-
-    def dump_crash_bundle(self, *, env_snapshot: dict, exc: BaseException, context: dict | None = None) -> Optional[dict]:
-        if self.ring is None:
+    
+    def dump_and_log_crash_bundle(self, env_snapshot: dict, exc: BaseException, context: dict | None = None) -> Optional[dict]:
+        """
+        Dumps crash bundle (ring buffer + snapshot + error) and, if wandb is enabled, logs it as an artifact. Returns bundle paths dict or None.
+        """
+        bundle = self._dump_crash_bundle(env_snapshot=env_snapshot, exc=exc, context=context)
+        if not bundle:
             return None
-        out_dir = os.path.join(self.model_dir, "debug")
-        return dump_crash_bundle_from_ring(
-            ring=self.ring,
-            out_dir=out_dir,
-            env_snapshot=env_snapshot,
-            exc=exc,
-            context=context,
-            compress=True,
-        )
+
+        if self.wandb_run is not None:
+            try:
+                # add crash bundle as artifact to wandb
+                import wandb
+                art = wandb.Artifact(name=f"crash_bundle_{self.wandb_run.id}", type="debug")
+                art.add_file(bundle["logs"])
+                art.add_file(bundle["snapshot"])
+                art.add_file(bundle["error"])
+                self.wandb_run.log_artifact(art)
+
+                # additionally add last 50 entries of ring buffer as table to wandb for easy preview (without downloading the artifact)
+                rows = [_record_to_dict(rec) for rec in list(self.ring.buffer)[-50:]]
+                if rows:
+                    table = wandb.Table(
+                        data=[list(r.values()) for r in rows],
+                        columns=list(rows[0].keys())
+                    )
+                    self.wandb_run.log({"crash/last_logs_preview": table})
+
+                # additionally add some crash info to wandb summary for easy filtering and overview
+                self.wandb_run.summary["crash/exception_type"] = type(exc).__name__
+                self.wandb_run.summary["crash/sim_step"] = env_snapshot.get("simulation", {}).get("sim_step")
+                self.wandb_run.summary["crash/queue_len"] = env_snapshot.get("charging", {}).get("queue_len")
+
+            except Exception as e:
+                # If saving fails, skip it to avoid masking the original exception
+                print(f"Error logging crash bundle to WandB: {e}")
+            
+
+        return bundle
+
 
     def close(self):
         if self.writer is not None:
@@ -288,6 +326,54 @@ def _setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_str
     )
     return run
 
+def _dump_crash_bundle_from_ring(
+    *,
+    ring: RingBufferHandler,
+    out_dir: str,
+    env_snapshot: Dict[str, Any],
+    exc: BaseException,
+    context: Dict[str, Any] | None = None,
+    compress: bool = True,
+) -> Dict[str, str]:
+    """
+    Writes:
+      - last_logs.jsonl(.gz)
+      - env_snapshot.json
+      - error.json
+    Returns paths.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    bundle_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    bundle_dir = os.path.join(out_dir, f"crash_{bundle_id}")
+    os.makedirs(bundle_dir, exist_ok=True)
+
+    logs_path = os.path.join(bundle_dir, "last_logs.jsonl" + (".gz" if compress else ""))
+    if compress:
+        with gzip.open(logs_path, "wt", encoding="utf-8") as f:
+            for rec in ring.buffer:
+                f.write(json.dumps(_record_to_dict(rec)) + "\n")
+    else:
+        with open(logs_path, "w", encoding="utf-8") as f:
+            for rec in ring.buffer:
+                f.write(json.dumps(_record_to_dict(rec)) + "\n")
+
+    snapshot_path = os.path.join(bundle_dir, "env_snapshot.json")
+    with open(snapshot_path, "w", encoding="utf-8") as f:
+        json.dump(env_snapshot, f, indent=2, default=str)
+
+    error_path = os.path.join(bundle_dir, "error.json")
+    err = {
+        "timestamp": bundle_id,
+        "exception_type": type(exc).__name__,
+        "exception": str(exc),
+        "traceback": traceback.format_exc(),
+        "context": context or {},
+    }
+    with open(error_path, "w", encoding="utf-8") as f:
+        json.dump(err, f, indent=2, default=str)
+
+    return {"bundle_dir": bundle_dir, "logs": logs_path, "snapshot": snapshot_path, "error": error_path}
+
 def _record_to_dict(record: logging.LogRecord) -> Dict[str, Any]:
     """Convert LogRecord (including extra fields) into JSON-serializable dict."""
     d: Dict[str, Any] = {
@@ -381,51 +467,3 @@ def setup_run_logging(
         py_log_path=py_log_path,
         mode=mode,
     )
-
-def dump_crash_bundle_from_ring(
-    *,
-    ring: RingBufferHandler,
-    out_dir: str,
-    env_snapshot: Dict[str, Any],
-    exc: BaseException,
-    context: Dict[str, Any] | None = None,
-    compress: bool = True,
-) -> Dict[str, str]:
-    """
-    Writes:
-      - last_logs.jsonl(.gz)
-      - env_snapshot.json
-      - error.json
-    Returns paths.
-    """
-    os.makedirs(out_dir, exist_ok=True)
-    bundle_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    bundle_dir = os.path.join(out_dir, f"crash_{bundle_id}")
-    os.makedirs(bundle_dir, exist_ok=True)
-
-    logs_path = os.path.join(bundle_dir, "last_logs.jsonl" + (".gz" if compress else ""))
-    if compress:
-        with gzip.open(logs_path, "wt", encoding="utf-8") as f:
-            for rec in ring.buffer:
-                f.write(json.dumps(_record_to_dict(rec)) + "\n")
-    else:
-        with open(logs_path, "w", encoding="utf-8") as f:
-            for rec in ring.buffer:
-                f.write(json.dumps(_record_to_dict(rec)) + "\n")
-
-    snapshot_path = os.path.join(bundle_dir, "env_snapshot.json")
-    with open(snapshot_path, "w", encoding="utf-8") as f:
-        json.dump(env_snapshot, f, indent=2, default=str)
-
-    error_path = os.path.join(bundle_dir, "error.json")
-    err = {
-        "timestamp": bundle_id,
-        "exception_type": type(exc).__name__,
-        "exception": str(exc),
-        "traceback": traceback.format_exc(),
-        "context": context or {},
-    }
-    with open(error_path, "w", encoding="utf-8") as f:
-        json.dump(err, f, indent=2, default=str)
-
-    return {"bundle_dir": bundle_dir, "logs": logs_path, "snapshot": snapshot_path, "error": error_path}
