@@ -1,5 +1,5 @@
 import numpy as np
-from circle_simulation import Simulation, PointlessRecommendationError, BadTimingRoutingError, ImpossibleRoutingError
+from simulation import Simulation, PointlessRecommendationError, BadTimingRoutingError, ImpossibleRoutingError
 
 # configure logging
 import logging

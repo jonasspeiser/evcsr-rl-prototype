@@ -1,6 +1,6 @@
 """Script containing utility functions for training and evaluating RL models."""
 
-from circle_environment import CircleEnv
+from environment import CircleEnv
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime
@@ -60,7 +60,7 @@ def _run_training(*, env, log, model, n_steps):
                 log.wandb_run.log_artifact(art)
         except Exception:
             pass
-        
+
         log.mark_failed(e)
         raise
     finally:

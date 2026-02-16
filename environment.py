@@ -2,7 +2,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from collections import deque, Counter
-from circle_simulation import Simulation
+from simulation import Simulation
 from vehicle import Vehicle
 from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider, Random_Data_Provider
