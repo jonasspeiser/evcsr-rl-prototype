@@ -1,19 +1,25 @@
+# python env and cache files
 __pycache__
+.venv
+
+# simulation state cache
 initial_state
 # map files
 map_data_aut_highway
-# tensorboard log files
-events.out.tfevents.*
-# debug log files
-*.log
-*.jsonl
-# model dumps
+
+# log and model directories
+models
+wandb
+# just to be sure: model dumps and log files
 *.zip
+*.log
+events.out.tfevents.*
 # benchmark files
 *.pstats
-# python venvs
-.venv
-evcsr_rl_prototype
+# Logged metrics
+metrics*.json
+# Visuals
+visuals
 
 # datasets
 datasets/asfinag_data/*
@@ -23,11 +29,3 @@ datasets/asfinag_data/*
 datasets/bast_data/2022_A_S.*
 
 datasets/obelis_data/df_lv.*
-
-
-# Logged metrics
-metrics*.json
-# Visuals
-visuals
-# wandb log files
-wandb
