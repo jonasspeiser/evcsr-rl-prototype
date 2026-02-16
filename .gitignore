@@ -4,7 +4,9 @@ initial_state
 map_data_aut_highway
 # tensorboard log files
 events.out.tfevents.*
+# debug log files
 *.log
+*.jsonl
 # model dumps
 *.zip
 # benchmark files
