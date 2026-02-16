@@ -41,12 +41,13 @@ def _run_training(*, env, log, model, n_steps):
         try:
             # Ensure that the model is saved even if an error occurs during training
             model.save(log.model_save_path)
-        except Exception:
+        except Exception as e2:
             # If saving fails, skip it to avoid masking the original exception
-            pass
+            print(f"Error saving model after exception: {e2}")
+            
         # dump crash bundle for debugging (ring buffer log + environment snapshot)
         try:
-            bundle = log.deump_crash_bundle(
+            bundle = log.dump_crash_bundle(
                 env_snapshot=env.get_snapshot(), # TODO: implement
                 exc=e,
                 context={"n_steps": n_steps}
@@ -58,8 +59,9 @@ def _run_training(*, env, log, model, n_steps):
                 art.add_file(bundle["snapshot"])
                 art.add_file(bundle["error"])
                 log.wandb_run.log_artifact(art)
-        except Exception:
-            pass
+        except Exception as e3:
+            # If saving fails, skip it to avoid masking the original exception
+            print(f"Error dumping crash bundle: {e3}")
 
         log.mark_failed(e)
         raise
