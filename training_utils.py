@@ -44,6 +44,23 @@ def _run_training(*, env, log, model, n_steps):
         except Exception:
             # If saving fails, skip it to avoid masking the original exception
             pass
+        # dump crash bundle for debugging (ring buffer log + environment snapshot)
+        try:
+            bundle = log.deump_crash_bundle(
+                env_snapshot=env.get_snapshot(), # TODO: implement
+                exc=e,
+                context={"n_steps": n_steps}
+            )
+            if bundle and log.wandb_run is not None:
+                import wandb
+                art = wandb.Artifact(name=f"crash_bundle_{log.wandb_run.id}", type="debug")
+                art.add_file(bundle["logs"])
+                art.add_file(bundle["snapshot"])
+                art.add_file(bundle["error"])
+                log.wandb_run.log_artifact(art)
+        except Exception:
+            pass
+        
         log.mark_failed(e)
         raise
     finally:

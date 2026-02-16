@@ -185,46 +185,7 @@ class CircleEnv(gym.Env):
         for vehicle_id, vehicle in self.vehicles.items():
             info[vehicle_id] = vehicle.get_info()
         return info
-
-    def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
-        """
-        Reset the environment and simulation for a new episode.
-        Returns: The observation of the initial state
-        """
-        logger.debug("Resetting environment")
-        super().reset(seed=seed) # needed for api compliance
-        
-        if seed:
-            self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
-        self.simulation.reset()
-        self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_mev_ids()
-        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
-        # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
-        Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
-        # Re-create the vehicles dictionary in case new vehicles were spawned.
-        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
-
-        # Additional attributes for managing charging requests and logging
-        self.charging_request_queue = deque()
-        self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
-        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        self.low_battery_ids = []
-        
-        if self.non_member_vehicles:
-            self._add_non_member_vehicles()
-
-        # Wait until a charging request is generated.
-        while self.active_charging_request_vehicle_id is None:
-            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
-            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
-            self._check_for_charging_request(newly_spawned_ids)
-            self.simulation.step()
-        
-        observation = self._update_and_get_observation()
-        info = self._get_info()
-        logger.debug(f"Reset observation: {observation}")
-        return observation, info
+    
 
     def _update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
         """Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step."""
@@ -283,6 +244,106 @@ class CircleEnv(gym.Env):
                 new_low_battery_ids.append(vehicle_id)
                 self.low_battery_ids.append(vehicle_id)
         return new_low_battery_ids
+    
+    
+    def get_snapshot(self, *, max_vehicles: int = 200) -> dict:
+        """
+        Minimal, JSON-serializable snapshot of env state for crash debugging.
+        Aim: SMALL and high-signal (NO huge routes, raw SUMO objects, etc.)
+        """
+        simulation_step = None
+        try:
+            simulation_step = self.simulation.get_current_time_step()
+        except Exception:
+            pass
+
+        vehicles_summary = {}
+        try:
+            items = list(self.vehicles.items())[:max_vehicles]
+            for vid, v in items:
+                vehicles_summary[str(vid)] = {
+                    "arrived": bool(getattr(v, "arrived", False)),
+                    "empty": bool(getattr(v, "empty", False)),
+                    "relative_battery_soc": getattr(v, "relative_battery_soc", None),
+                    "waiting_time": getattr(v, "waiting_time", None),
+                    "departure_time": getattr(v, "departure_time", None),
+                    "arrival_time": getattr(v, "arrival_time", None),
+                }
+        except Exception:
+            vehicles_summary = {"error": "failed to summarize vehicles"}
+
+        open_charging_requests = []
+        try:
+            open_charging_requests = list(self.charging_request_queue)
+        except Exception:
+            pass
+
+        snap = {
+            "env": {
+                "class": type(self).__name__,
+                "render_mode": self.render_mode,
+                "reward_strategy": type(self.reward_strategy).__name__,
+                "vehicles_to_spawn": self.vehicles_to_spawn,
+                "non_member_vehicles": self.non_member_vehicles,
+                "observation_sampling_rate": self.observation_sampling_rate,
+                "truncate_after_n_simulation_steps": self.truncate_after_n_simulation_steps,
+            },
+            "simulation": {
+                "sim_step": simulation_step,
+            },
+            "charging": {
+                "active_request_vehicle_id": self.active_charging_request_vehicle_id,
+                "queue_len": len(open_charging_requests),
+                "queue_head": open_charging_requests[0] if open_charging_requests else None,
+                "queue_tail": open_charging_requests[-1] if open_charging_requests else None,
+            },
+            "vehicles": vehicles_summary,
+            "counters": {
+                "charging_stops_per_episode_counter": dict(getattr(self, "charging_stops_per_episode_counter", {})),
+                "low_battery_ids": list(getattr(self, "low_battery_ids", [])),
+            }
+        }
+        return snap
+
+    def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
+        """
+        Reset the environment and simulation for a new episode.
+        Returns: The observation of the initial state
+        """
+        logger.debug("Resetting environment")
+        super().reset(seed=seed) # needed for api compliance
+        
+        if seed:
+            self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
+        self.simulation.reset()
+        self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
+        self.vehicle_ids = self.simulation.get_all_mev_ids()
+        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
+        # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
+        Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
+        # Re-create the vehicles dictionary in case new vehicles were spawned.
+        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
+
+        # Additional attributes for managing charging requests and logging
+        self.charging_request_queue = deque()
+        self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
+        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+        self.low_battery_ids = []
+        
+        if self.non_member_vehicles:
+            self._add_non_member_vehicles()
+
+        # Wait until a charging request is generated.
+        while self.active_charging_request_vehicle_id is None:
+            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
+            self._check_for_charging_request(newly_spawned_ids)
+            self.simulation.step()
+        
+        observation = self._update_and_get_observation()
+        info = self._get_info()
+        logger.debug(f"Reset observation: {observation}")
+        return observation, info
 
     def step(self, action):
         """
