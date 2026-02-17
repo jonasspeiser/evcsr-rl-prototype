@@ -489,7 +489,7 @@ class CircleEnv(gym.Env):
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        self.low_battery_ids = []
+        self.low_battery_ids = set()
         
         if self.non_member_vehicles:
             self._add_non_member_vehicles()
