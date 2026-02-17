@@ -40,6 +40,7 @@ def write_all_routes_json(net_file_path: str, output_path: str):
     """
     Writes all possible edge-to-edge routes in the network to a JSON file.
     This includes all pairs of edges, excluding routes that start and end on the same edge.
+    Only includes routes that are actually reachable.
     """
 
     print(f"Writing all edge-to-edge routes to JSON from {net_file_path}...")
@@ -55,20 +56,28 @@ def write_all_routes_json(net_file_path: str, output_path: str):
             if from_edge.getID() == to_edge.getID():
                 continue
             try:
-                path_edges = net.getShortestPath(from_edge, to_edge)[0]
-                if not path_edges:
+                # Use getShortestPath to check if route is reachable
+                path_result = net.getShortestPath(from_edge, to_edge)
+                if not path_result or not path_result[0]:
                     continue
+                    
+                path_edges = path_result[0]
                 route_ids = [e.getID() for e in path_edges]
                 route_length = sum(e.getLength() for e in path_edges)
-                all_routes.append({
-                    "from": from_edge.getID(),
-                    "to": to_edge.getID(),
-                    "length": round(route_length, 2),
-                    "route": route_ids
-                })
-                route_count += 1
-            except Exception:
-                continue  # skip unreachable pairs
+                
+                # Additional validation: ensure the route is actually valid
+                if route_length > 0:
+                    all_routes.append({
+                        "from": from_edge.getID(),
+                        "to": to_edge.getID(),
+                        "length": round(route_length, 2),
+                        "route": route_ids
+                    })
+                    route_count += 1
+            except Exception as e:
+                # Skip unreachable pairs
+                print(f"Skipping route from {from_edge.getID()} to {to_edge.getID()}: {e}")
+                continue
 
     with open(output_path, "w") as f:
         json.dump(all_routes, f, indent=2)
@@ -92,6 +101,51 @@ def get_all_routes(sumo_config_path_stub: str) -> dict:
         with open(routes_file_path, "r") as f:
             all_routes = json.load(f)
     return all_routes
+
+def write_all_distances_json(net_file_path: str, output_path: str):
+    """
+    Writes all possible edge-to-edge distances in the network to a JSON file.
+    This includes all pairs of edges, excluding distances that start and end on the same edge.
+    Only includes distances that are actually reachable.
+    """
+
+    print(f"Writing all edge-to-edge distances to JSON from {net_file_path}...")
+
+    net = readNet(net_file_path)
+    edges = net.getEdges()
+
+    all_distances = {}
+    distance_count = 0
+
+    for from_edge in edges:
+        for to_edge in edges:
+            if from_edge.getID() == to_edge.getID():
+                continue
+            try:
+                # Use getShortestPath to check if distance is reachable
+                path_result = net.getShortestPath(from_edge, to_edge)
+                if not path_result or not path_result[0]:
+                    continue
+
+                path_edges = path_result[0]
+                route_length = sum(e.getLength() for e in path_edges)
+
+                # Additional validation: ensure the distance is actually valid
+                if route_length > 0:
+                    if from_edge.getID() not in all_distances:
+                        all_distances[from_edge.getID()] = {}
+                    all_distances[from_edge.getID()][to_edge.getID()] = round(route_length, 2)
+                    distance_count += 1
+            except Exception as e:
+                # Skip unreachable pairs
+                print(f"Skipping distance from {from_edge.getID()} to {to_edge.getID()}: {e}")
+                continue
+
+    with open(output_path, "w") as f:
+        json.dump(all_distances, f, indent=2)
+
+    print(f"Wrote {distance_count} valid distances to {output_path}")
+    return all_distances
 
 def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     """
@@ -337,6 +391,11 @@ if __name__ == "__main__":
         net_file_path=f"{map_path_stub}.net.xml",
         output_path=f"{map_path_stub}.all_routes.json"
         )
+
+    write_all_distances_json(
+        net_file_path=f"{map_path_stub}.net.xml",
+        output_path=f"{map_path_stub}.all_distances.json"
+    )
 
     if test_generated_files:
         generate_test_routes(map_path_stub)

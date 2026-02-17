@@ -4,7 +4,7 @@ __pycache__
 
 # simulation state cache
 initial_state
-# map files
+# large map files
 map_data_aut_highway
 
 # log and model directories

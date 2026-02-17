@@ -1,6 +1,10 @@
 import random
 import datetime
 import json
+import logging
+
+# configure logging
+logger = logging.getLogger("rl.environment.scenario_generator")
 
 
 DEFAULT_BATTERY_MIN = 200
@@ -96,10 +100,26 @@ class ScenarioGenerator():
                     "route": a list of edge IDs
                 }, ...]
         """
-        if len(routes_list) < amount:
-            raise ValueError("Not enough routes available in routes_list.")
+        # Filter routes to only include those starting from main highway edges (not charging station edges)
+        # This ensures vehicles start on the main highway and travel meaningful distances
+        main_highway_routes = [route for route in routes_list 
+                              if route["from"].startswith("e") and route["from"] != route["to"]
+                              and route.get("length", 0) > 10000]  # Filter for routes longer than 10km
         
-        selected_routes = random.sample(routes_list, amount)
+        if len(main_highway_routes) < amount:
+            logger.warning(f"Not enough long highway routes available. Requested {amount}, but only {len(main_highway_routes)} highway routes available. Using all available routes as fallback.")
+            # Fallback to all valid routes if not enough highway routes
+            valid_routes = [route for route in routes_list if route.get("length", 0) > 0]
+            filtered_routes = valid_routes
+        else:
+            filtered_routes = main_highway_routes
+        
+        if len(filtered_routes) < amount:
+            # If still not enough, take what we have and log a warning
+            logger.warning(f"Using {len(filtered_routes)} routes instead of requested {amount}")
+            amount = len(filtered_routes)
+            
+        selected_routes = random.sample(filtered_routes, amount)
         routes_dict = {f"trip{i}": [item["from"], item["to"]] for i, item in enumerate(selected_routes)}
         return routes_dict
 
@@ -120,18 +140,20 @@ class ScenarioGenerator():
         return routes_dict
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
-        """The default implementation returns a list of 0s for each vehicle, meaning all vehicles start at time 0."""
-        return [0] * n_vehicles
+        """The default implementation always returns an empty list."""
+        return []
     
     def _select_depart_time(self, depart_time_iter):
-        """ Selects the next departure time from a predefined list of departure times. Returns None if the list is exhausted. """
-        return next(depart_time_iter, None)
+        """The default implementation returns always 0."""
+        return 0
 
     def generate_vehicles(self, n_vehicles, routes_list, start_soc_bounds=(DEFAULT_BATTERY_MIN, DEFAULT_BATTERY_MAX), scenario_id=None):
         """
         Params:
             n_vehicles (int): The amount of vehicles that should be generated
             routes_list (List): A list including all available route ids
+        Returns:
+            vehicles_dict (dict): A dictionary with all generated vehicles and their attributes.
         """
         depart_time_iter = iter(self._get_depart_time_list(n_vehicles, scenario_id)) # initialize an iterator for depart times
 
