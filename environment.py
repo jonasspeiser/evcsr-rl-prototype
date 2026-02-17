@@ -250,55 +250,6 @@ class CircleEnv(gym.Env):
     def _reached_max_simulation_steps(self):
         return self.simulation.get_current_time_step() > self.truncate_after_n_simulation_steps
 
-    def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
-        """
-        Reset the environment and simulation for a new episode.
-
-        Args:
-            seed (int, optional): The random seed to use for reproducibility.
-            options (dict, optional): Additional options for reset.
-
-        Returns:
-            tuple: The observation of the initial state and additional info.
-        """
-        logger.debug("Resetting environment")
-        super().reset(seed=seed) # needed for api compliance
-        
-        if seed:
-            self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
-        self.simulation.reset()
-        self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_mev_ids()
-        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
-        # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
-        Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
-        # Re-create the vehicles dictionary in case new vehicles were spawned.
-        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
-
-        # Additional attributes for managing charging requests and logging
-        self.charging_request_queue = deque()
-        self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
-        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
-        self.low_battery_ids = set()
-        
-        if self.non_member_vehicles:
-            self._add_non_member_vehicles()
-
-        # Wait until a charging request is generated.
-        while self.active_charging_request_vehicle_id is None:
-            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
-            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
-            self._check_for_charging_request(newly_spawned_ids)
-            self.simulation.step()
-            if self._reached_max_simulation_steps():
-                logger.warning("Reached maximum simulation steps without a charging request being generated. Truncating episode.")
-                break
-        
-        observation = self._update_and_get_observation()
-        info = self._get_info()
-        logger.debug(f"Reset observation: {observation}")
-        return observation, info
-
     def _update_vehicle_times(self, newly_spawned_ids, newly_arrived_ids):
         """
         Stores the actual departure and arrival times for all vehicles which arrived at destination during the current simulation step.
@@ -469,7 +420,13 @@ class CircleEnv(gym.Env):
     def reset(self, seed=None, options=None): # Later: add possibility to set seed by passing it as an argument `env.reset(seed=<desired seed>)`
         """
         Reset the environment and simulation for a new episode.
-        Returns: The observation of the initial state
+
+        Args:
+            seed (int, optional): The random seed to use for reproducibility.
+            options (dict, optional): Additional options for reset.
+
+        Returns:
+            tuple: The observation of the initial state and additional info.      
         """
         logger.debug("Resetting environment")
         super().reset(seed=seed) # needed for api compliance
@@ -500,6 +457,9 @@ class CircleEnv(gym.Env):
             self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids=None)
             self._check_for_charging_request(newly_spawned_ids)
             self.simulation.step()
+            if self._reached_max_simulation_steps():
+                logger.warning("Reached maximum simulation steps without a charging request being generated. Truncating episode.")
+                break
         
         observation = self._update_and_get_observation()
         info = self._get_info()
