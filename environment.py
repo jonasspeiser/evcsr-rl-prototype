@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle
-from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
+from reward_strategies import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider, Random_Data_Provider
 import os
 
