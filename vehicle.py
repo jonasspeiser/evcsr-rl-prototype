@@ -15,6 +15,7 @@ class Vehicle:
         self.vehicle_id = vehicle_id
         self.simulation = simulation
         self.last_action = -1
+        self.spawned = False
         self.arrived = False
         self.empty = False
         self.departure_time = None
@@ -32,7 +33,6 @@ class Vehicle:
             return
         self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)
         self.relative_battery_soc = self.battery_soc / self.max_battery_capacity
-        # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
     
     def update_from_state(self, state):
         """
@@ -48,6 +48,7 @@ class Vehicle:
             self.battery_soc = state.get("battery_soc")
             self.distance_to_cs = state.get("distance_to_cs")
             self.distance_to_destination = state.get("distance_to_destination")
+            self.spawned = True
 
     def get_observation(self, is_active=False):
         """

@@ -262,8 +262,10 @@ class CircleEnv(gym.Env):
             items = list(self.vehicles.items())[:max_vehicles]
             for vid, v in items:
                 vehicles_summary[str(vid)] = {
+                    "spawned": bool(getattr(v, "spawned", False)),
                     "arrived": bool(getattr(v, "arrived", False)),
                     "empty": bool(getattr(v, "empty", False)),
+                    "battery_soc": getattr(v, "battery_soc", None),
                     "relative_battery_soc": getattr(v, "relative_battery_soc", None),
                     "waiting_time": getattr(v, "waiting_time", None),
                     "departure_time": getattr(v, "departure_time", None),
