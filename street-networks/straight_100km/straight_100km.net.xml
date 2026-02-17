@@ -4,13 +4,13 @@
 <configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/netconvertConfiguration.xsd">
 
     <input>
-        <node-files value="./maps/straight_100km/straight_100km.nod.xml"/>
-        <edge-files value="./maps/straight_100km/straight_100km.edg.xml"/>
-        <type-files value="./maps/straight_100km/straight_100km.typ.xml"/>
+        <node-files value="./street-networks/straight_100km/straight_100km.nod.xml"/>
+        <edge-files value="./street-networks/straight_100km/straight_100km.edg.xml"/>
+        <type-files value="./street-networks/straight_100km/straight_100km.typ.xml"/>
     </input>
 
     <output>
-        <output-file value="./maps/straight_100km/straight_100km.net.xml"/>
+        <output-file value="./street-networks/straight_100km/straight_100km.net.xml"/>
     </output>
 
     <junctions>

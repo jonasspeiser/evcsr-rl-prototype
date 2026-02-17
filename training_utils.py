@@ -93,7 +93,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
     env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
@@ -102,7 +102,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
-        map=map,
+        street_network=street_network,
         n_vehicles=n_vehicles,
         n_steps=n_steps,
         mode="training",
@@ -119,7 +119,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None, wandb_project=None):
+def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
     env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
@@ -128,7 +128,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, 
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
-        map=map,
+        street_network=street_network,
         n_vehicles=n_vehicles,
         n_steps=n_steps,
         mode="training",
@@ -142,7 +142,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, 
     model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
     """
     Returns:
         The file path of the evaluation metrics file (str).
@@ -153,7 +153,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_veh
         "algorithm": algorithm,
         "version_tag": version_tag,
         "reward_strategy": reward_strategy,
-        "map": map,
+        "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_episodes": n_episodes,
         "random_seed": random_seed
@@ -165,7 +165,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_veh
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
-        map=map,
+        street_network=street_network,
         n_vehicles=n_vehicles,
         n_steps=None,
         mode="evaluation",
