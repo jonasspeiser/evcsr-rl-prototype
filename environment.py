@@ -233,13 +233,13 @@ class CircleEnv(gym.Env):
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         new_low_battery_ids = []
         for vehicle_id, vehicle in self.vehicles.items():
-            relative_battery_soc = vehicle.relative_battery_soc
-            if relative_battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
+            
+            if vehicle.spawned is False or vehicle.relative_battery_soc is None: # i.e. if the vehicle did not spawn in the simulation yet or despawned already
                 continue
             if vehicle_id in self.low_battery_ids and vehicle_id in just_charged_ids:
                 self.low_battery_ids.remove(vehicle_id)
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
-            if relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
+            if vehicle.relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
                 logger.info(f"{vehicle_id}: low battery")
                 new_low_battery_ids.append(vehicle_id)
                 self.low_battery_ids.append(vehicle_id)
