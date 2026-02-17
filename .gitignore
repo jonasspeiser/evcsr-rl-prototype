@@ -1,6 +1,7 @@
 # python env and cache files
 __pycache__
 .venv
+.vscode
 
 # simulation state cache
 initial_state
@@ -8,7 +9,7 @@ initial_state
 map_data_aut_highway
 
 # log and model directories
-models
+runs
 wandb
 # just to be sure: model dumps and log files
 *.zip

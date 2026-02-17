@@ -149,7 +149,7 @@ class CustomTensorboardCallback(BaseCallback):
 @dataclass
 class RunLogging:
     """Orchestrator and Data class to hold logging-related objects for a training or evaluation run."""
-    model_dir: str
+    run_dir: str
     model_save_path: str
     callback: BaseCallback | CallbackList  # SB3 callback (BaseCallback or CallbackList)
     writer: Optional[object] = None  # SummaryWriter when evaluating
@@ -161,7 +161,7 @@ class RunLogging:
     def _dump_crash_bundle(self, env_snapshot: dict, exc: BaseException, context: dict | None = None) -> Optional[dict]:
         if self.ring is None:
             return None
-        out_dir = os.path.join(self.model_dir, "debug")
+        out_dir = os.path.join(self.run_dir, "debug")
         return _dump_crash_bundle_from_ring(
             ring=self.ring,
             out_dir=out_dir,
@@ -274,9 +274,9 @@ def _setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, tra
     new_model_id = f"{current_time}_{version_tag}_{reward_strategy}_{map}_{algorithm}"
     # if a model path is given, i.e. an existing model is evaluated or trained further
     if model_load_path is not None:
-        current_model_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
+        current_run_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
     else:
-        current_model_dir = new_model_id
+        current_run_dir = new_model_id
     
     # Set up non existing directories
     match execution_context:
@@ -287,12 +287,12 @@ def _setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, tra
         case _:
             raise ValueError(f"Invalid execution context {execution_context}. Must be 'local' or 'colab'.")
 
-    model_dir = f"{root}/models/{current_model_dir}"
-    log_dir = f"{model_dir}/{training_or_evaluation}"
-    os.makedirs(model_dir, exist_ok=True)
+    run_dir = f"{root}/runs/{current_run_dir}"
+    log_dir = f"{run_dir}/{training_or_evaluation}"
+    os.makedirs(run_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
     
-    model_save_path = f"{model_dir}/{new_model_id}.zip"
+    model_save_path = f"{run_dir}/{new_model_id}.zip"
     py_log_path = f"{log_dir}/{log_id}.jsonl"
     console_log_level = _get_log_level(training_or_evaluation)
 
@@ -301,7 +301,7 @@ def _setup_logging(algorithm, version_tag, reward_strategy, map, n_vehicles, tra
         console_log_level=console_log_level,
         ring_capacity=2000,   
     )
-    return model_dir, model_save_path, resolved_log_path, ring
+    return run_dir, model_save_path, resolved_log_path, ring
 
 def _setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
     import wandb
@@ -419,7 +419,7 @@ def setup_run_logging(
     wandb_project: str | None = None,
 ):
     # path + python logging setup
-    model_dir, model_save_path, py_log_path, ring = _setup_logging(
+    run_dir, model_save_path, py_log_path, ring = _setup_logging(
         algorithm, version_tag, reward_strategy, map, n_vehicles,
         mode, model_load_path, execution_context=execution_context
     )
@@ -432,7 +432,7 @@ def setup_run_logging(
     writer = None
     if mode == "evaluation":
         from torch.utils.tensorboard import SummaryWriter
-        writer = SummaryWriter(log_dir=f"{model_dir}/evaluation")
+        writer = SummaryWriter(log_dir=f"{run_dir}/evaluation")
         callback = CustomTensorboardCallback(writer=writer)
 
     # wandb setup (optional)
@@ -455,10 +455,10 @@ def setup_run_logging(
         # ALTERNATIVE WandbCallback instead of CustomTensorboardCallback's internal logging (commented out since it doesn't support my custom metrics and would require more refactoring):
         # from stable_baselines3.common.callbacks import CallbackList
         # from wandb.integration.sb3 import WandbCallback
-        # callback = CallbackList([callback, WandbCallback(model_save_path=f"{model_dir}/wandb_models", verbose=2)])
+        # callback = CallbackList([callback, WandbCallback(model_save_path=f"{run_dir}/wandb_models", verbose=2)])
 
     return RunLogging(
-        model_dir=model_dir,
+        run_dir=run_dir,
         model_save_path=model_save_path,
         callback=callback,
         writer=writer,

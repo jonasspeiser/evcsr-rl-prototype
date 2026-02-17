@@ -116,7 +116,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, map, 
     algorithm_class = SB3_ALGOS.get(algorithm)
     if algorithm_class is None:
         raise ValueError(f"Invalid model type for training: {algorithm}")
-    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.model_dir)
+    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
 def further_train_model(scenario, algorithm, version_tag, reward_strategy, map, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None, wandb_project=None):
@@ -183,7 +183,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, map, n_veh
     try:
         metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=log.callback, metadata=metadata, random_seed=random_seed)
         # print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
-        evaluation_path = f"{log.model_dir}/evaluation/metrics{current_time}.json"
+        evaluation_path = f"{log.run_dir}/evaluation/metrics{current_time}.json"
         _dump_to_file(metrics_dict, evaluation_path)
         return evaluation_path
 
