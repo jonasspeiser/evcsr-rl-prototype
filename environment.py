@@ -355,7 +355,103 @@ class CircleEnv(gym.Env):
                 self.low_battery_ids.add(vehicle_id)
         return new_low_battery_ids
     
-    
+    def _collect_vehicle_status_updates(self):
+        """Collect all vehicle status updates from simulation - POTENTIAL BOTTLENECK."""
+        logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
+        
+        # Get vehicle status from simulation - these are likely expensive TraCI calls
+        newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+        newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
+        newly_removed_ids = self.simulation.get_removed_vehicle_ids()
+        newly_despawned_ids = newly_arrived_ids | newly_removed_ids
+        charging_ids = self.simulation.get_charging_vehicle_ids()
+        
+        if newly_despawned_ids:
+            logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
+
+        # Update vehicles' arrival status
+        for vid in newly_arrived_ids:
+            if vid in self.vehicles:
+                self.vehicles[vid].arrived = True
+
+        # Update vehicles' battery soc
+        for vid, vehicle in self.vehicles.items():
+            if not vehicle.arrived and not vehicle.empty:
+                vehicle.fetch_and_update_battery_values()
+
+        # Update vehicle times if needed
+        if newly_spawned_ids or newly_arrived_ids:
+            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
+
+        return {
+            'newly_spawned_ids': newly_spawned_ids,
+            'newly_arrived_ids': newly_arrived_ids,
+            'newly_removed_ids': newly_removed_ids,
+            'newly_despawned_ids': newly_despawned_ids,
+            'charging_ids': charging_ids
+        }
+
+    def _process_initial_action(self, action):
+        """Process the action for the active charging request vehicle."""
+        if self.active_charging_request_vehicle_id in self.vehicles:
+            vehicle = self.vehicles[self.active_charging_request_vehicle_id]
+            action_penalty = vehicle.handle_action(action, self.reward_strategy)
+            return action_penalty
+        return 0
+
+    def _calculate_step_reward(self, vehicle_status):
+        """Calculate reward for the current simulation step."""
+        temp_reward = self.reward_strategy.calculate_step_reward(
+            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'])
+        logger.debug(f"Step reward from simulation: {temp_reward}")
+        return temp_reward
+
+    def _check_termination_conditions(self):
+        """Check if episode should terminate or truncate."""
+        all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
+        terminated = all_vehicles_at_destination
+        truncated = self._reached_max_simulation_steps()
+        
+        return {
+            'terminated': terminated,
+            'truncated': truncated,
+            'all_vehicles_at_destination': all_vehicles_at_destination
+        }
+
+    def _should_update_observation(self, loop_counter, charging_request, termination_status):
+        """Determine if observation should be updated this step."""
+        loop_just_started = (loop_counter == 0)
+        important_event_happened = charging_request or termination_status['terminated'] or termination_status['truncated']
+        some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
+        
+        return loop_just_started or some_simulation_time_passed or important_event_happened
+
+    def _update_observation_and_info(self):
+        """Update observation and info."""
+        self._update_accumulated_waiting_times()
+        observation = self._update_and_get_observation()
+        info = self._get_info()
+        logger.debug(f"Intermediate simulation state: {info}")
+        return observation, info
+
+    def _handle_episode_termination(self, termination_status):
+        """Handle end-of-episode calculations and logging."""
+        simulation_time = self.simulation.get_current_time_step()
+        
+        if termination_status['terminated']:
+            self._set_cumulated_waiting_time_per_episode_terminated()
+            self._set_global_ttt_only_terminated(simulation_time)
+            
+        self._set_charging_stops_per_episode_mean()
+        self._set_empty_vehicles_per_episode()
+        self._set_cumulated_waiting_time_per_episode()
+        self._set_final_simulation_time(simulation_time)
+        self._set_global_ttt(simulation_time)
+        
+        final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
+        logger.info(f"Final reward: {final_reward}")
+        return final_reward
+        
     def get_snapshot(self, *, max_vehicles: int = 200) -> dict:
         """
         Minimal, JSON-serializable snapshot of env state for crash debugging.
@@ -529,103 +625,6 @@ class CircleEnv(gym.Env):
                               termination_status['truncated'],
                               termination_status['all_vehicles_at_destination'])
         return observation, reward, termination_status['terminated'], termination_status['truncated'], info
-
-    def _collect_vehicle_status_updates(self):
-        """Collect all vehicle status updates from simulation - POTENTIAL BOTTLENECK."""
-        logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
-        
-        # Get vehicle status from simulation - these are likely expensive TraCI calls
-        newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
-        newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
-        newly_removed_ids = self.simulation.get_removed_vehicle_ids()
-        newly_despawned_ids = newly_arrived_ids | newly_removed_ids
-        charging_ids = self.simulation.get_charging_vehicle_ids()
-        
-        if newly_despawned_ids:
-            logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
-
-        # Update vehicles' arrival status
-        for vid in newly_arrived_ids:
-            if vid in self.vehicles:
-                self.vehicles[vid].arrived = True
-
-        # Update vehicles' battery soc
-        for vid, vehicle in self.vehicles.items():
-            if not vehicle.arrived and not vehicle.empty:
-                vehicle.fetch_and_update_battery_values()
-
-        # Update vehicle times if needed
-        if newly_spawned_ids or newly_arrived_ids:
-            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
-
-        return {
-            'newly_spawned_ids': newly_spawned_ids,
-            'newly_arrived_ids': newly_arrived_ids,
-            'newly_removed_ids': newly_removed_ids,
-            'newly_despawned_ids': newly_despawned_ids,
-            'charging_ids': charging_ids
-        }
-
-    def _process_initial_action(self, action):
-        """Process the action for the active charging request vehicle."""
-        if self.active_charging_request_vehicle_id in self.vehicles:
-            vehicle = self.vehicles[self.active_charging_request_vehicle_id]
-            action_penalty = vehicle.handle_action(action, self.reward_strategy)
-            return action_penalty
-        return 0
-
-    def _calculate_step_reward(self, vehicle_status):
-        """Calculate reward for the current simulation step."""
-        temp_reward = self.reward_strategy.calculate_step_reward(
-            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'])
-        logger.debug(f"Step reward from simulation: {temp_reward}")
-        return temp_reward
-
-    def _check_termination_conditions(self):
-        """Check if episode should terminate or truncate."""
-        all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
-        terminated = all_vehicles_at_destination
-        truncated = self._reached_max_simulation_steps()
-        
-        return {
-            'terminated': terminated,
-            'truncated': truncated,
-            'all_vehicles_at_destination': all_vehicles_at_destination
-        }
-
-    def _should_update_observation(self, loop_counter, charging_request, termination_status):
-        """Determine if observation should be updated this step."""
-        loop_just_started = (loop_counter == 0)
-        important_event_happened = charging_request or termination_status['terminated'] or termination_status['truncated']
-        some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
-        
-        return loop_just_started or some_simulation_time_passed or important_event_happened
-
-    def _update_observation_and_info(self):
-        """Update observation and info."""
-        self._update_accumulated_waiting_times()
-        observation = self._update_and_get_observation()
-        info = self._get_info()
-        logger.debug(f"Intermediate simulation state: {info}")
-        return observation, info
-
-    def _handle_episode_termination(self, termination_status):
-        """Handle end-of-episode calculations and logging."""
-        simulation_time = self.simulation.get_current_time_step()
-        
-        if termination_status['terminated']:
-            self._set_cumulated_waiting_time_per_episode_terminated()
-            self._set_global_ttt_only_terminated(simulation_time)
-            
-        self._set_charging_stops_per_episode_mean()
-        self._set_empty_vehicles_per_episode()
-        self._set_cumulated_waiting_time_per_episode()
-        self._set_final_simulation_time(simulation_time)
-        self._set_global_ttt(simulation_time)
-        
-        final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
-        logger.info(f"Final reward: {final_reward}")
-        return final_reward
 
     def render(self, mode='human'):
         """
