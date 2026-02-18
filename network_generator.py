@@ -11,8 +11,8 @@ import json
 # === CONFIGURATION ===
 test_generated_files = True  # Set to False to skip launching SUMO
 
-maps_dir = "maps"  # Directory to store generated files
-map_name = "straight_100km"  # Base name for the map files
+networks_dir = "street-networks"  # Directory to store generated files
+network_name = "straight_100km"  # Base name for the network files
 
 
 # === GENERAL CONFIGURATION ===
@@ -90,7 +90,7 @@ def get_all_routes(sumo_config_path_stub: str) -> dict:
     Returns all possible edge-to-edge routes in the network as a dictionary.
     This includes all pairs of edges, excluding routes that start and end on the same edge.
     Params:
-        sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "maps/straight_100km/straight_100km"
+        sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     routes_file_path = f"{sumo_config_path_stub}.all_routes.json"
     # if routes file doesn't exist, create it
@@ -144,7 +144,7 @@ def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     """
     Returns the maximum possible distance between a vehicle's potential start and destination in km.
     Params:
-        SUMO_CONFIG_STUB (str): Path stub for the SUMO configuration files (without file extension). E.g. "maps/straight_100km/straight_100km"
+        SUMO_CONFIG_STUB (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     config_file_path = f"{SUMO_CONFIG_STUB}.config.json"
     if not os.path.exists(config_file_path):
@@ -160,7 +160,7 @@ def get_start_soc_bounds(sumo_config_path_stub: str) -> tuple:
     """
     Returns the start SOC bounds for vehicles in the network.
     Params:
-        sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "maps/straight_100km/straight_100km"
+        sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     config_file_path = f"{sumo_config_path_stub}.config.json"
     if not os.path.exists(config_file_path):
@@ -172,7 +172,7 @@ def get_start_soc_bounds(sumo_config_path_stub: str) -> tuple:
     return tuple(config["start_soc_bounds"])
 
 
-def generate_test_routes(map_path_stub: str):
+def generate_test_routes(network_path_stub: str):
     """
     Generates a simple set of test routes for the highway network.
     This creates 5 vehicles with a detour for one vehicle at a charging station.
@@ -180,13 +180,13 @@ def generate_test_routes(map_path_stub: str):
     print("Generating test routes with sumolib...")
 
     # Load the generated network
-    net = readNet(f"{map_path_stub}.net.xml")
+    net = readNet(f"{network_path_stub}.net.xml")
 
     # Get all highway edges
     edges = [e for e in net.getEdges() if e.getID().startswith("e")]
     edge_dict = {e.getID(): e for e in edges}
 
-    with open(f"{map_path_stub}.rou.xml", "w") as f:
+    with open(f"{network_path_stub}.rou.xml", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<routes>\n')
         f.write('  <vType id="car" accel="1.5" decel="4.5" sigma="0.5" length="5" minGap="2.5" maxSpeed="33.33"/>\n')
 
@@ -227,13 +227,13 @@ def generate_test_routes(map_path_stub: str):
 
     print("Route file written.")
 
-    with open(f"{map_path_stub}.test.sumocfg", "w") as f:
+    with open(f"{network_path_stub}.test.sumocfg", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
         f.write('<configuration>\n')
         f.write('    <input>\n')
-        f.write(f'        <net-file value="{map_name}.net.xml"/>\n')
-        f.write(f'        <route-files value="{map_name}.rou.xml"/>\n')  # Optional file
-        f.write(f'        <additional-files value="{map_name}.add.xml"/>\n')
+        f.write(f'        <net-file value="{network_name}.net.xml"/>\n')
+        f.write(f'        <route-files value="{network_name}.rou.xml"/>\n')  # Optional file
+        f.write(f'        <additional-files value="{network_name}.add.xml"/>\n')
         f.write('    </input>\n\n')
         f.write('    <time>\n')
         f.write('        <begin value="0"/>\n')
@@ -247,26 +247,26 @@ def generate_test_routes(map_path_stub: str):
     print("Test routes generated and written to .rou.xml and .sumocfg files.")
 
 
-def start_sumo_gui(map_path_stub: str):
+def start_sumo_gui(network_path_stub: str):
     """
-    Launches the SUMO GUI with the specified map configuration.
+    Launches the SUMO GUI with the specified network configuration.
     """
     print("🚦 Launching SUMO GUI...")
-    subprocess.run(["sumo-gui", f"{map_path_stub}.test.sumocfg"])
+    subprocess.run(["sumo-gui", f"{network_path_stub}.test.sumocfg"])
 
 
 if __name__ == "__main__":
     # === FILE PATH SETUP ===
-    # Ensure the maps directory exists
-    map_working_dir = os.path.join(".", maps_dir, map_name) # Directory for the current map
-    if not os.path.exists(map_working_dir):
-        os.makedirs(map_working_dir)
-    map_path_stub = os.path.join(map_working_dir, map_name) # map path without extension
+    # Ensure the street-networks directory exists
+    network_working_dir = os.path.join(".", networks_dir, network_name) # Directory for the current network
+    if not os.path.exists(network_working_dir):
+        os.makedirs(network_working_dir)
+    network_path_stub = os.path.join(network_working_dir, network_name) # network path without extension
 
-    route_file = f"{map_path_stub}.rou.xml"  # Optional
+    route_file = f"{network_path_stub}.rou.xml"  # Optional
 
     # === NODES ===
-    with open(f"{map_path_stub}.nod.xml", "w") as f:
+    with open(f"{network_path_stub}.nod.xml", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<nodes>\n')
 
         # Main highway nodes
@@ -282,7 +282,7 @@ if __name__ == "__main__":
         f.write('</nodes>\n')
 
     # === EDGES ===
-    with open(f"{map_path_stub}.edg.xml", "w") as f:
+    with open(f"{network_path_stub}.edg.xml", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<edges>\n')
 
         # Main highway edges
@@ -315,7 +315,7 @@ if __name__ == "__main__":
         f.write('</edges>\n')
 
     # === TYPES ===
-    with open(f"{map_path_stub}.typ.xml", "w") as f:
+    with open(f"{network_path_stub}.typ.xml", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n<types>\n')
         f.write(f'  <type id="highway" numLanes="{lane_count}" speed="{highway_lane_speed}"/>\n')
         f.write(f'  <type id="charging" numLanes="1" speed="{charging_lane_speed}"/>\n')
@@ -323,7 +323,7 @@ if __name__ == "__main__":
 
 
     # === ADDITIONAL: Charging Stations ===
-    with open(f"{map_path_stub}.add.xml", "w") as f:
+    with open(f"{network_path_stub}.add.xml", "w") as f:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
         f.write(f'<!-- generated on {timestamp} by Python script -->\n\n')
@@ -345,21 +345,21 @@ if __name__ == "__main__":
     # === GENERATE NETWORK ===
     print("✔ Generating SUMO network...")
     os.system(
-        f'netconvert -n {map_path_stub}.nod.xml '
-        f'-e {map_path_stub}.edg.xml '
-        f'-t {map_path_stub}.typ.xml '
+        f'netconvert -n {network_path_stub}.nod.xml '
+        f'-e {network_path_stub}.edg.xml '
+        f'-t {network_path_stub}.typ.xml '
         f"--junctions.join true "  
-        f'-o {map_path_stub}.net.xml'
+        f'-o {network_path_stub}.net.xml'
     )
 
 
     # === GENERATE SUMOCFG ===
-    with open(f"{map_path_stub}.sumocfg", "w") as f:
+    with open(f"{network_path_stub}.sumocfg", "w") as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n\n')
         f.write('<configuration>\n')
         f.write('    <input>\n')
-        f.write(f'        <net-file value="{map_name}.net.xml"/>\n')
-        f.write(f'        <additional-files value="{map_name}.add.xml, ../../vehicle-models/soulEV65.add.xml"/>\n')
+        f.write(f'        <net-file value="{network_name}.net.xml"/>\n')
+        f.write(f'        <additional-files value="{network_name}.add.xml, ../../vehicle-models/soulEV65.add.xml"/>\n')
         f.write('    </input>\n\n')
         f.write('    <report>\n')
         f.write('        <verbose value="true"/>\n')
@@ -369,9 +369,9 @@ if __name__ == "__main__":
 
 
     # === GENERATE CONFIG FILE ===
-    with open(f"{map_path_stub}.config.json", "w") as f:
+    with open(f"{network_path_stub}.config.json", "w") as f:
         config = {
-            "map_name": map_name,
+            "network_name": network_name,
             "km_total": km_total,
             "max_possible_distance": max_possible_distance,
             "max_battery_capacity": max_battery_capacity,
@@ -381,8 +381,8 @@ if __name__ == "__main__":
 
     # === GENERATE ROUTE MATRIX FOR ANALYSIS ===
     write_all_routes_json(
-        net_file_path=f"{map_path_stub}.net.xml",
-        output_path=f"{map_path_stub}.all_routes.json"
+        net_file_path=f"{network_path_stub}.net.xml",
+        output_path=f"{network_path_stub}.all_routes.json"
         )
 
     write_all_distances_json(
@@ -391,7 +391,7 @@ if __name__ == "__main__":
     )
 
     if test_generated_files:
-        generate_test_routes(map_path_stub)
-        start_sumo_gui(map_path_stub)
+        generate_test_routes(network_path_stub)
+        start_sumo_gui(network_path_stub)
 
-    print("Network generation complete. Check the 'maps' directory for files.")
+    print("Network generation complete. Check the 'street-networks' directory for files.")

@@ -129,7 +129,7 @@ class ScenarioGenerator():
         Returns a dict mapping route_id (str) -> list_of_edge_ids (list of str).        
         Params:
             amount (int): The amount of routes that should be generated
-            edge_list (List): A list including all of the maps edges
+            edge_list (List): A list including all of the networks edges
             veh_type (str): Optional vehicle type ID to pass to findRoute (can be None).
         """
         routes_dict = {}

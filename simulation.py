@@ -21,7 +21,7 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
-SUMO_CONFIG_STUB = "./maps/straight_100km/straight_100km"
+SUMO_CONFIG_STUB = "./street-networks/straight_100km/straight_100km"
 SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
 DISTANCES_FILE = f"{SUMO_CONFIG_STUB}.all_distances.json"
 CHARGING_DURATION = 30 # charging duration in seconds
