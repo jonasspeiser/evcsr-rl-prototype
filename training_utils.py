@@ -1,6 +1,6 @@
 """Script containing utility functions for training and evaluating RL models."""
 
-from environment import CircleEnv
+from environment import CustomEnv
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime
@@ -95,7 +95,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
 
 def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
-    env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
     # setup logging
     log = setup_run_logging(
@@ -121,7 +121,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
 
 def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None, wandb_project=None):
     # initiate environment
-    env = CircleEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
     # setup logging
     log = setup_run_logging(
@@ -159,7 +159,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "random_seed": random_seed
     }
     # initiate environment
-    env = CircleEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
     # setup logging
     log = setup_run_logging(
         algorithm=algorithm,

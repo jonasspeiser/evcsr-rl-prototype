@@ -63,7 +63,7 @@ def main() -> int:
                     random_seed=None,
                 )
             except TypeError as e2:
-                if "CircleEnv.__init__() missing" in str(e2):
+                if "CustomEnv.__init__() missing" in str(e2):
                     return 125  # skip untestable commits
                 raise
 

@@ -15,7 +15,7 @@ logger = logging.getLogger("rl.environment")
 
 OBSERVATION_SPACE_SIZE = 5000 # The number of vehicles in the observation space. This is used to create a fixed-size observation space for all environments.
 # This allows for a consistent observation space size across different environment instances, even if the number of vehicles varies.
-class CircleEnv(gym.Env):
+class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
@@ -685,10 +685,10 @@ if __name__ == "__main__":
 
     def test_env():
         """
-        Test the CircleEnv environment using the stable_baselines3 environment checker.
+        Test the CustomEnv environment using the stable_baselines3 environment checker.
         """
         from stable_baselines3.common.env_checker import check_env
-        env = CircleEnv(scenario_generator="all_random")
+        env = CustomEnv(scenario_generator="all_random")
         check_env(env, skip_render_check=True)
         print("CHECKS PASSED")
         env.close()
@@ -700,7 +700,7 @@ if __name__ == "__main__":
         Args:
             random_seed (int, optional): The random seed for reproducibility.
         """
-        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
+        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
@@ -725,7 +725,7 @@ if __name__ == "__main__":
         Args:
             random_seed (int, optional): The random seed for reproducibility.
         """
-        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
+        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
