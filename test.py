@@ -35,14 +35,14 @@ def main() -> int:
                 scenario="all_random",
                 algorithm="PPO",
                 policy="MultiInputPolicy",
-                version_tag="v0.7.9",
+                version_tag="v0.8.0",
                 reward_strategy="basic",
                 street_network="straight100Test",
                 n_vehicles=2,
                 n_steps=1,
                 execution_context="local",
                 random_seed=None,
-                use_wandb=True, wandb_entity="evcs-rl", wandb_project="v0.7.9_straight100Test_PPO"
+                use_wandb=True, wandb_entity="evcs-rl", wandb_project="v0.8.0_straight100Test_PPO"
             )
         except TypeError as e:
             # if not is_signature_typeerror(e):
