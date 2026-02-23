@@ -21,5 +21,6 @@ dependencies = [
 dev = [
     "jupyter",
     "seaborn",
-    "wandb<1"
+    "wandb<1",
+    "snakeviz",
 ]
