@@ -103,10 +103,10 @@ uv run python main.py
 
 ---
 
-### Editing or changing the simulation map or scenario
-The underlying map and the simulated scenarios can be easily customized and switched out. This can be done by replacing the correspondant SUMO files (circle.net.xml, circle.add.xml, circle.sumocfg).
+### Editing or changing the simulation street network or scenario
+The underlying street network and the simulated scenarios can be easily customized and switched out. This can be done by replacing the correspondant SUMO files (circle.net.xml, circle.add.xml, circle.sumocfg).
 More information can be found here: [Link to SUMO documentation]
-In this way, the map with all its attributes as well as the number, position and specifica of charging stations can be changed.
+In this way, the street network with all its attributes as well as the number, position and specifica of charging stations can be changed.
 
 ## Overview
 
@@ -123,7 +123,7 @@ simulation.py
 ### Gymnasium Environment
 environment.py
 
-### Map/ Network Generator
+### Street Network Generator
 network_generator.py
 
 ### Scenario Generator

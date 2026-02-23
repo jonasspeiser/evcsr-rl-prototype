@@ -4,6 +4,7 @@ import sys
 if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
 import traci
+from traci import constants as tc
 from sumolib import checkBinary
 from collections import Counter
 from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
@@ -20,8 +21,9 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
-SUMO_CONFIG_STUB = "./maps/straight_100km/straight_100km"
+SUMO_CONFIG_STUB = "./street-networks/straight_100km/straight_100km"
 SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
+DISTANCES_FILE = f"{SUMO_CONFIG_STUB}.all_distances.json"
 CHARGING_DURATION = 30 # charging duration in seconds
 EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
 
@@ -98,6 +100,10 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 class Simulation():
 
     def __init__(self, scenario_generator, gui:bool=False, random_seed = None):
+        
+        with open(DISTANCES_FILE, "r") as f:
+            self.all_distances = json.load(f)
+
         if type(gui) is not bool:
             raise ValueError("gui must be a boolean")
         self.gui = gui
@@ -133,6 +139,21 @@ class Simulation():
         self.departure_counts = Counter()
         self.just_removed_vehicle_ids = set()
         traci.simulation.loadState("initial_state")
+        self._subscribe_to_simulation()
+        self.simulation_data = traci.simulation.getSubscriptionResults()
+        self.vehicle_data = None
+
+
+    def _subscribe_to_simulation(self):
+        """Subscribe to relevant simulation variables."""
+        traci.simulation.subscribe([
+            tc.VAR_MIN_EXPECTED_VEHICLES, 
+            tc.VAR_TIME,
+            tc.VAR_LOADED_VEHICLES_IDS,
+            tc.VAR_DEPARTED_VEHICLES_IDS,
+            tc.VAR_ARRIVED_VEHICLES_IDS,
+            tc.VAR_STOP_ENDING_VEHICLES_IDS,
+        ])
 
     def add_non_member_routes(self):
         """
@@ -183,9 +204,21 @@ class Simulation():
             traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"])
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
-            logger.info(f"Vehicle {vehicle_id} spawned with initial route: {vehicle['route']}")
-            self.added_vehicles.add(vehicle_id)      
-    
+            logger.info(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")
+            self.added_vehicles.add(vehicle_id)
+            self._subscribe_to_vehicle(vehicle_id)
+
+    def _subscribe_to_vehicle(self, vehicle_id):
+        """Helper function defining vehicle subscription to TraCI variables."""
+        traci.vehicle.subscribe(vehicle_id, [
+            tc.VAR_ROAD_ID, # Current edge ID
+            # tc.VAR_POSITION, # Current position (x, y)
+            tc.VAR_STOPSTATE, # Stop state (stopped, driving, etc.)
+            tc.VAR_DISTANCE, # Distance travelled since departure
+            tc.VAR_ACCUMULATED_WAITING_TIME, # Time the vehicle stood still (excl. planned stops)
+        ])
+        traci.vehicle.subscribeParameterWithKey(vehicle_id, "device.battery.actualBatteryCapacity") # Current SOC
+
     def _fetch_charging_stations(self):
         charging_station_ids = traci.chargingstation.getIDList()
         charging_stations = {}
@@ -209,34 +242,26 @@ class Simulation():
         Returns:
             str or None: The edge ID or None if not found.
         """
-        try:
-            vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
-        except traci.exceptions.TraCIException: 
+        data = self.vehicle_data.get(vehicle_id)
+        if data is None:
             logger.error(f"get_vehicle_edge: {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
-            return None       
-        if str(vehicle_lane) == "":
-            logger.debug(f"{vehicle_id} is not on a lane. It probably didn't spawn yet.")
             return None
-        vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        vehicle_edge = data.get(tc.VAR_ROAD_ID)
+        if not vehicle_edge: # None or ""
+            logger.debug(f"get_vehicle_edge: {vehicle_id} is not on a road. It probably didn't spawn yet.")
+            return None
         return vehicle_edge
+        # try:
+        #     vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
+        # except traci.exceptions.TraCIException: 
+        #     logger.error(f"get_vehicle_edge: {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+        #     return None       
+        # if str(vehicle_lane) == "":
+        #     logger.debug(f"{vehicle_id} is not on a lane. It probably didn't spawn yet.")
+        #     return None
+        # vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
+        # return vehicle_edge
 
-    def get_position_and_destination(self, vehicle_id):
-        """
-        Returns the current edge and destination for a vehicle.
-
-        Args:
-            vehicle_id (str): The ID of the vehicle.
-
-        Returns:
-            Tuple[str, str]: (current edge, destination)
-        """
-        vehicle_lane = traci.vehicle.getLaneID(vehicle_id)
-        try:
-            current_vehicle_edge = traci.lane.getEdgeID(vehicle_lane)
-        except traci.exceptions.TraCIException:
-            raise ValueError(f"Lane {vehicle_lane} not found, most likely vehicle {vehicle_id} does not exist in the simulation yet")
-        destination = self.get_vehicle_destination(vehicle_id)
-        return current_vehicle_edge, destination
 
     def reroute_for_charging(self, vehicle_id, cs_id):
         """
@@ -250,11 +275,14 @@ class Simulation():
             None
         """
         # get vehicle type, lane, edge, and destination
+        #TODO: Use subscription (low prio)
         v_type = traci.vehicle.getTypeID(vehicle_id)
-        current_vehicle_edge, destination = self.get_position_and_destination(vehicle_id)
+        current_vehicle_edge = self._get_vehicle_edge(vehicle_id)
+        destination = self.get_vehicle_destination(vehicle_id)
         cs_edge = self.charging_stations[cs_id]
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
+        #TODO: Use subscription (low prio)
         logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
 
         if dist_cs is None or dist_dest is None:
@@ -307,6 +335,7 @@ class Simulation():
             list: List of stops.
         """
         try:
+            #TODO: Use subscription (low prio)
             stops = traci.vehicle.getStops(vehicle_id)
             return stops
         except traci.exceptions.TraCIException:
@@ -358,18 +387,20 @@ class Simulation():
         """
         DISTANCE_THRESHOLD = 100 # the threshold under which the energy consumption calculation is deemed too unprecise
         CONSUMPTION_DEFAULT = 0.24 # the default value for energy consumption, used until the live-calculation is deemed precise enough
-        remaining_capacity = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-        energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.totalEnergyConsumed"))
-        distance_travelled = float(traci.vehicle.getDistance(vehicle_id))
+
+        distance_travelled = float(self.vehicle_data.get(vehicle_id, {}).get(tc.VAR_DISTANCE, 0))
         # Return None if remaining range can't be calculated (-> division by zero)
         if distance_travelled == 0:
             return None
         if distance_travelled < DISTANCE_THRESHOLD:
+            energy_consumed = None
             energy_consumption = CONSUMPTION_DEFAULT
         else:
+            energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.totalEnergyConsumed")) # cannot use subscription here because traci only allows to subscribe to one generic parameter at a time.
             energy_consumption = energy_consumed / distance_travelled
         # Get the energy consumption in Wh/km
         try:
+            remaining_capacity = self.get_battery_soc(vehicle_id)
             remaining_range_km = remaining_capacity / energy_consumption
             logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
             logger.debug(f"vehicle {vehicle_id}: Energy consumed: {energy_consumed}, distance travelled: {distance_travelled}, remaining capacity: {remaining_capacity}, energy consumption: {energy_consumption}")
@@ -438,10 +469,13 @@ class Simulation():
     def step(self):
         traci.simulationStep()
         self.just_removed_vehicle_ids = set()
-
+        self.vehicle_data = traci.vehicle.getAllSubscriptionResults()
+        self.simulation_data = traci.simulation.getSubscriptionResults()
 
     def active_vehicles_exist(self):
-        return traci.simulation.getMinExpectedNumber() > 0
+        expected_vehicles = self.simulation_data.get(tc.VAR_MIN_EXPECTED_VEHICLES, 0)
+        # traci_value = traci.simulation.getMinExpectedNumber()
+        return expected_vehicles > 0 
 
     def close(self):
         traci.close()
@@ -478,6 +512,7 @@ class Simulation():
         Returns:
             set: Set of online member vehicle IDs.
         """
+        #TODO: Use subscription (low prio)
         original_set = set(traci.vehicle.getIDList())
         return self._filter_set_for_member_evs(original_set)
 
@@ -491,7 +526,7 @@ class Simulation():
         Returns:
             set: Set of loaded member vehicle IDs.
         """
-        original_set = set(traci.simulation.getLoadedIDList())
+        original_set = set(self.simulation_data.get(tc.VAR_LOADED_VEHICLES_IDS, []))
         return self._filter_set_for_member_evs(original_set)
 
 
@@ -502,8 +537,8 @@ class Simulation():
         Returns:
             set: Set of spawned member vehicle IDs.
         """
-        original_set = set(traci.simulation.getDepartedIDList())
-        return self._filter_set_for_member_evs(original_set)
+        original_list = set(self.simulation_data.get(tc.VAR_DEPARTED_VEHICLES_IDS, []))
+        return self._filter_set_for_member_evs(original_list)
 
 
     def get_arrived_vehicle_ids(self):
@@ -513,7 +548,7 @@ class Simulation():
         Returns:
             set: Set of arrived member vehicle IDs.
         """
-        original_set = set(traci.simulation.getArrivedIDList())
+        original_set = set(self.simulation_data.get(tc.VAR_ARRIVED_VEHICLES_IDS, []))
         return self._filter_set_for_member_evs(original_set)
 
     def get_removed_vehicle_ids(self):
@@ -538,7 +573,7 @@ class Simulation():
 
         for station in charging_stations_ids:
             # Get vehicles stopped at this charging station
-            vehicles = traci.chargingstation.getVehicleIDs(station)
+            vehicles = traci.chargingstation.getVehicleIDs(station) # Note: Direct call, because it doesn't seem possible to get this value via traci subscription
             charging_vehicles.update(vehicles)
 
         original_set = charging_vehicles
@@ -552,7 +587,7 @@ class Simulation():
         Returns:
             set: Set of member vehicle IDs leaving a charging stop.
         """
-        original_set = set(traci.simulation.getStopEndingVehiclesIDList())
+        original_set = set(self.simulation_data.get(tc.VAR_STOP_ENDING_VEHICLES_IDS, []))
         return self._filter_set_for_member_evs(original_set)
 
     def get_vehicle_waiting_time(self, vehicle_id):
@@ -565,7 +600,7 @@ class Simulation():
         Returns:
             float: Accumulated waiting time in seconds.
         """
-        return traci.vehicle.getAccumulatedWaitingTime(vehicle_id)
+        return self.vehicle_data.get(vehicle_id, {}).get(tc.VAR_ACCUMULATED_WAITING_TIME)
     
 
     def _adapt_vehicle_color(self, vehicle_id, battery_soc):
@@ -603,7 +638,7 @@ class Simulation():
 
     def _calculate_distance(self, edgeID1, edgeID2):
         """
-        Returns the distance between the given edgeIDs. Returns None if edgeID2 is not reachable from edgeID1.
+        Returns the distance between the given edgeIDs. Returns 0 if edgeID1 == edgeID2, Returns None if edgeID2 is not reachable from edgeID1.
 
         Args:
             edgeID1 (str): The starting edge ID.
@@ -612,17 +647,16 @@ class Simulation():
         Returns:
             float or None: Distance in meters, or None if unreachable.
         """
-        # get distance from .all_distances.json if said file exists
-        distances_file = f"{SUMO_CONFIG_STUB}.all_distances.json"
-        if os.path.exists(distances_file):
-            with open(distances_file, "r") as f:
-                all_distances = json.load(f)
-                if edgeID1 in all_distances and edgeID2 in all_distances[edgeID1]:
-                    return all_distances[edgeID1][edgeID2]
-        # If not found, fall back to SUMO's distance calculation (slow!)
-        logger.warning(f"Distance from {edgeID1} to {edgeID2} not found in {distances_file}, falling back to SUMO's distance calculation (slow!)")  
-        distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
-        return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
+          
+        # Old way: Request distance from TraCI:
+        # distance = traci.simulation.getDistanceRoad(edgeID1=edgeID1, pos1=0, edgeID2=edgeID2, pos2=0, isDriving=True)
+        # return None if distance < 0 else distance # sumo returns a negative distance if edgeID2 is not reachable from edgeID1. 
+        
+        if edgeID1 == edgeID2:
+            return 0
+        if edgeID1 in self.all_distances and edgeID2 in self.all_distances[edgeID1]:
+            return self.all_distances[edgeID1][edgeID2]
+        return None # if not found in precomputed distances, return None to indicate unreachable
 
     def _get_distances_to_all_cs(self, vehicle_position) -> dict:
         """
@@ -654,18 +688,32 @@ class Simulation():
         Returns:
             float or None: Actual battery capacity, or None if not found.
         """
-        try:
-            battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-            logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
-            if self.gui:
-                self._adapt_vehicle_color(vehicle_id, battery_soc)
-            # stop vehicle if battery is empty
-            if battery_soc <= EMPTY_SOC:
-                self._simulate_empty_battery(vehicle_id)
-            return battery_soc
-        except traci.exceptions.TraCIException: 
+        data = self.vehicle_data.get(vehicle_id)
+        if data is None:
             logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
             return None
+        parameter_data = data.get(tc.VAR_PARAMETER_WITH_KEY, {})
+        battery_soc = float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None
+        logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
+        if self.gui:
+            self._adapt_vehicle_color(vehicle_id, battery_soc)
+        # stop vehicle if battery is empty
+        if battery_soc <= EMPTY_SOC:
+            self._simulate_empty_battery(vehicle_id)
+        return battery_soc
+        # WITH DIRECT TRACI CALLS:
+        # try:
+        #     battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
+        #     logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
+        #     if self.gui:
+        #         self._adapt_vehicle_color(vehicle_id, battery_soc)
+        #     # stop vehicle if battery is empty
+        #     if battery_soc <= EMPTY_SOC:
+        #         self._simulate_empty_battery(vehicle_id)
+        #     return battery_soc
+        # except traci.exceptions.TraCIException: 
+        #     logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+        #     return None
 
     def get_vehicle_state(self, vehicle_id):
         """
@@ -728,7 +776,7 @@ class Simulation():
     
     def get_state(self):
         """
-        Returns the state of all vehicles in the simulation.
+        Get the current simulation state. Returns the state of all vehicles in the simulation.
 
         Returns:
             dict: Mapping from vehicle ID to vehicle state dict.
@@ -745,11 +793,11 @@ class Simulation():
         Returns:
             float: Current simulation time step.
         """
-        return traci.simulation.getTime()
+        return self.simulation_data.get(tc.VAR_TIME, 0)
 
 if __name__ == "__main__":
 
-    simulation = Simulation(scenario_generator="BASt", gui=True)
+    simulation = Simulation(scenario_generator="BASt", gui=False)
 
     def _adapt_destination(vehicle_id, vehicle_state):
         """Routes the vehicles in circles"""
@@ -824,8 +872,8 @@ if __name__ == "__main__":
         # Set to keep track of vehicles in the simulation
         active_vehicles = set()
         # Subscribe to vehicle arrival and departure events
-        traci.simulation.subscribe([traci.constants.VAR_DEPARTED_VEHICLES_IDS, 
-                                    traci.constants.VAR_ARRIVED_VEHICLES_IDS])
+        traci.simulation.subscribe([tc.VAR_DEPARTED_VEHICLES_IDS, 
+                                    tc.VAR_ARRIVED_VEHICLES_IDS])
         
         for i in range(40000):
             # Get the current simulation step
@@ -835,14 +883,14 @@ if __name__ == "__main__":
             result = traci.simulation.getSubscriptionResults()
 
             # Check for new vehicles (spawned)
-            if result[traci.constants.VAR_DEPARTED_VEHICLES_IDS]:
-                for vehicle_id in result[traci.constants.VAR_DEPARTED_VEHICLES_IDS]:
+            if result[tc.VAR_DEPARTED_VEHICLES_IDS]:
+                for vehicle_id in result[tc.VAR_DEPARTED_VEHICLES_IDS]:
                     print(f"Step {current_step}: Vehicle {vehicle_id} spawned")
                     active_vehicles.add(vehicle_id)
 
             # Check for arrived vehicles (despawned)
-            if result[traci.constants.VAR_ARRIVED_VEHICLES_IDS]:
-                for vehicle_id in result[traci.constants.VAR_ARRIVED_VEHICLES_IDS]:
+            if result[tc.VAR_ARRIVED_VEHICLES_IDS]:
+                for vehicle_id in result[tc.VAR_ARRIVED_VEHICLES_IDS]:
                     print(f"Step {current_step}: Vehicle {vehicle_id} despawned")
                     active_vehicles.remove(vehicle_id)
             

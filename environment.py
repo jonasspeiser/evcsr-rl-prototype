@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle, get_padded_observation
-from rewards import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
+from reward_strategies import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from data_processing import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -15,7 +15,7 @@ logger = logging.getLogger("rl.environment")
 
 OBSERVATION_SPACE_SIZE = 5000 # The number of vehicles in the observation space. This is used to create a fixed-size observation space for all environments.
 # This allows for a consistent observation space size across different environment instances, even if the number of vehicles varies.
-class CircleEnv(gym.Env):
+class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
@@ -355,7 +355,103 @@ class CircleEnv(gym.Env):
                 self.low_battery_ids.add(vehicle_id)
         return new_low_battery_ids
     
-    
+    def _collect_vehicle_status_updates(self):
+        """Collect all vehicle status updates from simulation - POTENTIAL BOTTLENECK."""
+        logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
+        
+        # Get vehicle status from simulation - these are likely expensive TraCI calls
+        newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
+        newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
+        newly_removed_ids = self.simulation.get_removed_vehicle_ids()
+        newly_despawned_ids = newly_arrived_ids | newly_removed_ids
+        charging_ids = self.simulation.get_charging_vehicle_ids()
+        
+        if newly_despawned_ids:
+            logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
+
+        # Update vehicles' arrival status
+        for vid in newly_arrived_ids:
+            if vid in self.vehicles:
+                self.vehicles[vid].arrived = True
+
+        # Update vehicles' battery soc
+        for vid, vehicle in self.vehicles.items():
+            if not vehicle.arrived and not vehicle.empty:
+                vehicle.fetch_and_update_battery_values()
+
+        # Update vehicle times if needed
+        if newly_spawned_ids or newly_arrived_ids:
+            self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
+
+        return {
+            'newly_spawned_ids': newly_spawned_ids,
+            'newly_arrived_ids': newly_arrived_ids,
+            'newly_removed_ids': newly_removed_ids,
+            'newly_despawned_ids': newly_despawned_ids,
+            'charging_ids': charging_ids
+        }
+
+    def _process_initial_action(self, action):
+        """Process the action for the active charging request vehicle."""
+        if self.active_charging_request_vehicle_id in self.vehicles:
+            vehicle = self.vehicles[self.active_charging_request_vehicle_id]
+            action_penalty = vehicle.handle_action(action, self.reward_strategy)
+            return action_penalty
+        return 0
+
+    def _calculate_step_reward(self, vehicle_status):
+        """Calculate reward for the current simulation step."""
+        temp_reward = self.reward_strategy.calculate_step_reward(
+            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'])
+        logger.debug(f"Step reward from simulation: {temp_reward}")
+        return temp_reward
+
+    def _check_termination_conditions(self):
+        """Check if episode should terminate or truncate."""
+        all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
+        terminated = all_vehicles_at_destination
+        truncated = self._reached_max_simulation_steps()
+        
+        return {
+            'terminated': terminated,
+            'truncated': truncated,
+            'all_vehicles_at_destination': all_vehicles_at_destination
+        }
+
+    def _should_update_observation(self, loop_counter, charging_request, termination_status):
+        """Determine if observation should be updated this step."""
+        loop_just_started = (loop_counter == 0)
+        important_event_happened = charging_request or termination_status['terminated'] or termination_status['truncated']
+        some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
+        
+        return loop_just_started or some_simulation_time_passed or important_event_happened
+
+    def _update_observation_and_info(self):
+        """Update observation and info."""
+        self._update_accumulated_waiting_times()
+        observation = self._update_and_get_observation()
+        info = self._get_info()
+        logger.debug(f"Intermediate simulation state: {info}")
+        return observation, info
+
+    def _handle_episode_termination(self, termination_status):
+        """Handle end-of-episode calculations and logging."""
+        simulation_time = self.simulation.get_current_time_step()
+        
+        if termination_status['terminated']:
+            self._set_cumulated_waiting_time_per_episode_terminated()
+            self._set_global_ttt_only_terminated(simulation_time)
+            
+        self._set_charging_stops_per_episode_mean()
+        self._set_empty_vehicles_per_episode()
+        self._set_cumulated_waiting_time_per_episode()
+        self._set_final_simulation_time(simulation_time)
+        self._set_global_ttt(simulation_time)
+        
+        final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
+        logger.info(f"Final reward: {final_reward}")
+        return final_reward
+        
     def get_snapshot(self, *, max_vehicles: int = 200) -> dict:
         """
         Minimal, JSON-serializable snapshot of env state for crash debugging.
@@ -479,94 +575,56 @@ class CircleEnv(gym.Env):
         charging_request = False
         accumulated_reward = 0
         loop_counter = 0
+        observation = None
+        info = None
+        termination_status = None
 
         # loop through sumo-steps until the next vehicle goes online or a vehicle just finished charging
         while not charging_request:
-            logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
-            newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
-            newly_arrived_ids = self.simulation.get_arrived_vehicle_ids()
-            newly_removed_ids = self.simulation.get_removed_vehicle_ids()
-            newly_despawned_ids = newly_arrived_ids | newly_removed_ids
-            charging_ids = self.simulation.get_charging_vehicle_ids()
-            if newly_despawned_ids:
-                logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
+            # Collect vehicle status updates from simulation
+            vehicle_status = self._collect_vehicle_status_updates()
 
-            # Update vehicles’ arrival status.
-            for vid in newly_arrived_ids:
-                if vid in self.vehicles:
-                    self.vehicles[vid].arrived = True
+            # Process initial action (only on first loop iteration)
+            if loop_counter == 0:
+                accumulated_reward += self._process_initial_action(action)
 
-            # Update vehicles' battery soc
-            for vid, vehicle in self.vehicles.items():
-                if not vehicle.arrived and not vehicle.empty:
-                    vehicle.fetch_and_update_battery_values()
+            # Calculate step reward from reward strategy
+            accumulated_reward += self._calculate_step_reward(vehicle_status)
 
-            if newly_spawned_ids or newly_arrived_ids:
-                self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
+            # Check termination conditions
+            termination_status = self._check_termination_conditions()
 
-            # only execute once per step
-            loop_just_started = (loop_counter == 0)
-            if loop_just_started:
-                # Process the action for the vehicle that filed the charging request.
-                if self.active_charging_request_vehicle_id in self.vehicles:
-                    vehicle = self.vehicles[self.active_charging_request_vehicle_id]
-                    # The vehicle handles its action, then the reward strategy computes a penalty based on the context.
-                    action_penalty = vehicle.handle_action(action, self.reward_strategy)
-                    accumulated_reward += action_penalty
+            # Check for new charging requests
+            charging_request = self._check_for_charging_request(
+                vehicle_status['newly_spawned_ids'], 
+                vehicle_status['newly_despawned_ids']
+            )
 
-            # Delegate reward calculation to the reward strategy.
-            temp_reward = self.reward_strategy.calculate_step_reward(
-                self.vehicles, newly_arrived_ids, charging_ids)
-            logger.debug(f"Step reward from simulation: {temp_reward}")
-            accumulated_reward += temp_reward
+            # Update observations and info (only when needed for performance)
+            if self._should_update_observation(loop_counter, charging_request, termination_status):
+                observation, info = self._update_observation_and_info()
 
-            
-            # Terminate only when ALL vehicles are at destination
-            all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
-            terminated = all_vehicles_at_destination
-            # Truncate (abort) when it takes too long (i.e. more than x SUMO simulation steps WITHOUT a charging request being triggered)
-            truncated = self._reached_max_simulation_steps()
-            # Remove despawned vehicles from charging request queue and check for new charging requests
-            charging_request = self._check_for_charging_request(newly_spawned_ids, newly_despawned_ids)
-
-            important_event_happened = charging_request or terminated or truncated
-            some_simulation_time_passed = (loop_counter % self.observation_sampling_rate == 0)
-
-            self._update_accumulated_waiting_times()
-
-            # get observation (only every few simulation steps, for performance purposes)
-            if loop_just_started or some_simulation_time_passed or important_event_happened:
-                observation = self._update_and_get_observation()
-                info = self._get_info()
-                logger.debug(f"Intermediate simulation state: {info}")
-
-            # note: the step for the agent ends if there is a charging request (see while loop condition) or the episode is terminated or truncated  
-            if terminated or truncated:
-                simulation_time = self.simulation.get_current_time_step()
-                if terminated:
-                    self._set_cumulated_waiting_time_per_episode_terminated()
-                    self._set_global_ttt_only_terminated(simulation_time)
-                self._set_charging_stops_per_episode_mean()
-                self._set_empty_vehicles_per_episode()
-                self._set_cumulated_waiting_time_per_episode()
-                self._set_final_simulation_time(simulation_time)
-                self._set_global_ttt(simulation_time)
-                final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
-                accumulated_reward += final_reward
-                logger.info(f"Final reward: {final_reward}")
+            # Handle episode termination
+            if termination_status['terminated'] or termination_status['truncated']:
+                accumulated_reward += self._handle_episode_termination(termination_status)
                 break
-
+            
+            # Advance simulation and handle despawned active vehicles
             loop_counter += 1
             self.simulation.step()
-            # If the active vehicle just despawned, continue the loop to find the next active vehicle
-            if self.active_charging_request_vehicle_id in newly_despawned_ids:
+            if self.active_charging_request_vehicle_id in vehicle_status['newly_despawned_ids']:
                 charging_request = False
-
+        
+        # Final setup before returning
         reward = accumulated_reward
-        info = self._get_info()
-        self._log_step_details(info, observation, reward, terminated, truncated,
-                                all_vehicles_at_destination)
-        return observation, reward, terminated, truncated, info
+        if info is None:
+            info = self._get_info()
+        
+        self._log_step_details(info, observation, reward, 
+                              termination_status['terminated'], 
+                              termination_status['truncated'],
+                              termination_status['all_vehicles_at_destination'])
+        return observation, reward, termination_status['terminated'], termination_status['truncated'], info
 
     def render(self, mode='human'):
         """
@@ -627,10 +685,10 @@ if __name__ == "__main__":
 
     def test_env():
         """
-        Test the CircleEnv environment using the stable_baselines3 environment checker.
+        Test the CustomEnv environment using the stable_baselines3 environment checker.
         """
         from stable_baselines3.common.env_checker import check_env
-        env = CircleEnv(scenario_generator="all_random")
+        env = CustomEnv(scenario_generator="all_random")
         check_env(env, skip_render_check=True)
         print("CHECKS PASSED")
         env.close()
@@ -642,7 +700,7 @@ if __name__ == "__main__":
         Args:
             random_seed (int, optional): The random seed for reproducibility.
         """
-        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
+        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
@@ -667,7 +725,7 @@ if __name__ == "__main__":
         Args:
             random_seed (int, optional): The random seed for reproducibility.
         """
-        env = CircleEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
+        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
         random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
