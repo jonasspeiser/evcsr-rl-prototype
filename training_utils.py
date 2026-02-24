@@ -194,3 +194,33 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     finally:
         env.close()
         log.close()
+
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
+    """
+    Returns:
+        model_path (str): The file path of the trained model
+        eval_metrics_filepath_list (List): A list of the filepaths for the evaluation metrics files of the trained model, the RANDOM and the GREEDY baseline algorithm
+    """
+    # train new model
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_steps=n_steps, n_nmevs=n_nmevs, execution_context=execution_context, random_seed=random_seed_training)
+    # evaluate with random and greedy
+    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    eval_metrics_filepath_list = [random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
+    return model_path, eval_metrics_filepath_list
+
+if __name__ == "__main__":
+    # Example usage:
+    train_and_evaluate(
+        scenario="BASt",
+        algorithm="PPO",
+        policy="MultiInputPolicy",
+        version_tag="v0.9.0",
+        reward_strategy="basic",
+        street_network="straight100Test_500MEV_0NMEV",
+        n_vehicles=500,
+        n_nmevs=0,
+        n_steps=10000,
+        execution_context="local"
+    )
