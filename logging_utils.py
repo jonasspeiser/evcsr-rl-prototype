@@ -267,11 +267,11 @@ def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capac
                     force=True) # force=True overwrites the logging configuration so that we can change the logfile name
     return ring, log_file_path
 
-def _setup_logging(algorithm, version_tag, reward_strategy, street_network, n_vehicles, training_or_evaluation, model_load_path=None, execution_context="local"):
+def _setup_logging(algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_nmevs, training_or_evaluation, model_load_path=None, execution_context="local"):
     # Create a unique identifier for this training run
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_id = f"{current_time}_{version_tag}_{reward_strategy}_{street_network}_{algorithm}_{n_vehicles}vehicles_{training_or_evaluation}"    
-    new_model_id = f"{current_time}_{version_tag}_{reward_strategy}_{street_network}_{algorithm}"
+    log_id = "_".join([current_time, version_tag, reward_strategy, street_network, algorithm, f"{n_vehicles}MEV", f"{n_nmevs}NMEV", training_or_evaluation])
+    new_model_id = "_".join([current_time, version_tag, reward_strategy, street_network, algorithm])
     # if a model path is given, i.e. an existing model is evaluated or trained further
     if model_load_path is not None:
         current_run_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
@@ -303,7 +303,7 @@ def _setup_logging(algorithm, version_tag, reward_strategy, street_network, n_ve
     )
     return run_dir, model_save_path, resolved_log_path, ring
 
-def _setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
+def _setup_wandb(wandb_entity, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, training_or_evaluation, model_load_path=None):
     import wandb
 
     config = {
@@ -320,7 +320,7 @@ def _setup_wandb(wandb_entity, wandb_project, algorithm, version_tag, reward_str
         # Set the wandb entity where the project will be logged (e.g. team name).
         entity=wandb_entity,
         # Set the wandb project where this run will be logged.
-        project=wandb_project,
+        project="_".join([version_tag, street_network, algorithm]),
         config=config,
         sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
     )
@@ -410,18 +410,17 @@ def setup_run_logging(
     reward_strategy: str,
     street_network: str,
     n_vehicles: int,
+    n_nmevs: int,
     mode: Literal["training", "evaluation"],
     execution_context: str = "local",
     model_load_path: str | None = None,
     n_steps: int | None = None,
     use_wandb: bool = False,
     wandb_entity: str | None = None,
-    wandb_project: str | None = None,
 ):
     # path + python logging setup
     run_dir, model_save_path, py_log_path, ring = _setup_logging(
-        algorithm, version_tag, reward_strategy, street_network, n_vehicles,
-        mode, model_load_path, execution_context=execution_context
+        algorithm=algorithm, version_tag=version_tag, reward_strategy=reward_strategy, street_network=street_network, n_vehicles=n_vehicles, n_nmevs=n_nmevs, training_or_evaluation=mode, model_load_path=model_load_path, execution_context=execution_context
     )
 
     # sb3 callback (tensorboard + optional wandb logging inside it)
@@ -437,11 +436,11 @@ def setup_run_logging(
 
     # wandb setup (optional)
     if use_wandb:
-        if wandb_entity is None or wandb_project is None:
-            raise ValueError("WandB entity and project must be provided if use_wandb is True.")
+        if wandb_entity is None:
+            raise ValueError("WandB entity must be provided if use_wandb is True.")
 
         run = _setup_wandb(
-            wandb_entity, wandb_project,
+            wandb_entity,
             algorithm, version_tag, reward_strategy, street_network, n_vehicles,
             n_steps, mode, model_load_path
         )
