@@ -126,8 +126,8 @@ environment.py
 ### Street Network Generator
 network_generator.py
 
-### Scenario Generator
-scenario_generator.py
+### MEV Scenario Generator
+mev_scenario_generator.py
 * Default scenario
 * Same route scenario
 * Same SOC same route scenario

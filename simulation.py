@@ -7,7 +7,7 @@ import traci
 from traci import constants as tc
 from sumolib import checkBinary
 from collections import Counter
-from scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
+from mev_scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
 import network_generator 
 
 

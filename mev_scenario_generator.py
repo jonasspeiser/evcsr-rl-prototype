@@ -130,7 +130,6 @@ class ScenarioGenerator():
         Params:
             amount (int): The amount of routes that should be generated
             edge_list (List): A list including all of the networks edges
-            veh_type (str): Optional vehicle type ID to pass to findRoute (can be None).
         """
         routes_dict = {}
         for i in range(amount):
@@ -152,6 +151,8 @@ class ScenarioGenerator():
         Params:
             n_vehicles (int): The amount of vehicles that should be generated
             routes_list (List): A list including all available route ids
+            start_soc_bounds (Tuple): Optional. Outer bounds for the start soc value in the shape (MIN_VALUE, MAX_VALUE)
+            scenario_id (str): Optional. Scenario ID to reproduce a certain scenario.
         Returns:
             vehicles_dict (dict): A dictionary with all generated vehicles and their attributes.
         """
