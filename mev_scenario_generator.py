@@ -13,44 +13,6 @@ DEFAULT_BATTERY_MAX = 500
 
 BAST_DISTRIBUTION_PATH = "datasets/bast_data/relatives_verkehrsaufkommen_2022.json"
 
-def random_date(start_year=2022, end_year=2022):
-    """
-    Generate a random date between Jan 1 of start_year and Dec 31 of end_year.
-    """
-    start_date = datetime.date(start_year, 1, 1)
-    end_date = datetime.date(end_year, 12, 31)
-    delta_days = (end_date - start_date).days
-    random_days = random.randint(0, delta_days)
-    return start_date + datetime.timedelta(days=random_days)
-
-def day_of_year_to_month_day(day_of_year, year):
-    """
-    Convert a day-of-year number to (month, day).
-    
-    Parameters:
-        day_of_year (int): Day of the year (1-366)
-        year (int): Year to account for leap years (default: current year)
-        
-    Returns:
-        (int, int): (month, day)
-    """
-    date = datetime.datetime(year, 1, 1) + datetime.timedelta(days=day_of_year - 1)
-    return date.month, date.day
-
-def month_day_to_day_of_year(month, day, year):
-    """
-    Convert (month, day) to day of the year.
-
-    Args:
-        month (int): Month (1-12)
-        day (int): Day of the month (1-31 depending on month)
-        year (int): Year to account for leap years (default: current year)
-
-    Returns:
-        int: Day of the year (1-366)
-    """
-    date = datetime.datetime(year, month, day)
-    return date.timetuple().tm_yday
 
 def json_keys_to_int(x):
     if isinstance(x, dict):
@@ -72,7 +34,7 @@ class ScenarioGenerator():
     def __init__(self, seed):
         if seed is not None:
             print("seed set ")
-            random.seed(seed)
+            self.rng = random.Random(seed)
 
     def _select_route(self, edge_list):
         """
@@ -80,10 +42,10 @@ class ScenarioGenerator():
         """
         if len(edge_list) < 2:
             raise ValueError("edge_list must contain at least two elements.")
-        return list(random.sample(edge_list, 2))
+        return list(self.rng.sample(edge_list, 2))
     
     def _select_soc(self, start_soc_bounds):
-        soc = random.randint(start_soc_bounds[0], start_soc_bounds[1])
+        soc = self.rng.randint(start_soc_bounds[0], start_soc_bounds[1])
         return soc
 
     def generate_routes_from_routes_list(self, amount, routes_list):
@@ -119,7 +81,7 @@ class ScenarioGenerator():
             logger.warning(f"Using {len(filtered_routes)} routes instead of requested {amount}")
             amount = len(filtered_routes)
             
-        selected_routes = random.sample(filtered_routes, amount)
+        selected_routes = self.rng.sample(filtered_routes, amount)
         routes_dict = {f"trip{i}": [item["from"], item["to"]] for i, item in enumerate(selected_routes)}
         return routes_dict
 
@@ -168,7 +130,7 @@ class ScenarioGenerator():
                 break
             vehicle_id = f"member_ev_{i}"
             vehicle_type = "soulEV65"
-            route_id = random.choice(routes_list)
+            route_id = self.rng.choice(routes_list)
             battery_capacity = start_soc_bounds[1]
             start_soc = self._select_soc(start_soc_bounds)
             
@@ -247,7 +209,7 @@ class CustomDistributionScenario(ScenarioGenerator):
             # Set a departure time for each vehicle in this hour
             for _ in range(int(amount)):
                 hour_in_seconds = (hour - 1) * 3600
-                minutes_in_seconds = random.randint(0, 59) * 60
+                minutes_in_seconds = self.rng.randint(0, 59) * 60
                 depart_time_list.append(hour_in_seconds + minutes_in_seconds)
         return depart_time_list
 
@@ -261,11 +223,20 @@ class BAStDistributionScenario(CustomDistributionScenario):
         with open(BAST_DISTRIBUTION_PATH, 'r') as file:
             self.depart_time_distribution_dict = json.load(file, object_hook=json_keys_to_int)
 
+    def _random_date(self, start_year=2022, end_year=2022):
+        """
+        Generate a random date between Jan 1 of start_year and Dec 31 of end_year.
+        """
+        start_date = datetime.date(start_year, 1, 1)
+        end_date = datetime.date(end_year, 12, 31)
+        delta_days = (end_date - start_date).days
+        random_days = self.rng.randint(0, delta_days)
+        return start_date + datetime.timedelta(days=random_days)
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
         """ Constructs a list of departure times based on the BASt distribution data. If no scenario_id is provided, a random date in 2022 is used to select the distribution. """
         if scenario_id is None:
-            date = random_date(2022, 2022)
+            date = self._random_date(2022, 2022)
             year = (date.year)
             month = (date.month)
             day = (date.day)

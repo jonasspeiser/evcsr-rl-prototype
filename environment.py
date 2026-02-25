@@ -701,7 +701,7 @@ if __name__ == "__main__":
             random_seed (int, optional): The random seed for reproducibility.
         """
         env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
-        random.seed(random_seed)
+        # random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
         model = RandomAlgorithm(env)
@@ -726,7 +726,7 @@ if __name__ == "__main__":
             random_seed (int, optional): The random seed for reproducibility.
         """
         env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=1)
-        random.seed(random_seed)
+        # random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)
         model = NeverChargeAlgorithm(env)
