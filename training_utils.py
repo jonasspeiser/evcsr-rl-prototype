@@ -244,7 +244,7 @@ if __name__ == "__main__":
     def get_git_version():
         try:
             return subprocess.check_output(
-                ["git", "describe", "--tags", "--abbrev=0"],
+                ["git", "describe", "--tags"],
                 stderr=subprocess.DEVNULL
             ).decode().strip()
         except Exception:
