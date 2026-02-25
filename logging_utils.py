@@ -49,6 +49,23 @@ class RingBufferHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         self.buffer.append(record)
 
+class LoggerPrefixFilter(logging.Filter):
+    """
+    Allow only records whose logger name starts with any of the given prefixes.
+    Example: prefixes=("rl",) will allow:
+        rl
+        rl.environment
+        rl.environment.simulation
+        etc.
+    """
+    def __init__(self, prefixes):
+        super().__init__()
+        self.prefixes = tuple(prefixes)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        name = record.name or ""
+        return any(name == p or name.startswith(p + ".") for p in self.prefixes)
+
 class CustomTensorboardCallback(BaseCallback):
     """
     Custom sb3 callback for logging rolling mean of environment metrics to Tensorboard.
@@ -255,6 +272,9 @@ def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capac
             log_file_path = log_file_path.replace(".log", ".jsonl")    
         json_handler = JsonlFileHandler(log_file_path, mode="a")
         json_handler.setLevel(logging.DEBUG)
+        # Filter out logs from other modules to reduce noise and make comparisons between runs easier
+        # prefixes=("rl",) will allow all loggers starting with "rl", e.g. "rl.environment.simulation"
+        json_handler.addFilter(LoggerPrefixFilter(prefixes=("rl",)))
         handlers.append(json_handler)
     
     if ring_capacity and ring_capacity > 0:
