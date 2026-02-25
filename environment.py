@@ -319,7 +319,7 @@ class CustomEnv(gym.Env):
         # add charging requests to the queue (if any)
         if charging_requests:
             logger.debug(f"New charging requests: spawned={newly_spawned_ids}, just charged={just_charged_ids}, low battery={new_low_battery_ids}")
-            self.charging_request_queue.extend(charging_requests)
+            self.charging_request_queue.extend(sorted(charging_requests))
         
         # set active charging request vehicle id (if any)
         if self.charging_request_queue:
