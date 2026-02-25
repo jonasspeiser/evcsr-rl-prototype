@@ -48,7 +48,7 @@ class CustomEnv(gym.Env):
         self.non_member_vehicles = non_member_vehicles
         if non_member_vehicles:
             # self.nmev_data_provider = Obelis_Data_Provider()
-            self.nmev_data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps)
+            self.nmev_data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps, seed=random_seed)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
