@@ -94,9 +94,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     return metrics_list
 
 def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
-    # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
-
+    
     # setup logging
     log = setup_run_logging(
         algorithm=algorithm,
@@ -111,6 +109,10 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
     )
+
+    # initiate environment
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+
     
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -120,8 +122,6 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
 def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
-    # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
     # setup logging
     log = setup_run_logging(
@@ -137,6 +137,9 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
     )
+
+    # initiate environment
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -158,8 +161,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_episodes": n_episodes,
         "random_seed": random_seed
     }
-    # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
+    
     # setup logging
     log = setup_run_logging(
         algorithm=algorithm,
@@ -175,6 +177,9 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
     )
+
+    # initiate environment
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
