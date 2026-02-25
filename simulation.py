@@ -859,7 +859,7 @@ if __name__ == "__main__":
 
     def test_non_member_vehicles():
         """Test whether non_member_vehicles are spawning and despawning as expected - compare console output of this function to data source."""
-        from data_processing import Obelis_Data_Provider
+        from nmev_data_provider import Obelis_Data_Provider
         data_provider = Obelis_Data_Provider()
         print("Data provider added")
         simulation.add_non_member_routes()

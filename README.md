@@ -127,19 +127,19 @@ environment.py
 network_generator.py
 
 ### Scenario Generator
-scenarion_generator.py
+scenario_generator.py
 * Default scenario
 * Same route scenario
 * Same SOC same route scenario
 
 ### Reward Strategy
-rewards.py
+reward_strategies.py
 * Basic reward strategy
 * No time component reward strategy
 * Reward shaping strategy
 
 ### NMEV Dataset Strategy
-data_processing.py
+nmev_data_provider.py
 * Random data provider
 * OBELIS data provider
 
