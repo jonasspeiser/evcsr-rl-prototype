@@ -120,6 +120,9 @@ class Simulation():
             '--device.battery.probability', '1', # sets all vehicles to be EVs instead of combustion engine
             # '--device.stationfinder.probability', '1' # remove vehicle if it runs out of battery
             ]
+        if random_seed is not None:
+            sumoCmd += ['--seed', str(random_seed)]
+            
         # close any existing traci connection (e.g. from previous simulation runs) before starting a new one
         try:
             traci.close()
