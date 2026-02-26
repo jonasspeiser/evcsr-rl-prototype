@@ -287,11 +287,11 @@ def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capac
                     force=True) # force=True overwrites the logging configuration so that we can change the logfile name
     return ring, log_file_path
 
-def _setup_logging(algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs, training_or_evaluation, model_load_path=None, execution_context="local"):
+def _setup_logging(algorithm, version_tag, reward_strategy, scenario, street_network, n_vehicles, n_noevs, training_or_evaluation, model_load_path=None, execution_context="local"):
     # Create a unique identifier for this training run
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    log_id = "_".join([current_time, version_tag, reward_strategy, street_network, algorithm, f"{n_vehicles}OEV", f"{n_noevs}NOEV", training_or_evaluation])
-    new_model_id = "_".join([current_time, version_tag, reward_strategy, street_network, algorithm])
+    log_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm, f"{n_vehicles}OEV", f"{n_noevs}NOEV", training_or_evaluation])
+    new_model_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm])
     # if a model path is given, i.e. an existing model is evaluated or trained further
     if model_load_path is not None:
         current_run_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
@@ -428,6 +428,7 @@ def setup_run_logging(
     algorithm: str,
     version_tag: str,
     reward_strategy: str,
+    scenario: str,
     street_network: str,
     n_vehicles: int,
     n_noevs: int,
@@ -440,7 +441,7 @@ def setup_run_logging(
 ):
     # path + python logging setup
     run_dir, model_save_path, py_log_path, ring = _setup_logging(
-        algorithm=algorithm, version_tag=version_tag, reward_strategy=reward_strategy, street_network=street_network, n_vehicles=n_vehicles, n_noevs=n_noevs, training_or_evaluation=mode, model_load_path=model_load_path, execution_context=execution_context
+        algorithm=algorithm, version_tag=version_tag, reward_strategy=reward_strategy, scenario=scenario, street_network=street_network, n_vehicles=n_vehicles, n_noevs=n_noevs, training_or_evaluation=mode, model_load_path=model_load_path, execution_context=execution_context
     )
 
     # sb3 callback (tensorboard + optional wandb logging inside it)

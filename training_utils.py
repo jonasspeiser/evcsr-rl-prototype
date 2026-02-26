@@ -94,12 +94,13 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     return metrics_list
 
 def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
-    
+
     # setup logging
     log = setup_run_logging(
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
+        scenario=scenario,
         street_network=street_network,
         n_vehicles=n_vehicles,
         n_noevs=n_noevs,
@@ -128,6 +129,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
+        scenario=scenario,
         street_network=street_network,
         n_vehicles=n_vehicles,
         n_noevs=n_noevs,
@@ -167,6 +169,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         algorithm=algorithm,
         version_tag=version_tag,
         reward_strategy=reward_strategy,
+        scenario=scenario,
         street_network=street_network,
         n_vehicles=n_vehicles,
         n_noevs=n_noevs,

@@ -289,7 +289,7 @@ class Simulation():
         logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
 
         if dist_cs is None or dist_dest is None:
-            raise ImpossibleRoutingError(f"Cannot calculate route: dist_cs={dist_cs}, dist_dest={dist_dest}.")
+            raise ImpossibleRoutingError(f"Cannot calculate route: vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}.")
         if dist_cs > dist_dest:
             raise PointlessRecommendationError(dist_dest, dist_cs)
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
