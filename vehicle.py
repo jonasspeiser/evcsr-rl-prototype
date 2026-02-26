@@ -124,7 +124,7 @@ class Vehicle:
         try:
             next_charging_stop = self.simulation.get_next_charging_stop_id(self.vehicle_id)
         except ValueError as e:
-            logger.error(f"Handling action {action} for {self.vehicle_id} failed: {e}")
+            logger.error(f"{type(e).__name__}: Handling action {action} for {self.vehicle_id} failed: {e}")
             return 0
         
         charging_stop_is_planned = next_charging_stop is not None
@@ -148,11 +148,11 @@ class Vehicle:
                     'sufficient_range': self.is_remaining_range_sufficient(buffer=0),
                 }) 
             except (ImpossibleRoutingError, BadTimingRoutingError) as e:
-                logger.error(e)
+                logger.error(f"{type(e).__name__}: {e}")
                 context['reroute_successful'] = False
                 context['rerouting_exception_occurred'] = True
             except PointlessRecommendationError as e:
-                logger.error(e)
+                logger.error(f"{type(e).__name__}: {e}")
                 context['reroute_successful'] = False
                 context['recommendation_past_destination'] = True
 
