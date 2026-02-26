@@ -93,7 +93,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
     
     # setup logging
     log = setup_run_logging(
@@ -102,7 +102,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         reward_strategy=reward_strategy,
         street_network=street_network,
         n_vehicles=n_vehicles,
-        n_nmevs=n_nmevs,
+        n_noevs=n_noevs,
         n_steps=n_steps,
         mode="training",
         execution_context=execution_context,
@@ -121,7 +121,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_nmevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
+def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_noevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
 
     # setup logging
     log = setup_run_logging(
@@ -130,7 +130,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
         reward_strategy=reward_strategy,
         street_network=street_network,
         n_vehicles=n_vehicles,
-        n_nmevs=n_nmevs,
+        n_noevs=n_noevs,
         n_steps=n_steps,
         mode="training",
         execution_context=execution_context,
@@ -145,7 +145,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
     model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_nmevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
     """
     Returns:
         The file path of the evaluation metrics file (str).
@@ -169,7 +169,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         reward_strategy=reward_strategy,
         street_network=street_network,
         n_vehicles=n_vehicles,
-        n_nmevs=n_nmevs,
+        n_noevs=n_noevs,
         n_steps=None,
         mode="evaluation",
         model_load_path=model_load_path,
@@ -200,7 +200,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         env.close()
         log.close()
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_nmevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -214,9 +214,9 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
         version_tag (str): The current environment version (current git version tag).
         reward_strategy (str): The reward strategy to use in the environment.
         street_network (str): The street network to use.
-        n_vehicles (int): The number of MEVs (member electric vehicles) in the environment.
+        n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
         n_steps (int): The number of training steps.
-        n_nmevs (int, optional): The number of NMEVs (non member electric vehicles).
+        n_noevs (int, optional): The number of NOEVs (non observable electric vehicles).
             Defaults to None.
         execution_context (str, optional): The execution context (e.g., "local", "cloud").
             Defaults to "local".
@@ -233,11 +233,11 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_steps=n_steps, n_nmevs=n_nmevs, execution_context=execution_context, random_seed=random_seed_training)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_steps=n_steps, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training)
     # evaluate with random and greedy
-    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
-    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
-    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_nmevs=n_nmevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
     eval_metrics_filepath_list = [random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
     return model_path, eval_metrics_filepath_list
 
@@ -263,7 +263,7 @@ if __name__ == "__main__":
         reward_strategy="basic",
         street_network="straight100km",
         n_vehicles=500,
-        n_nmevs=0,
+        n_noevs=0,
         n_steps=10000,
         eval_episodes=10,
         execution_context="local"

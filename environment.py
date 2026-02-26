@@ -5,7 +5,7 @@ from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle, get_padded_observation
 from reward_strategies import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
-from nmev_data_provider import Obelis_Data_Provider, Random_Data_Provider
+from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
 # configure logging
@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_member_vehicles=None, random_seed=None):
+                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_observable_vehicles=None, random_seed=None):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -27,10 +27,10 @@ class CustomEnv(gym.Env):
             scenario_generator (str or ScenarioGenerator): The scenario to use for the simulation. Can be a string like "bast", "all_random", or an instance of a ScenarioGenerator class.
             render_mode (str, optional): The mode in which the environment should be rendered. If None, no rendering is done. "human" shows a graphical window with the simulation.
             reward_strategy (str, optional): The version of the environment to use. Can be "basic", "noTime", or "shaping". "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting. "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation. "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
-            vehicles_to_spawn (int, optional): The number of vehicles to spawn in the simulation. This is the number of member vehicles (MEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
+            vehicles_to_spawn (int, optional): The number of vehicles to spawn in the simulation. This is the number of observable vehicles (OEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
             observation_sampling_rate (int, optional): The rate at which the observation is sampled (i.e. every x simulation steps).
             truncate_after_n_steps (int, optional): The number of simulation steps after which the episode is truncated if no charging request is triggered.
-            non_member_vehicles (int, optional): The number of non-member vehicles (i.e. not observable by the agent) to spawn in the simulation.
+            non_observable_vehicles (int, optional): The number of non-observable vehicles (i.e. not observable by the agent) to spawn in the simulation.
             random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -45,10 +45,10 @@ class CustomEnv(gym.Env):
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed)
         self.vehicles_to_spawn = vehicles_to_spawn
 
-        self.non_member_vehicles = non_member_vehicles
-        if non_member_vehicles:
-            # self.nmev_data_provider = Obelis_Data_Provider()
-            self.nmev_data_provider = Random_Data_Provider(n_nmevs=self.non_member_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps, seed=random_seed)
+        self.non_observable_vehicles = non_observable_vehicles
+        if non_observable_vehicles:
+            # self.noev_data_provider = Obelis_Data_Provider()
+            self.noev_data_provider = Random_Data_Provider(n_noevs=self.non_observable_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps, seed=random_seed)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
@@ -73,10 +73,10 @@ class CustomEnv(gym.Env):
             dtype=np.float32
         )
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_mev_ids()
+        self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
 
-        self.observation_space_ids = [f"member_ev_{i}" for i in range(OBSERVATION_SPACE_SIZE)] # used to create a fixed-size observation space for all environments, even if the number of vehicles varies
+        self.observation_space_ids = [f"observable_ev_{i}" for i in range(OBSERVATION_SPACE_SIZE)] # used to create a fixed-size observation space for all environments, even if the number of vehicles varies
         self.observation_space = spaces.Dict({
             vehicle_id: single_vehicle_observation_space for vehicle_id in self.observation_space_ids
         })
@@ -202,14 +202,14 @@ class CustomEnv(gym.Env):
         logger.debug(f"empty_vehicles_per_episode: {self.empty_vehicles_per_episode}")
 
 
-    def _add_non_member_vehicles(self):
+    def _add_non_observable_vehicles(self):
         """
-        Adds non-member vehicles to the simulation using the data provider.
+        Adds non-observable vehicles to the simulation using the data provider.
         """
-        self.simulation.add_non_member_routes()
-        vehicle_data = self.nmev_data_provider.get_non_member_vehicle_data()
+        self.simulation.add_non_observable_routes()
+        vehicle_data = self.noev_data_provider.get_non_observable_vehicle_data()
         for entry in vehicle_data:
-            self.simulation.add_non_member_vehicle(cs_id=entry["cs_id"],
+            self.simulation.add_non_observable_vehicle(cs_id=entry["cs_id"],
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
 
@@ -492,7 +492,7 @@ class CustomEnv(gym.Env):
                 "render_mode": self.render_mode,
                 "reward_strategy": type(self.reward_strategy).__name__,
                 "vehicles_to_spawn": self.vehicles_to_spawn,
-                "non_member_vehicles": self.non_member_vehicles,
+                "non_observable_vehicles": self.non_observable_vehicles,
                 "observation_sampling_rate": self.observation_sampling_rate,
                 "truncate_after_n_simulation_steps": self.truncate_after_n_simulation_steps,
             },
@@ -531,7 +531,7 @@ class CustomEnv(gym.Env):
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_mev_ids()
+        self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
         Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
@@ -544,8 +544,8 @@ class CustomEnv(gym.Env):
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
         self.low_battery_ids = set()
         
-        if self.non_member_vehicles:
-            self._add_non_member_vehicles()
+        if self.non_observable_vehicles:
+            self._add_non_observable_vehicles()
 
         # Wait until a charging request is generated.
         while self.active_charging_request_vehicle_id is None:
@@ -700,7 +700,7 @@ if __name__ == "__main__":
         Args:
             random_seed (int, optional): The random seed for reproducibility.
         """
-        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_member_vehicles=5)
+        env = CustomEnv(scenario_generator="all_random", render_mode="human", vehicles_to_spawn=3, non_observable_vehicles=5)
         # random.seed(random_seed)
         observation, info = env.reset(seed=random_seed)
         env.action_space.seed(random_seed)

@@ -7,7 +7,7 @@ import traci
 from traci import constants as tc
 from sumolib import checkBinary
 from collections import Counter
-from mev_scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
+from oev_scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
 import network_generator 
 
 
@@ -158,14 +158,14 @@ class Simulation():
             tc.VAR_STOP_ENDING_VEHICLES_IDS,
         ])
 
-    def add_non_member_routes(self):
+    def add_non_observable_routes(self):
         """
-        Add routes for charging station usage of non-member EVs.
+        Add routes for charging station usage of non-observable EVs.
         """
         for cs_id, cs_edge in self.charging_stations.items():
-            traci.route.add(f"{cs_id}_non_member_route", [cs_edge])
+            traci.route.add(f"{cs_id}_non_observable_route", [cs_edge])
 
-    def add_non_member_vehicle(self, cs_id, depart_time, charge_duration):
+    def add_non_observable_vehicle(self, cs_id, depart_time, charge_duration):
         """
         Add a vehicle with a specific departure time directly in front of specified charging station. The vehicle disappears shortly after charging has finished.
 
@@ -176,10 +176,10 @@ class Simulation():
         """
         count = self.departure_counts.get(depart_time, 0)
         suffix = f"_{count}" if count else ""
-        vehicle_id = f"non_member_ev_t{depart_time}{suffix}"
+        vehicle_id = f"non_observable_ev_t{depart_time}{suffix}"
         self.departure_counts[depart_time] += 1
 
-        route_id = f"{cs_id}_non_member_route"
+        route_id = f"{cs_id}_non_observable_route"
         traci.vehicle.add(vehicle_id, route_id, depart=depart_time)
         traci.vehicle.setChargingStationStop(vehicle_id, cs_id, duration=charge_duration)
 
@@ -486,8 +486,8 @@ class Simulation():
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
     
-    def _filter_set_for_member_evs(self, original_collection):
-        return {item for item in original_collection if item.startswith("member_ev")}
+    def _filter_set_for_observable_evs(self, original_collection):
+        return {item for item in original_collection if item.startswith("observable_ev")}
 
     def get_all_vehicle_ids(self):
         """
@@ -498,26 +498,26 @@ class Simulation():
         """
         return self.added_vehicles
     
-    def get_all_mev_ids(self):
+    def get_all_oev_ids(self):
         """
-        Returns a set of all member vehicle ids that have been added to the simulation.
+        Returns a set of all observable vehicle ids that have been added to the simulation.
 
         Returns:
-            set: Set of member vehicle IDs.
+            set: Set of observable vehicle IDs.
         """
         original_set = self.get_all_vehicle_ids()
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
     def get_online_vehicle_ids(self):
         """
-        Returns a set of ids of all member vehicles currently running within the scenario.
+        Returns a set of ids of all observable vehicles currently running within the scenario.
 
         Returns:
-            set: Set of online member vehicle IDs.
+            set: Set of online observable vehicle IDs.
         """
         #TODO: Use subscription (low prio)
         original_set = set(traci.vehicle.getIDList())
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
     def get_loaded_vehicle_ids(self):
         """
@@ -527,49 +527,49 @@ class Simulation():
             Sumo does not load all vehicle definitions in advance but only when they are needed. If you give the vehicle definitions in an additional file instead, all will be parsed in advance but only if you define individual vehicles not with flows.
 
         Returns:
-            set: Set of loaded member vehicle IDs.
+            set: Set of loaded observable vehicle IDs.
         """
         original_set = set(self.simulation_data.get(tc.VAR_LOADED_VEHICLES_IDS, []))
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
 
     def get_spawned_vehicle_ids(self):
         """
-        Returns a set of ids of all member vehicles that have spawned during the current time step.
+        Returns a set of ids of all observable vehicles that have spawned during the current time step.
 
         Returns:
-            set: Set of spawned member vehicle IDs.
+            set: Set of spawned observable vehicle IDs.
         """
         original_list = set(self.simulation_data.get(tc.VAR_DEPARTED_VEHICLES_IDS, []))
-        return self._filter_set_for_member_evs(original_list)
+        return self._filter_set_for_observable_evs(original_list)
 
 
     def get_arrived_vehicle_ids(self):
         """
-        Returns a set of ids of all member vehicles that have arrived at their destination during the current time step.
+        Returns a set of ids of all observable vehicles that have arrived at their destination during the current time step.
 
         Returns:
-            set: Set of arrived member vehicle IDs.
+            set: Set of arrived observable vehicle IDs.
         """
         original_set = set(self.simulation_data.get(tc.VAR_ARRIVED_VEHICLES_IDS, []))
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
     def get_removed_vehicle_ids(self):
         """
-        Returns a set of ids of all member vehicles that have been manually removed from the simulation during the current time step.
+        Returns a set of ids of all observable vehicles that have been manually removed from the simulation during the current time step.
         (E.g. because their battery is empty)
 
         Returns:
-            set: Set of removed member vehicle IDs.
+            set: Set of removed observable vehicle IDs.
         """
         return self.just_removed_vehicle_ids
 
     def get_charging_vehicle_ids(self):
         """
-        Returns a set of ids of member vehicles currently charging at any charging station.
+        Returns a set of ids of observable vehicles currently charging at any charging station.
 
         Returns:
-            set: Set of charging member vehicle IDs.
+            set: Set of charging observable vehicle IDs.
         """
         charging_vehicles = set()
         charging_stations_ids = self.get_all_charging_station_ids()
@@ -580,18 +580,18 @@ class Simulation():
             charging_vehicles.update(vehicles)
 
         original_set = charging_vehicles
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
 
     def get_charging_stop_ending_vehicle_ids(self):
         """
-        Returns a set of ids of member vehicles that begin to continue their journey, leaving a scheduled stop in this time step.
+        Returns a set of ids of observable vehicles that begin to continue their journey, leaving a scheduled stop in this time step.
 
         Returns:
-            set: Set of member vehicle IDs leaving a charging stop.
+            set: Set of observable vehicle IDs leaving a charging stop.
         """
         original_set = set(self.simulation_data.get(tc.VAR_STOP_ENDING_VEHICLES_IDS, []))
-        return self._filter_set_for_member_evs(original_set)
+        return self._filter_set_for_observable_evs(original_set)
 
     def get_vehicle_waiting_time(self, vehicle_id):
         """
@@ -860,17 +860,17 @@ if __name__ == "__main__":
         simulation.close()
 
 
-    def test_non_member_vehicles():
-        """Test whether non_member_vehicles are spawning and despawning as expected - compare console output of this function to data source."""
-        from nmev_data_provider import Obelis_Data_Provider
+    def test_non_observable_vehicles():
+        """Test whether non_observable_vehicles are spawning and despawning as expected - compare console output of this function to data source."""
+        from noev_data_provider import Obelis_Data_Provider
         data_provider = Obelis_Data_Provider()
         print("Data provider added")
-        simulation.add_non_member_routes()
+        simulation.add_non_observable_routes()
         print("routes added")
-        vehicle_data = data_provider.get_non_member_vehicle_data()
-        print("got non member vehicle data")
+        vehicle_data = data_provider.get_non_observable_vehicle_data()
+        print("got non observable vehicle data")
         for entry in vehicle_data:
-            simulation.add_non_member_vehicle(cs_id=entry["cs_id"], depart_time=entry["charge_begin_seconds"], charge_duration=entry["charge_duration"])
+            simulation.add_non_observable_vehicle(cs_id=entry["cs_id"], depart_time=entry["charge_begin_seconds"], charge_duration=entry["charge_duration"])
 
         # Set to keep track of vehicles in the simulation
         active_vehicles = set()
@@ -904,6 +904,6 @@ if __name__ == "__main__":
         simulation.close()
     
     # driving_in_circles()
-    # test_non_member_vehicles()
+    # test_non_observable_vehicles()
     test_simulation_end()
 

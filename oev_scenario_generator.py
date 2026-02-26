@@ -128,7 +128,7 @@ class ScenarioGenerator():
             if depart_time is None:
                 print(f"Warning: No departure time available for vehicle {i}. Stopping vehicle generation.")
                 break
-            vehicle_id = f"member_ev_{i}"
+            vehicle_id = f"observable_ev_{i}"
             vehicle_type = "soulEV65"
             route_id = self.rng.choice(routes_list)
             battery_capacity = start_soc_bounds[1]

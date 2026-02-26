@@ -37,4 +37,4 @@ To allow at least limited spatial analysis of utilization, information about the
 
 
 **Usage in project**:  
-Used to simulate realistic charging station occupancy patterns (for non-member vehicles).
+Used to simulate realistic charging station occupancy patterns (for non-observable vehicles).

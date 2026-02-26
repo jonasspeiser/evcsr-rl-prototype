@@ -126,8 +126,8 @@ environment.py
 ### Street Network Generator
 network_generator.py
 
-### MEV Scenario Generator
-mev_scenario_generator.py
+### OEV Scenario Generator
+oev_scenario_generator.py
 * Default scenario
 * Same route scenario
 * Same SOC same route scenario
@@ -138,8 +138,8 @@ reward_strategies.py
 * No time component reward strategy
 * Reward shaping strategy
 
-### NMEV Dataset Strategy
-nmev_data_provider.py
+### NOEV Dataset Strategy
+noev_data_provider.py
 * Random data provider
 * OBELIS data provider
 
@@ -164,7 +164,7 @@ To enable W&B tracking, call `train_model(...)` and `evaluate_model(...)` with t
 
 #### Interpreting tensorboard values
 * `env/charging_stops_per_episode_mean`:
-* `env/global_ttt`: The cumulated total travel time of all member vehicles, in seconds.
+* `env/global_ttt`: The cumulated total travel time of all observable vehicles, in seconds.
 * `env/global_ttt_only_terminated`: global_ttt but only for episodes which terminated (= were not truncated)
 * `env/ttt_per_ev_mean`: global_ttt divided by the number of member EVs
 * `env/ttt_per_ev_mean_only_terminated`: ttt_per_ev_mean but only for episodes which terminated (= were not truncated)
