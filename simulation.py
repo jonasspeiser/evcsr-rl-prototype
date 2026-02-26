@@ -636,6 +636,7 @@ class Simulation():
             vehicle_id (str): The ID of the vehicle.
         """
         logger.info(f"Battery empty, vehicle {vehicle_id} will be removed from simulation")
+        traci.vehicle.unsubscribe(vehicle_id)
         traci.vehicle.remove(vehicle_id)
         self.just_removed_vehicle_ids.add(vehicle_id)
 
