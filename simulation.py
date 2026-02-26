@@ -207,9 +207,10 @@ class Simulation():
             traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"])
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
-            logger.info(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")
+            logger.debug(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")
             self.added_vehicles.add(vehicle_id)
             self._subscribe_to_vehicle(vehicle_id)
+        logger.info(f"Added {len(vehicles_dict)} vehicles: {list(vehicles_dict.keys())}")
 
     def _subscribe_to_vehicle(self, vehicle_id):
         """Helper function defining vehicle subscription to TraCI variables."""
@@ -286,7 +287,7 @@ class Simulation():
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
         #TODO: Use subscription (low prio)
-        logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
+        logger.debug(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
 
         if dist_cs is None or dist_dest is None:
             raise ImpossibleRoutingError(f"Cannot calculate route: vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}.")

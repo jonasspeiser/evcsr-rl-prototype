@@ -111,7 +111,7 @@ class Vehicle:
             # My evaluation algos return tuples. Only the first value is of interest.
             action = action[0]
         
-        logger.info(f"{self.vehicle_id}: handling action {action}")
+        logger.debug(f"{self.vehicle_id}: handling action {action}")
         self.last_action = action
 
         # Build a context dictionary with information useful for penalty calculation.

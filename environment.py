@@ -262,11 +262,14 @@ class CustomEnv(gym.Env):
             return
         
         current_time = self.simulation.get_current_time_step()
+        just_spawned = []
         for vehicle_id in newly_spawned_ids or []:
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle and vehicle.departure_time is None:
                 vehicle.departure_time = current_time
-                logger.info(f"{vehicle_id} spawned at time {current_time}")
+                just_spawned.append(vehicle_id)
+        if just_spawned:
+            logger.info(f"{len(just_spawned)} vehicle(s) spawned at time {current_time}: {just_spawned}")
         for vehicle_id in newly_arrived_ids or []:
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:
