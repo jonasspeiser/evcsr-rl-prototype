@@ -107,11 +107,11 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             if context.get('charging_stop_already_planned', False):
                 return 0
             if context.get('sufficient_range', False):
-                logger.debug(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
+                logger.info(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -1)")
                 return -1
             if context.get('rerouting_exception_occurred', False):
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                logger.debug(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -1)")
+                logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -1)")
                 return -1
         return 0 # if action is "do nothing"
 
@@ -159,7 +159,7 @@ class RewardShapingStrategy(RewardStrategy):
                 # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
                 remaining_range_is_sufficient = vehicle.is_remaining_range_sufficient(buffer=0)
                 if not remaining_range_is_sufficient:
-                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+                    logger.info(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
                     reward += 1
 
         return reward

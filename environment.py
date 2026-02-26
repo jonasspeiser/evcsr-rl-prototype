@@ -328,7 +328,7 @@ class CustomEnv(gym.Env):
         if self.charging_request_queue:
             logger.debug(f"Charging request queue: {self.charging_request_queue}")
             self.active_charging_request_vehicle_id = self.charging_request_queue.popleft()
-            logger.info(f"Active charging request for: {self.active_charging_request_vehicle_id}")
+            logger.debug(f"Active charging request for: {self.active_charging_request_vehicle_id}")
             return True
         
         return False
