@@ -35,6 +35,7 @@ class Vehicle:
         self.relative_battery_soc = None
         self.distance_to_cs_dict = None  # Expected to be a dict {cs_id: distance}
         self.distance_to_destination = None
+        self.had_bad_timing_error = False
 
     def fetch_and_update_battery_values(self):
         # Ignore if the vehicle did not spawn in the simulation yet or despawned already
@@ -153,6 +154,8 @@ class Vehicle:
                 logger.error(f"{type(e).__name__}: {e}")
                 context['reroute_successful'] = False
                 context['rerouting_exception_occurred'] = True
+                if isinstance(e, BadTimingRoutingError):
+                    self.had_bad_timing_error = True
             except PointlessRecommendationError as e:
                 logger.error(f"{type(e).__name__}: {e}")
                 context['reroute_successful'] = False

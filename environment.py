@@ -296,7 +296,12 @@ class CustomEnv(gym.Env):
             logger.info(f"{vid}: just finished charging")
         # Find out if there are vehicles that just entered low battery status
         new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
-        charging_requests = (newly_spawned_ids or set()) | just_charged_ids | new_low_battery_ids
+        # Find vehicles that missed their recommended charging station (BadTimingRoutingError)
+        missed_station_ids = {vid for vid, v in self.vehicles.items() if v.had_bad_timing_error}
+        for vid in missed_station_ids:
+            self.vehicles[vid].had_bad_timing_error = False
+            logger.info(f"{vid}: missed charging station, re-queuing charging request")
+        charging_requests = (newly_spawned_ids or set()) | just_charged_ids | new_low_battery_ids | missed_station_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
         
