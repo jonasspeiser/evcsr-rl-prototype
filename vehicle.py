@@ -13,10 +13,12 @@ def get_padded_observation():
 
 class Vehicle:
 
-    EMPTY_SOC = 30 # value under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles) 
-    MAX_POSSIBLE_CAPACITY = 100000.0 # 100000 Wh is considered as max. possible battery capacity, regardless of vehicle type (used for normalization)
-    MAX_POSSIBLE_DISTANCE = None 
-    """ MAX_POSSIBLE_DISTANCE is set once during runtime upon simulation start. Max. possible distance between a vehicles start and destination in meters (used for normalization)."""
+    EMPTY_SOC = 30 
+    """ Value in Wh under which the battery should be considered empty by the environment (used for monitoring the number of empty vehicles)"""
+    DISTANCE_NORMALIZATION_VALUE = None 
+    """ DISTANCE_NORMALIZATION_VALUE is set once during runtime upon simulation start. Max. possible distance between a vehicles start and destination in meters (used for normalization)."""
+    CAPACITY_NORMALIZATION_VALUE = 100000.0 
+    """100000 Wh is considered as max. possible battery capacity, regardless of vehicle type (used for normalization)"""
 
     def __init__(self, vehicle_id, simulation:Simulation):
         self.vehicle_id = vehicle_id
@@ -71,12 +73,12 @@ class Vehicle:
         if vehicle_is_offline:
             # Use -1 as padding to indicate that the vehicle is not spawned.
             return get_padded_observation()
-        normalized_soc = self.battery_soc / self.MAX_POSSIBLE_CAPACITY if self.battery_soc is not None else -1 
-        dist_destination = self.distance_to_destination / self.MAX_POSSIBLE_DISTANCE if self.distance_to_destination is not None else -1
+        normalized_soc = self.battery_soc / self.CAPACITY_NORMALIZATION_VALUE if self.battery_soc is not None else -1 
+        dist_destination = self.distance_to_destination / self.DISTANCE_NORMALIZATION_VALUE if self.distance_to_destination is not None else -1
         # Ensure a fixed order by sorting charging station ids; pad if needed.
         distances = [
             -1 if self.distance_to_cs_dict[k] is None # if distance is None, the target is not reachable. Thus return -1
-            else self.distance_to_cs_dict[k] / self.MAX_POSSIBLE_DISTANCE # if reachable, normalise distance
+            else self.distance_to_cs_dict[k] / self.DISTANCE_NORMALIZATION_VALUE # if reachable, normalise distance
             for k in sorted(self.distance_to_cs_dict.keys())
             ]
         while len(distances) < 4:

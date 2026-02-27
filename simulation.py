@@ -45,9 +45,7 @@ class PointlessRecommendationError(RoutingError):
         dist_dest (float): Distance to destination.
         dist_cs (float): Distance to charging station.
     """
-    def __init__(self, dist_dest, dist_cs):
-        message = (f"Recommendation denied: Destination is {dist_dest} units away, "
-                   f"but the charging station is {dist_cs} units away.")
+    def __init__(self, message):
         super().__init__(message)
 
 class ImpossibleRoutingError(RoutingError):
@@ -287,12 +285,12 @@ class Simulation():
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
         #TODO: Use subscription (low prio)
-        logger.debug(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
+        logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
 
         if dist_cs is None or dist_dest is None:
             raise ImpossibleRoutingError(f"Cannot calculate route: vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}.")
         if dist_cs > dist_dest:
-            raise PointlessRecommendationError(dist_dest, dist_cs)
+            raise PointlessRecommendationError(f"Recommendation denied: Recommended station is past destination. vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}")
         if current_vehicle_edge != cs_edge: # this check avoids that charging is abborted if this function gets called while a vehicle is charging
             # find route from vehicle position to charging station and from charging station to destination
             route_to_cs = traci.simulation.findRoute(current_vehicle_edge, cs_edge, v_type)

@@ -537,7 +537,7 @@ class CustomEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
-        Vehicle.MAX_POSSIBLE_DISTANCE = self.simulation.get_max_possible_distance()
+        Vehicle.DISTANCE_NORMALIZATION_VALUE = self.simulation.get_max_possible_distance()
         # Re-create the vehicles dictionary in case new vehicles were spawned.
         self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
 
