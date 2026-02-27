@@ -53,14 +53,20 @@ class GreedyAlgorithm(EvaluationAlgorithm):
             raise UnboundLocalError(f"battery_soc is None for the vehicle with active_charging_request {active_vehicle}. This shouldn't be possible.")
         
         if normalized_battery_soc > 0.07:  # 0.07 ≈ 7,000 Wh = 25 km range at 240 Wh/km + ~16% headroom
+            logger.info(f"greedy → do nothing for {active_vehicle} (normalized soc={normalized_battery_soc:.3f})")
             return 0, placeholder # "do nothing"
-        
+
         # Unreachable stations are encoded as -1; same-edge stations as 0 (vehicle already past them).
-        # Treat both as infinitely far so argmin only considers stations genuinely ahead.
+        # Stations beyond the destination are also useless. Treat all such cases as infinitely far
+        # so argmin only considers stations genuinely reachable and ahead.
+        distance_to_destination = vehicle_obs[1]
         distances = np.array(station_distances, dtype=float)
-        distances[distances <= 0] = np.inf
+        distances[distances <= 0] = np.inf                       # unreachable or same-edge
+        distances[distances > distance_to_destination] = np.inf  # station is past destination
         if np.all(np.isinf(distances)):
+            logger.info(f"greedy → do nothing for {active_vehicle} (normalized soc={normalized_battery_soc:.3f}, no reachable station before destination)")
             return 0, placeholder  # no reachable station, do nothing
         closest_station = int(np.argmin(distances))
         action = closest_station + 1
+        logger.info(f"greedy → cs_{closest_station} for {active_vehicle} (normalized soc={normalized_battery_soc:.3f})")
         return action, placeholder
