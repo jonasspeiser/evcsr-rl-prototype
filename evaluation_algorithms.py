@@ -55,9 +55,10 @@ class GreedyAlgorithm(EvaluationAlgorithm):
         if battery_soc > 0.2:
             return 0, placeholder # "do nothing"
         
-        # Unreachable stations are encoded as -1; treat them as infinitely far
+        # Unreachable stations are encoded as -1; same-edge stations as 0 (vehicle already past them).
+        # Treat both as infinitely far so argmin only considers stations genuinely ahead.
         distances = np.array(station_distances, dtype=float)
-        distances[distances == -1] = np.inf
+        distances[distances <= 0] = np.inf
         if np.all(np.isinf(distances)):
             return 0, placeholder  # no reachable station, do nothing
         closest_station = int(np.argmin(distances))
