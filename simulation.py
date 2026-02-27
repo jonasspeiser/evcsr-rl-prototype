@@ -24,8 +24,10 @@ RED = [255, 0, 0]
 SUMO_CONFIG_STUB = "./street-networks/straight_100km/straight_100km"
 SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
 DISTANCES_FILE = f"{SUMO_CONFIG_STUB}.all_distances.json"
-CHARGING_DURATION = 30 # charging duration in seconds
-EMPTY_SOC = 30 # value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process.
+CHARGING_DURATION = 1000  
+"""charging duration in seconds — charges from near-empty to ~80% of 64 kWh (51,200 Wh) in ~969 s at 200 kW / 0.95 efficiency"""
+EMPTY_SOC = 30 
+"""value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process."""
 
 class RoutingError(Exception):
     """
