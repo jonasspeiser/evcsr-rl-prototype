@@ -42,17 +42,17 @@ class GreedyAlgorithm(EvaluationAlgorithm):
             active_charging_request_flag = vehicle_obs[8]
             if active_charging_request_flag:
                 active_vehicle = vehicle_id
-                battery_soc = vehicle_obs[0]
+                normalized_battery_soc = vehicle_obs[0]
                 station_distances = vehicle_obs[2:6]
                 break
         else: # for...else
             logger.warning("No vehicle with an active charging request found in the observation.")
             return 0, placeholder # "do nothing"
         
-        if battery_soc is None:
+        if normalized_battery_soc is None:
             raise UnboundLocalError(f"battery_soc is None for the vehicle with active_charging_request {active_vehicle}. This shouldn't be possible.")
         
-        if battery_soc > 0.07:  # 0.07 ≈ 7,000 Wh = 25 km range at 240 Wh/km + ~16% headroom
+        if normalized_battery_soc > 0.07:  # 0.07 ≈ 7,000 Wh = 25 km range at 240 Wh/km + ~16% headroom
             return 0, placeholder # "do nothing"
         
         # Unreachable stations are encoded as -1; same-edge stations as 0 (vehicle already past them).
