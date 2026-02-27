@@ -81,6 +81,8 @@ class CustomEnv(gym.Env):
             vehicle_id: single_vehicle_observation_space for vehicle_id in self.observation_space_ids
         })
 
+        self.episode_count = 0
+
         # Instantiate the reward strategy based on reward_strategy.
         if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
@@ -91,16 +93,6 @@ class CustomEnv(gym.Env):
         else:
             raise ValueError(f"Unknown reward_strategy: {reward_strategy}")
 
-    def _log_step_details(self, simulation_state, observation, reward, terminated, truncated, all_vehicles_at_destination):
-        logger.debug(f"State: {simulation_state}, Step reward: {reward}")
-        if terminated:
-            logger.info("Episode terminated")
-            if all_vehicles_at_destination:
-                logger.info("All vehicles arrived at their destination")
-            # if one_vehicle_is_empty:
-            #     logger.info("One or more vehicles ran out of battery")
-        if truncated:
-            logger.info("Episode truncated")
 
     def _set_charging_stops_per_episode_mean(self):
         """
@@ -275,7 +267,7 @@ class CustomEnv(gym.Env):
             if vehicle:
                 vehicle.arrival_time = current_time
                 vehicle.arrived = True
-                logger.debug(f"{vehicle_id} arrived at time {current_time}")
+                logger.info(f"{vehicle_id} arrived at time {current_time}")
 
     def _check_for_charging_request(self, newly_spawned_ids, newly_despawned_ids=None):
         """
@@ -457,7 +449,10 @@ class CustomEnv(gym.Env):
         self._set_global_ttt(simulation_time)
         
         final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
-        logger.info(f"Final reward: {final_reward}")
+        status_str = "terminated" if termination_status['terminated'] else "truncated"
+        all_arrived = all(v.arrived for v in self.vehicles.values())
+        arrived_str = ", all arrived" if all_arrived else ""
+        logger.info(f"Episode {self.episode_count} ended ({status_str}{arrived_str}): reward = {final_reward:.2f}")
         return final_reward
         
     def get_snapshot(self, *, max_vehicles: int = 200) -> dict:
@@ -539,6 +534,8 @@ class CustomEnv(gym.Env):
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
+        self.episode_count += 1
+        logger.info(f"--- Episode {self.episode_count} started ---")
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
@@ -628,10 +625,7 @@ class CustomEnv(gym.Env):
         if info is None:
             info = self._get_info()
         
-        self._log_step_details(info, observation, reward, 
-                              termination_status['terminated'], 
-                              termination_status['truncated'],
-                              termination_status['all_vehicles_at_destination'])
+        logger.debug(f"State: {info}, Step reward: {reward}")
         return observation, reward, termination_status['terminated'], termination_status['truncated'], info
 
     def render(self, mode='human'):

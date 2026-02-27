@@ -287,7 +287,7 @@ class Simulation():
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
         #TODO: Use subscription (low prio)
-        logger.info(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
+        logger.debug(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
 
         if dist_cs is None or dist_dest is None:
             raise ImpossibleRoutingError(f"Cannot calculate route: vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}.")
