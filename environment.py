@@ -534,10 +534,9 @@ class CustomEnv(gym.Env):
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.episode_count += 1
-        logger.info(f"--- Episode {self.episode_count} started ---")
         self.vehicle_ids = self.simulation.get_all_oev_ids()
-        logger.debug(f"Reset vehicle_ids: {self.vehicle_ids}")
+        self.episode_count += 1
+        logger.info(f"--- Episode {self.episode_count} started ({len(self.vehicle_ids)} vehicles) ---")
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
         Vehicle.DISTANCE_NORMALIZATION_VALUE = self.simulation.get_max_possible_distance()
         # Re-create the vehicles dictionary in case new vehicles were spawned.

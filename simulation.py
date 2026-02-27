@@ -210,7 +210,7 @@ class Simulation():
             logger.debug(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")
             self.added_vehicles.add(vehicle_id)
             self._subscribe_to_vehicle(vehicle_id)
-        logger.info(f"Added {len(vehicles_dict)} vehicles: {list(vehicles_dict.keys())}")
+        logger.debug(f"Added {len(vehicles_dict)} vehicles: {list(vehicles_dict.keys())}")
 
     def _subscribe_to_vehicle(self, vehicle_id):
         """Helper function defining vehicle subscription to TraCI variables."""
