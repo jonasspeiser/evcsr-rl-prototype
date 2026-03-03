@@ -32,9 +32,8 @@ class ScenarioGenerator():
     """
 
     def __init__(self, seed):
-        if seed is not None:
-            print("seed set ")
-            self.rng = random.Random(seed)
+
+        self.rng = random.Random(seed)  # random.Random(None) works as well if no seed is provided.
 
     def _select_route(self, edge_list):
         """
