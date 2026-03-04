@@ -119,6 +119,7 @@ class Simulation():
             '--start', # start simulation immediately
             '--device.battery.probability', '1', # sets all vehicles to be EVs instead of combustion engine
             # '--device.stationfinder.probability', '1' # remove vehicle if it runs out of battery
+            '--time-to-teleport', '-1', # disable teleporting of vehicles that are stuck in traffic, we want queues to form at charging stations
             ]
         if random_seed is not None:
             sumoCmd += ['--seed', str(random_seed)]
