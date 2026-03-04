@@ -112,9 +112,9 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
 
-    
+
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
     if algorithm_class is None:
@@ -141,7 +141,7 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -182,7 +182,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)

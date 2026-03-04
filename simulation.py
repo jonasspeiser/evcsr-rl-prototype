@@ -99,7 +99,7 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 
 class Simulation():
 
-    def __init__(self, scenario_generator, gui:bool=False, random_seed = None):
+    def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None):
         
         with open(DISTANCES_FILE, "r") as f:
             self.all_distances = json.load(f)
@@ -122,7 +122,13 @@ class Simulation():
             ]
         if random_seed is not None:
             sumoCmd += ['--seed', str(random_seed)]
-            
+        if sumo_log_path is not None:
+            sumoCmd += [
+                '--log', sumo_log_path,
+                '--log.timestamps', 'true',
+                '--aggregate-warnings', '100'
+                ]
+
         # close any existing traci connection (e.g. from previous simulation runs) before starting a new one
         try:
             traci.close()
