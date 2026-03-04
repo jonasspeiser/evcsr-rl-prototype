@@ -261,7 +261,8 @@ class CustomEnv(gym.Env):
                 vehicle.departure_time = current_time
                 just_spawned.append(vehicle_id)
         if just_spawned:
-            logger.info(f"{len(just_spawned)} vehicle(s) spawned at time {current_time}: {just_spawned}")
+            logger.info(f"{len(just_spawned)} vehicle(s) spawned at time {current_time}")
+            logger.debug(f"Spawned vehicle IDs: {just_spawned}")
         for vehicle_id in newly_arrived_ids or []:
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:

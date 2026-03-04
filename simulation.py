@@ -334,7 +334,7 @@ class Simulation():
         try:
             traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="")
         except traci.exceptions.TraCIException:
-            logger.info(f"{vehicle_id}: No charging stop to remove")
+            logger.debug(f"{vehicle_id}: No charging stop to remove")
 
     def get_stops(self, vehicle_id):
         """

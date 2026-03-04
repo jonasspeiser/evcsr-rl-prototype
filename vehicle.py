@@ -185,7 +185,6 @@ class Vehicle:
         if self.empty:
             return False
         if self.is_battery_empty():
-            logger.info(f"{self.vehicle_id}: battery empty")
             self.empty = True
             return True
         return False
