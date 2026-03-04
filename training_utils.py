@@ -6,6 +6,7 @@ from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime
 import json
 from logging_utils import RunLogging, setup_run_logging
+import subprocess
 
 SB3_ALGOS = {
     "PPO": PPO,
@@ -54,6 +55,14 @@ def _run_training(*, env, log: RunLogging, model, n_steps):
         env.close()
         log.close()
 
+def get_git_version():
+    try:
+        return subprocess.check_output(
+            ["git", "describe", "--tags"],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        return "unknown"
 
 def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed):
     metrics_list = []
@@ -245,18 +254,6 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     return model_path, eval_metrics_filepath_list
 
 if __name__ == "__main__":
-    # Example usage:
-
-    import subprocess
-
-    def get_git_version():
-        try:
-            return subprocess.check_output(
-                ["git", "describe", "--tags"],
-                stderr=subprocess.DEVNULL
-            ).decode().strip()
-        except Exception:
-            return "unknown"
     
     train_and_evaluate(
         scenario="BASt",
@@ -268,6 +265,7 @@ if __name__ == "__main__":
         n_vehicles=500,
         n_noevs=0,
         n_steps=10000,
-        eval_episodes=10,
+        eval_episodes=5,
+        random_seed_eval=123,
         execution_context="local"
     )
