@@ -23,7 +23,15 @@ EVAL_ALGOS = {
 
 def _load_model(model_path, algorithm, env):
     if algorithm in SB3_ALGOS:
-        return SB3_ALGOS[algorithm].load(model_path, env=env)
+        try:
+            return SB3_ALGOS[algorithm].load(model_path, env=env)
+        except ValueError as e:
+            # Compatibility handling for old models with renamed observation space keys (member_vehicle -> observable_vehicle)
+            # TODO: Remove this try/catch block once all models are based on v0.9.2 or newer
+            if "Observation spaces do not match" not in str(e):
+                raise
+            print(f"Warning: Observation space key mismatch (old model with renamed keys). Retrying with space override.\n  {e}")
+            return SB3_ALGOS[algorithm].load(model_path, env=env, custom_objects={"observation_space": env.observation_space})
     if algorithm in EVAL_ALGOS:
         return EVAL_ALGOS[algorithm](environment=env)
     raise ValueError(f"Invalid model type: {algorithm}")
