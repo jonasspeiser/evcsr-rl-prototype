@@ -712,7 +712,6 @@ class Simulation():
             return None
         parameter_data = data.get(tc.VAR_PARAMETER_WITH_KEY, {})
         battery_soc = float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None
-        logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
         if self.gui:
             self._adapt_vehicle_color(vehicle_id, battery_soc)
         # stop vehicle if battery is empty

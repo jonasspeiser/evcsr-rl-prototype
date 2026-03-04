@@ -253,7 +253,7 @@ def _get_log_level(training_or_evaluation):
         case _:
             return None
 
-def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capacity: int = 0):
+def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capacity: int = 0, file_log_level=logging.INFO):
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
     handlers = []
     ring = None
@@ -266,12 +266,11 @@ def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capac
         handlers.append(console_handler)
 
     if log_file_path is not None:
-        # create file handler which logs DEBUG messages to a log file
         if log_file_path.endswith(".log"):
             # Replace .log with .jsonl automatically (for compatibility with existing code)
-            log_file_path = log_file_path.replace(".log", ".jsonl")    
+            log_file_path = log_file_path.replace(".log", ".jsonl")
         json_handler = JsonlFileHandler(log_file_path, mode="a")
-        json_handler.setLevel(logging.DEBUG)
+        json_handler.setLevel(file_log_level)
         # Filter out logs from other modules to reduce noise and make comparisons between runs easier
         # prefixes=("rl",) will allow all loggers starting with "rl", e.g. "rl.environment.simulation"
         json_handler.addFilter(LoggerPrefixFilter(prefixes=("rl",)))
@@ -319,7 +318,8 @@ def _setup_logging(algorithm, version_tag, reward_strategy, scenario, street_net
     ring, resolved_log_path = _configure_logging(
         log_file_path=py_log_path,
         console_log_level=console_log_level,
-        ring_capacity=2000,   
+        ring_capacity=2000,
+        file_log_level=logging.INFO,
     )
     return run_dir, model_save_path, resolved_log_path, ring
 
