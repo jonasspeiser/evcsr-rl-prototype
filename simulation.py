@@ -703,7 +703,7 @@ class Simulation():
         if self.gui:
             self._adapt_vehicle_color(vehicle_id, battery_soc)
         # stop vehicle if battery is empty
-        if battery_soc <= EMPTY_SOC:
+        if battery_soc is not None and battery_soc <= EMPTY_SOC:
             self._simulate_empty_battery(vehicle_id)
         return battery_soc
         # WITH DIRECT TRACI CALLS:
