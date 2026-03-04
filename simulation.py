@@ -156,6 +156,8 @@ class Simulation():
             tc.VAR_DEPARTED_VEHICLES_IDS,
             tc.VAR_ARRIVED_VEHICLES_IDS,
             tc.VAR_STOP_ENDING_VEHICLES_IDS,
+            tc.VAR_TELEPORT_STARTING_VEHICLES_IDS,
+            tc.VAR_TELEPORT_ENDING_VEHICLES_IDS,
         ])
 
     def add_non_observable_routes(self):
@@ -475,6 +477,11 @@ class Simulation():
         self.just_removed_vehicle_ids = set()
         self.vehicle_data = traci.vehicle.getAllSubscriptionResults()
         self.simulation_data = traci.simulation.getSubscriptionResults()
+        sim_time = self.simulation_data.get(tc.VAR_TIME)
+        for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
+            logger.warning(f"Teleport start: {vid} at t={sim_time}")
+        for vid in self.simulation_data.get(tc.VAR_TELEPORT_ENDING_VEHICLES_IDS, []):
+            logger.warning(f"Teleport end: {vid} at t={sim_time}")
 
     def active_vehicles_exist(self):
         expected_vehicles = self.simulation_data.get(tc.VAR_MIN_EXPECTED_VEHICLES, 0)
