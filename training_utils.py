@@ -85,6 +85,22 @@ def training_units_to_steps(n_training_units, n_oevs):
     return n_training_units * n_oevs * 3
 
 
+def get_latest_model(runs_dir="runs"):
+    """Return the path to the most recently trained model .zip file."""
+    run_dirs = sorted(
+        e for e in (os.path.join(runs_dir, d) for d in os.listdir(runs_dir))
+        if os.path.isdir(e)
+    )
+    if not run_dirs:
+        raise FileNotFoundError(f"No runs found in {runs_dir!r}")
+    models = sorted(
+        e for e in (os.path.join(run_dirs[-1], f) for f in os.listdir(run_dirs[-1]))
+        if e.endswith(".zip")
+    )
+    if not models:
+        raise FileNotFoundError(f"No model .zip found in {run_dirs[-1]!r}")
+    return models[-1]
+
 def get_git_version():
     try:
         return subprocess.check_output(
@@ -206,9 +222,10 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         wandb_entity=wandb_entity,
     )
 
-    _save_run_config(log.run_dir, {
+    # Save alongside the new model file (not in run_dir root, to avoid overwriting the original run_config.json)
+    _dump_to_file({
         "git_version": version_tag,
-        "mode": "training",
+        "mode": "training_continued",
         "algorithm": algorithm,
         "policy": config.get("policy"),
         "version_tag": version_tag,
@@ -221,7 +238,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "n_steps": n_steps,
         "execution_context": execution_context,
         "continued_from": model_load_path,
-    })
+    }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
     env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
@@ -264,7 +281,8 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         wandb_entity=wandb_entity,
     )
 
-    _save_run_config(os.path.join(log.run_dir, "evaluation"), {
+    # Use the same timestamp as the metrics file so configs and metrics are paired by name
+    _dump_to_file({
         "git_version": get_git_version(),
         "mode": "evaluation",
         "algorithm": algorithm,
@@ -278,7 +296,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "random_seed": random_seed,
         "model_load_path": model_load_path,
         "execution_context": execution_context,
-    })
+    }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
     env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
@@ -384,14 +402,30 @@ if __name__ == "__main__":
     #     execution_context="local"
     # )
 
+    train_model(
+        scenario="same_route",
+        algorithm="PPO",
+        policy="MultiInputPolicy",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight100km",
+        n_vehicles=20,
+        n_noevs=0,
+        n_training_units=100,
+        use_wandb=False,
+        wandb_entity="evcs-rl"
+    )
+
+    
+
     # further_train_model(
-    #     model_load_path="runs/2026-03-05_11-12-30_v0.9.5-2-g5e10088_basic_same_route_straight100km_PPO/2026-03-05_11-12-30_v0.9.5-2-g5e10088_basic_same_route_straight100km_PPO.zip",
-    #     n_training_units=500,
+    #     model_load_path=get_latest_model(),
+    #     n_training_units=100,
     #     execution_context="local"
     # )
 
-    evaluate_model_with_config(
-        model_load_path="runs/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO.zip",
-        n_episodes=20,
-        random_seed=123,
-    )
+    # evaluate_model_with_config(
+    #     model_load_path="runs/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO.zip",
+    #     n_episodes=20,
+    #     random_seed=123,
+    # )

@@ -93,7 +93,8 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         # Copy run configs from each evaluation folder for reproducibility
         run_configs = []
         for fp in filepath_list:
-            config_path = Path(fp).parent / "run_config.json"
+            # Config filename mirrors the metrics 
+            config_path = Path(fp).parent / Path(fp).name.replace("metrics", "run_config_")
             if config_path.exists():
                 with open(config_path) as f:
                     run_configs.append(json.load(f))
