@@ -28,7 +28,7 @@ def json_keys_to_int(x):
 
 class ScenarioGenerator():
     """
-    Vehicles have different routes, where start and endpoint are random. Vehicles are starting directly one after the other. Start battery values are variable.
+    Vehicles have different routes, where start and endpoint are random. Vehicles are starting directly one after the other on simulation start. Start battery values are random within start_soc_bounds.
     """
 
     def __init__(self, seed):
@@ -145,7 +145,7 @@ class ScenarioGenerator():
      
 class SameRouteScenario(ScenarioGenerator):
     """
-    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other. Start battery values are variable.
+    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are random within start_soc_bounds.
     """
     def __init__(self, seed=None):
         super().__init__(seed)
@@ -162,7 +162,7 @@ class SameRouteScenario(ScenarioGenerator):
     
 class SameSOCSameRouteScenario(SameRouteScenario):
     """
-    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other. Start battery values are equal for all vehicles (50 % of BATTERY_MAX).
+    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are equal for all vehicles (50 % of BATTERY_MAX).
     """
 
     def _select_soc(self, start_soc_bounds):

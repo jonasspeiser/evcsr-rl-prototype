@@ -63,6 +63,16 @@ def _run_training(*, env, log: RunLogging, model, n_steps):
         env.close()
         log.close()
 
+def training_units_to_steps(n_training_units, n_oevs):
+    """Convert training units to environment steps.
+
+    One training unit roughly corresponds to one episode.
+    Each OEV generates ~3 charging requests per episode (spawn + low battery/post-charge),
+    so steps per episode ≈ n_oevs * 3.
+    """
+    return n_training_units * n_oevs * 3
+
+
 def get_git_version():
     try:
         return subprocess.check_output(
@@ -110,7 +120,8 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
+    n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
     # setup logging
     log = setup_run_logging(
@@ -139,7 +150,8 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_steps, model_load_path, n_noevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
+def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, model_load_path, n_noevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
+    n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
     # setup logging
     log = setup_run_logging(
@@ -220,7 +232,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         env.close()
         log.close()
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_steps, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -235,7 +247,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
         reward_strategy (str): The reward strategy to use in the environment.
         street_network (str): The street network to use.
         n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
-        n_steps (int): The number of training steps.
+        n_training_units (int): The number of training units (roughly episodes) to train for.
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles).
             Defaults to None.
         execution_context (str, optional): The execution context (e.g., "local", "cloud").
@@ -253,7 +265,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_steps=n_steps, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
     random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
@@ -264,16 +276,16 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 if __name__ == "__main__":
     
     train_and_evaluate(
-        scenario="BASt",
+        scenario="same_route",
         algorithm="PPO",
         policy="MultiInputPolicy",
         version_tag=get_git_version(),
         reward_strategy="basic",
         street_network="straight100km",
-        n_vehicles=500,
+        n_vehicles=20,
         n_noevs=0,
-        n_steps=10000,
-        eval_episodes=5,
+        n_training_units=300,
+        eval_episodes=20,
         random_seed_eval=123,
         execution_context="local"
     )
