@@ -5,6 +5,7 @@ from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeA
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime
 import json
+import os
 from logging_utils import RunLogging, setup_run_logging
 import subprocess
 
@@ -40,6 +41,17 @@ def _load_model(model_path, algorithm, env):
 def _dump_to_file(content, filepath):
     with open(filepath, 'w') as f:
         json.dump(content, f, indent=2)
+
+def _save_run_config(directory, config):
+    """Save run configuration to run_config.json in the given directory."""
+    _dump_to_file(config, os.path.join(directory, "run_config.json"))
+
+def _load_run_config(model_load_path):
+    """Load run_config.json from the run directory of the given model."""
+    run_dir = os.path.dirname(os.path.abspath(model_load_path))
+    config_path = os.path.join(run_dir, "run_config.json")
+    with open(config_path, 'r') as f:
+        return json.load(f)
 
 def _run_training(*, env, log: RunLogging, model, n_steps):
     try:
@@ -139,9 +151,25 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         wandb_entity=wandb_entity,
     )
 
+    _save_run_config(log.run_dir, {
+        "git_version": get_git_version(),
+        "mode": "training",
+        "algorithm": algorithm,
+        "policy": policy,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "scenario": scenario,
+        "street_network": street_network,
+        "n_vehicles": n_vehicles,
+        "n_noevs": n_noevs,
+        "n_training_units": n_training_units,
+        "n_steps": n_steps,
+        "random_seed": random_seed,
+        "execution_context": execution_context,
+    })
+
     # initiate environment
     env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
-
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -150,7 +178,15 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def further_train_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, model_load_path, n_noevs=None, execution_context="local", use_wandb=False, wandb_entity=None):
+def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None):
+    config = _load_run_config(model_load_path)
+    scenario = config["scenario"]
+    algorithm = config["algorithm"]
+    reward_strategy = config["reward_strategy"]
+    street_network = config["street_network"]
+    n_vehicles = config["n_vehicles"]
+    n_noevs = config.get("n_noevs")
+    version_tag = get_git_version()
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
     # setup logging
@@ -164,13 +200,31 @@ def further_train_model(scenario, algorithm, version_tag, reward_strategy, stree
         n_noevs=n_noevs,
         n_steps=n_steps,
         mode="training",
+        model_load_path=model_load_path,
         execution_context=execution_context,
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
     )
 
+    _save_run_config(log.run_dir, {
+        "git_version": version_tag,
+        "mode": "training",
+        "algorithm": algorithm,
+        "policy": config.get("policy"),
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "scenario": scenario,
+        "street_network": street_network,
+        "n_vehicles": n_vehicles,
+        "n_noevs": n_noevs,
+        "n_training_units": n_training_units,
+        "n_steps": n_steps,
+        "execution_context": execution_context,
+        "continued_from": model_load_path,
+    })
+
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -210,6 +264,22 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         wandb_entity=wandb_entity,
     )
 
+    _save_run_config(os.path.join(log.run_dir, "evaluation"), {
+        "git_version": get_git_version(),
+        "mode": "evaluation",
+        "algorithm": algorithm,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "scenario": scenario,
+        "street_network": street_network,
+        "n_vehicles": n_vehicles,
+        "n_noevs": n_noevs,
+        "n_episodes": n_episodes,
+        "random_seed": random_seed,
+        "model_load_path": model_load_path,
+        "execution_context": execution_context,
+    })
+
     # initiate environment
     env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
 
@@ -231,6 +301,30 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     finally:
         env.close()
         log.close()
+
+def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None):
+    """Evaluate a trained model, loading scenario/algorithm/etc. from its run_config.json.
+
+    Returns:
+        The file path of the evaluation metrics file (str).
+    """
+    config = _load_run_config(model_load_path)
+    return evaluate_model(
+        scenario=config["scenario"],
+        algorithm=config["algorithm"],
+        version_tag=get_git_version(),
+        reward_strategy=config["reward_strategy"],
+        street_network=config["street_network"],
+        n_vehicles=config["n_vehicles"],
+        n_noevs=config.get("n_noevs"),
+        n_episodes=n_episodes,
+        model_load_path=model_load_path,
+        render_mode=render_mode,
+        random_seed=random_seed,
+        execution_context=execution_context,
+        use_wandb=use_wandb,
+        wandb_entity=wandb_entity,
+    )
 
 def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
@@ -275,17 +369,29 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    train_and_evaluate(
-        scenario="same_route",
-        algorithm="PPO",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight100km",
-        n_vehicles=20,
-        n_noevs=0,
-        n_training_units=300,
-        eval_episodes=20,
-        random_seed_eval=123,
-        execution_context="local"
+    # train_and_evaluate(
+    #     scenario="same_route",
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight100km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_training_units=300,
+    #     eval_episodes=20,
+    #     random_seed_eval=123,
+    #     execution_context="local"
+    # )
+
+    # further_train_model(
+    #     model_load_path="runs/2026-03-05_11-12-30_v0.9.5-2-g5e10088_basic_same_route_straight100km_PPO/2026-03-05_11-12-30_v0.9.5-2-g5e10088_basic_same_route_straight100km_PPO.zip",
+    #     n_training_units=500,
+    #     execution_context="local"
+    # )
+
+    evaluate_model_with_config(
+        model_load_path="runs/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO.zip",
+        n_episodes=20,
+        random_seed=123,
     )

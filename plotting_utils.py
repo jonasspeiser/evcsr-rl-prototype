@@ -90,6 +90,17 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             # Convert Path objects to strings for JSON serialization
             json.dump({"source_files": [str(fp) for fp in filepath_list]}, f, indent=2)
 
+        # Copy run configs from each evaluation folder for reproducibility
+        run_configs = []
+        for fp in filepath_list:
+            config_path = Path(fp).parent / "run_config.json"
+            if config_path.exists():
+                with open(config_path) as f:
+                    run_configs.append(json.load(f))
+        if run_configs:
+            with open(f"{save_directory}/run_configs.json", "w") as f:
+                json.dump(run_configs, f, indent=2)
+
         # Save dataframe for easier later modifications of visuals
         df.to_csv(f"{save_directory}/data_raw.csv", index=False)
         df_melted.to_csv(f"{save_directory}/data_melted.csv", index=False)
