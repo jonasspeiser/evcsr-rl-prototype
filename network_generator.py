@@ -386,8 +386,8 @@ if __name__ == "__main__":
         )
 
     write_all_distances_json(
-        net_file_path=f"{map_path_stub}.net.xml",
-        output_path=f"{map_path_stub}.all_distances.json"
+        net_file_path=f"{network_path_stub}.net.xml",
+        output_path=f"{network_path_stub}.all_distances.json"
     )
 
     if test_generated_files:
