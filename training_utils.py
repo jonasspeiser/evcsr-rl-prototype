@@ -161,7 +161,8 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         policy (str): The policy configuration to use.
         version_tag (str): The current environment version (current git version tag).
         reward_strategy (str): The reward strategy to use in the environment.
-        street_network (str): The street network to use.
+        street_network (str): The street network directory name to use (e.g., "straight_100km", "straight_120km").
+            Must match a subdirectory under street-networks/ containing the corresponding SUMO files.
         n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
         n_training_units (int): The number of training units (roughly episodes) to train for.
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
@@ -213,7 +214,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     })
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -284,7 +285,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -299,7 +300,8 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         algorithm (str): The RL algorithm or baseline algorithm to evaluate.
         version_tag (str): The current environment version (current git version tag).
         reward_strategy (str): The reward strategy to use in the environment.
-        street_network (str): The street network to use.
+        street_network (str): The street network directory name to use (e.g., "straight_100km", "straight_120km").
+            Must match a subdirectory under street-networks/ containing the corresponding SUMO files.
         n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
         n_episodes (int): The number of episodes to run for evaluation.
         model_load_path (str, optional): The file path to the trained model .zip file   to load for evaluation. If None, the function will evaluate a baseline algorithm specified by the `algorithm` argument. Defaults to None.
@@ -360,7 +362,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy= reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'))
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
@@ -418,7 +420,8 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
         policy (str): The policy configuration to use.
         version_tag (str): The current environment version (current git version tag).
         reward_strategy (str): The reward strategy to use in the environment.
-        street_network (str): The street network to use.
+        street_network (str): The street network directory name to use (e.g., "straight_100km", "straight_120km").
+            Must match a subdirectory under street-networks/ containing the corresponding SUMO files.
         n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
         n_training_units (int): The number of training units (roughly episodes) to train for.
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles).
@@ -455,7 +458,7 @@ if __name__ == "__main__":
         policy="MultiInputPolicy",
         version_tag=get_git_version(),
         reward_strategy="basic",
-        street_network="straight100km",
+        street_network="straight_100km",
         n_vehicles=20,
         n_noevs=0,
         n_training_units=300,
@@ -471,7 +474,7 @@ if __name__ == "__main__":
     #     policy="MultiInputPolicy",
     #     version_tag=get_git_version(),
     #     reward_strategy="basic",
-    #     street_network="straight100km",
+    #     street_network="straight_100km",
     #     n_vehicles=20,
     #     n_noevs=0,
     #     n_training_units=100,
@@ -497,7 +500,7 @@ if __name__ == "__main__":
     #     algorithm="RANDOM",
     #     version_tag=get_git_version(),
     #     reward_strategy="basic",
-    #     street_network="straight100km",
+    #     street_network="straight_100km",
     #     n_vehicles=20,
     #     n_noevs=0,
     #     n_episodes=5,

@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_observable_vehicles=None, random_seed=None, sumo_log_path=None):
+                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -42,7 +42,7 @@ class CustomEnv(gym.Env):
             self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
         
         gui = (self.render_mode == "human")
-        self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed, sumo_log_path=sumo_log_path)
+        self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed, sumo_log_path=sumo_log_path, street_network=street_network)
         self.vehicles_to_spawn = vehicles_to_spawn
 
         self.non_observable_vehicles = non_observable_vehicles

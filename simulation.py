@@ -21,9 +21,7 @@ GREEN = [0, 255, 0]
 YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
-SUMO_CONFIG_STUB = "./street-networks/straight_100km/straight_100km"
-SUMO_CONFIG_PATH = f"{SUMO_CONFIG_STUB}.sumocfg"
-DISTANCES_FILE = f"{SUMO_CONFIG_STUB}.all_distances.json"
+DEFAULT_STREET_NETWORK = "straight_100km"
 CHARGING_DURATION = 1000  
 """charging duration in seconds — charges from near-empty to ~80% of 64 kWh (51,200 Wh) in ~969 s at 200 kW / 0.95 efficiency"""
 EMPTY_SOC = 30 
@@ -99,9 +97,10 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 
 class Simulation():
 
-    def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None):
-        
-        with open(DISTANCES_FILE, "r") as f:
+    def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None, street_network = DEFAULT_STREET_NETWORK):
+        self.sumo_config_stub = f"./street-networks/{street_network}/{street_network}"
+
+        with open(f"{self.sumo_config_stub}.all_distances.json", "r") as f:
             self.all_distances = json.load(f)
 
         if type(gui) is not bool:
@@ -111,7 +110,7 @@ class Simulation():
             sumoBinary = checkBinary('sumo-gui')
         else:
             sumoBinary = checkBinary('sumo')
-        config_file = SUMO_CONFIG_PATH
+        config_file = f"{self.sumo_config_stub}.sumocfg"
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
@@ -202,8 +201,8 @@ class Simulation():
             scenario_id (str, optional): The id of the scenario to use for generating the vehicles. If None, the scenario is selected randomly.
         """
         # edge_list = traci.edge.getIDList()
-        all_routes = network_generator.get_all_routes(SUMO_CONFIG_STUB)
-        start_soc_bounds = network_generator.get_start_soc_bounds(SUMO_CONFIG_STUB) 
+        all_routes = network_generator.get_all_routes(self.sumo_config_stub)
+        start_soc_bounds = network_generator.get_start_soc_bounds(self.sumo_config_stub)
         routes_dict = self.scenario_generator.generate_routes_from_routes_list(amount, all_routes)
         routes_id_list = list(routes_dict.keys())
         vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds, scenario_id)
@@ -444,7 +443,7 @@ class Simulation():
         Returns:
             float: Maximum possible distance in meters.
         """
-        return network_generator.get_max_possible_distance(SUMO_CONFIG_STUB)
+        return network_generator.get_max_possible_distance(self.sumo_config_stub)
     
     def get_vehicle_destination(self, vehicle_id):
         """
