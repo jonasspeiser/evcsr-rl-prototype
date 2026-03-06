@@ -51,6 +51,49 @@ def make_violinplot(data_df, metric_name, save_path=None):
         fig.savefig(save_path)
         
 
+def plot_action_distribution(df, save_path=None):
+    """Plot the mean action distribution per algorithm as a grouped bar chart.
+
+    Normalises each episode's action_counts to fractions first so that
+    episodes of different lengths are weighted equally.
+    """
+    if "action_counts" not in df.columns:
+        return
+
+    rows = []
+    for _, row in df.iterrows():
+        counts = row.get("action_counts")
+        if not isinstance(counts, dict) or not counts:
+            continue
+        total = sum(counts.values())
+        for action, count in counts.items():
+            rows.append({
+                "algorithm": row["algorithm"],
+                "action": int(action),
+                "fraction": count / total if total > 0 else 0,
+            })
+
+    if not rows:
+        return
+
+    df_actions = pd.DataFrame(rows)
+    df_agg = df_actions.groupby(["algorithm", "action"])["fraction"].mean().reset_index()
+
+    sns.set_theme(style="whitegrid")
+    plt.figure(figsize=(10, 6))
+    plot = sns.barplot(data=df_agg, x="action", y="fraction", hue="algorithm", palette="muted")
+    plt.title("Action Distribution per Algorithm", fontsize=14)
+    plt.xlabel("Action")
+    plt.ylabel("Mean fraction of steps")
+    plt.ylim(0, 1)
+    sns.despine(left=True, bottom=True)
+    plt.show()
+
+    if save_path:
+        fig = plot.get_figure()
+        fig.savefig(save_path)
+
+
 def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     data_list = []
     for filepath in filepath_list:
@@ -72,12 +115,14 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             "env/cumulated_waiting_time_only_terminated",
             "env/empty_vehicles_per_episode",
             "env/final_simulation_time",
+            "action_distribution",
         ]
 
-    # Melt the DataFrame to long format
-    df_melted = df.melt(id_vars=["algorithm"], 
-                        value_vars=metrics_to_plot, 
-                        var_name="Metric", 
+    # Melt the DataFrame to long format — "action_distribution" is not a plain column, filter it out
+    meltable_metrics = [m for m in metrics_to_plot if m != "action_distribution"]
+    df_melted = df.melt(id_vars=["algorithm"],
+                        value_vars=meltable_metrics,
+                        var_name="Metric",
                         value_name="Value")
 
     if save_figure:
@@ -109,9 +154,13 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
 
     # Create plots
     for metric in metrics_to_plot:
-        # Filter data for the current metric
-        df_filtered = df_melted[df_melted["Metric"] == metric]
-        # Cut out the leading "/env" in the variable name
-        metric_display_name = metric[4:]
-        figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_figure else None
-        make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
+        if metric == "action_distribution":
+            save_path = f"{save_directory}/action_distribution.png" if save_figure else None
+            plot_action_distribution(df, save_path=save_path)
+        else:
+            # Filter data for the current metric
+            df_filtered = df_melted[df_melted["Metric"] == metric]
+            # Cut out the leading "env/" in the variable name
+            metric_display_name = metric[4:]
+            figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_figure else None
+            make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
