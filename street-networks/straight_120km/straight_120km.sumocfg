@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration>
+    <input>
+        <net-file value="straight_120km.net.xml"/>
+        <additional-files value="straight_120km.add.xml, ../../vehicle-models/soulEV65.add.xml"/>
+    </input>
+
+    <report>
+        <verbose value="true"/>
+        <no-step-log value="true"/>
+    </report>
+</configuration>

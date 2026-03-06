@@ -1,0 +1,10 @@
+{
+  "network_name": "straight_120km",
+  "km_total": 120,
+  "max_possible_distance": 120001.2,
+  "max_battery_capacity": 100000.0,
+  "start_soc_bounds": [
+    3880,
+    22390
+  ]
+}

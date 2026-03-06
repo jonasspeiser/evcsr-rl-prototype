@@ -12,11 +12,11 @@ import json
 test_generated_files = True  # Set to False to skip launching SUMO
 
 networks_dir = "street-networks"  # Directory to store generated files
-network_name = "straight_100km"  # Base name for the network files
+network_name = "straight_120km"  # Base name for the network files
 
 
 # === GENERAL CONFIGURATION ===
-km_total = 100 # Total length of the generated highway straight in km
+km_total = 120 # Total length of the generated highway straight in km
 km_step = 1 # length of each individual edge in km
 lane_count = 3
 highway_lane_speed = 33.33  # m/s ~120 km/h
@@ -29,7 +29,7 @@ start_soc_bounds = (3880, 22_390)  # Start SOC bounds for vehicles in Wh (~6% to
 # === CHARGING STATION CONFIGURATION ===
 charging_params = {
     "startPos": 500.0, # Distance from the entry node in meters
-    "endPos": 540.0,
+    "endPos": 510.0,
     "chargeDelay": 2,
     "chargeInTransit": 0,
     "power": 200_000,        # Watts
