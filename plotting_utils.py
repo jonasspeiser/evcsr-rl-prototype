@@ -25,7 +25,7 @@ def get_last_x_metrics_files(n_files,runs_dir="runs"):
         eval_dir = run / "evaluation"
         metrics = list(eval_dir.glob("metrics*.json"))
         if metrics:
-            metrics_files.append(metrics[0])  # assuming one metrics file per run
+            metrics_files.append(sorted(metrics)[-1])  # take newest (timestamp in filename)
 
     return metrics_files
 
