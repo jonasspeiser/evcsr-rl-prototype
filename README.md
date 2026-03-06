@@ -173,6 +173,9 @@ To enable W&B tracking, call `train_model(...)` and `evaluate_model(...)` with t
 * `env/empty_vehicles_per_episode`: How many vehicles went completely empty
 * `env/final_simulation_time`: The value of the final SUMO-timestep when the episode ended
 
+### Using SUMO GUI to visually inspect evaluation runs
+To actually see the vehicles when zoomed out, after the SUMO GUI opened, click on `Edit` -> `Edit Visualisation` (or press F9). There, click on the `Vehicles` tab and activate `Draw with constant size when zoomed out`.
+
 ## Data
 
 The datasets used in this project and their documentation can be found in the "datasets" directory.

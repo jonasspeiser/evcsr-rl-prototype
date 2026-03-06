@@ -153,6 +153,26 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     return metrics_list
 
 def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
+    """Trains a reinforcement learning model with the specified configuration and logs the training process.
+
+    Args:        
+        scenario (str): The scenario configuration for the environment.
+        algorithm (str): The RL algorithm to use for training.
+        policy (str): The policy configuration to use.
+        version_tag (str): The current environment version (current git version tag).
+        reward_strategy (str): The reward strategy to use in the environment.
+        street_network (str): The street network to use.
+        n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
+        n_training_units (int): The number of training units (roughly episodes) to train for.
+        n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
+        execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
+        random_seed (int, optional): Random seed for reproducibility. Defaults to None.
+        use_wandb (bool, optional): Whether to log training with Weights & Biases. Defaults to False.
+        wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
+
+    Returns:        
+        The file path of the saved model (.zip).
+    """
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
     # setup logging
@@ -199,6 +219,18 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
 def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None):
+    """Continue training an existing model, loading scenario/algorithm/etc. from its run_config.json.
+
+    Args:
+        model_load_path (str): The file path to the existing model .zip file to load and continue training.
+        n_training_units (int): The number of additional training units (roughly episodes) to train for.
+        execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
+        use_wandb (bool, optional): Whether to log training with Weights & Biases. Defaults to False.
+        wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
+
+    Returns:
+        The file path of the newly saved model (.zip) after further training.
+    """
     config = _load_run_config(model_load_path)
     scenario = config["scenario"]
     algorithm = config["algorithm"]
@@ -253,6 +285,24 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
 
 def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
     """
+    Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
+
+    Args:        
+        scenario (str): The scenario configuration for the environment.
+        algorithm (str): The RL algorithm or baseline algorithm to evaluate.
+        version_tag (str): The current environment version (current git version tag).
+        reward_strategy (str): The reward strategy to use in the environment.
+        street_network (str): The street network to use.
+        n_vehicles (int): The number of OEVs (observable electric vehicles) in the environment.
+        n_episodes (int): The number of episodes to run for evaluation.
+        model_load_path (str, optional): The file path to the trained model .zip file   to load for evaluation. If None, the function will evaluate a baseline algorithm specified by the `algorithm` argument. Defaults to None.
+        n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
+        execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
+        render_mode (str, optional): The render mode to use for the environment during evaluation (e.g., "human", "rgb_array"). Defaults to "human".
+        random_seed (int, optional): Random seed for reproducibility. Defaults to None.
+        use_wandb (bool, optional): Whether to log evaluation with Weights & Biases. Defaults to False.
+        wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
+
     Returns:
         The file path of the evaluation metrics file (str).
     """
@@ -391,20 +441,20 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    train_and_evaluate(
-        scenario="same_route",
-        algorithm="PPO",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight100km",
-        n_vehicles=20,
-        n_noevs=0,
-        n_training_units=4000,
-        eval_episodes=10,
-        random_seed_eval=54321,
-        execution_context="local"
-    )
+    # train_and_evaluate(
+    #     scenario="same_route",
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight100km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_training_units=4000,
+    #     eval_episodes=10,
+    #     random_seed_eval=54321,
+    #     execution_context="local"
+    # )
 
     # train_model(
     #     scenario="same_route",
@@ -427,7 +477,23 @@ if __name__ == "__main__":
     # )
 
     # evaluate_model_with_config(
-    #     model_load_path=get_latest_model(),
-    #     n_episodes=20,
+    #     # model_load_path=get_latest_model(),
+    #     model_load_path="runs/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO.zip",
+    #     n_episodes=5,
     #     random_seed=123,
     # )
+
+    evaluate_model(
+        scenario="same_route",
+        algorithm="RANDOM",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight100km",
+        n_vehicles=20,
+        n_noevs=0,
+        n_episodes=5,
+        model_load_path=None,
+        execution_context="local",
+        render_mode="human",
+        random_seed=123,
+    )
