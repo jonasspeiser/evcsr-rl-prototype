@@ -2,8 +2,9 @@
 
 from environment import CustomEnv
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
+from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import os
 from logging_utils import RunLogging, setup_run_logging
@@ -126,8 +127,10 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
         episode_length = 0
         terminated = truncated = False
 
+        action_counts = Counter()
         while not (terminated or truncated):
             action, _ = model.predict(observation, deterministic=True)
+            action_counts[int(action)] += 1
             observation, reward, terminated, truncated, info = env.step(action)
             total_step += 1
             episode_reward += reward
@@ -140,6 +143,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
             "episode_length": episode_length,
             "was_truncated": truncated,
             "reward": episode_reward,
+            "action_counts": action_counts,
             **metadata
             })
         metrics_list.append(episode_metrics)
@@ -387,22 +391,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    # train_and_evaluate(
-    #     scenario="same_route",
-    #     algorithm="PPO",
-    #     policy="MultiInputPolicy",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight100km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_training_units=300,
-    #     eval_episodes=20,
-    #     random_seed_eval=123,
-    #     execution_context="local"
-    # )
-
-    train_model(
+    train_and_evaluate(
         scenario="same_route",
         algorithm="PPO",
         policy="MultiInputPolicy",
@@ -411,12 +400,25 @@ if __name__ == "__main__":
         street_network="straight100km",
         n_vehicles=20,
         n_noevs=0,
-        n_training_units=100,
-        use_wandb=False,
-        wandb_entity="evcs-rl"
+        n_training_units=4000,
+        eval_episodes=10,
+        random_seed_eval=54321,
+        execution_context="local"
     )
 
-    
+    # train_model(
+    #     scenario="same_route",
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight100km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_training_units=100,
+    #     use_wandb=False,
+    #     wandb_entity="evcs-rl"
+    # )
 
     # further_train_model(
     #     model_load_path=get_latest_model(),
@@ -425,7 +427,7 @@ if __name__ == "__main__":
     # )
 
     # evaluate_model_with_config(
-    #     model_load_path="runs/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO/2026-03-05_12-20-13_v0.9.5-3-g9501ec8_basic_same_route_straight100km_PPO.zip",
+    #     model_load_path=get_latest_model(),
     #     n_episodes=20,
     #     random_seed=123,
     # )
