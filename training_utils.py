@@ -152,10 +152,10 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed=None, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed=None, ent_coef=0.0, use_wandb=False, wandb_entity=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
-    Args:        
+    Args:
         scenario (str): The scenario configuration for the environment.
         algorithm (str): The RL algorithm to use for training.
         policy (str): The policy configuration to use.
@@ -167,10 +167,13 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
         execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
         random_seed (int, optional): Random seed for reproducibility. Defaults to None.
+        ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Higher values encourage
+            more exploration by penalizing overconfident policies. 0.01 is a typical starting point.
+            Defaults to 0.0 (SB3 default, no entropy bonus). Not used for DQN.
         use_wandb (bool, optional): Whether to log training with Weights & Biases. Defaults to False.
         wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
 
-    Returns:        
+    Returns:
         The file path of the saved model (.zip).
     """
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
@@ -205,6 +208,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "n_training_units": n_training_units,
         "n_steps": n_steps,
         "random_seed": random_seed,
+        "ent_coef": ent_coef,
         "execution_context": execution_context,
     })
 
@@ -215,7 +219,8 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     algorithm_class = SB3_ALGOS.get(algorithm)
     if algorithm_class is None:
         raise ValueError(f"Invalid model type for training: {algorithm}")
-    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir)
+    algo_kwargs = {"ent_coef": ent_coef} if algorithm in ("PPO", "A2C") else {}
+    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
 def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None):
@@ -238,6 +243,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     street_network = config["street_network"]
     n_vehicles = config["n_vehicles"]
     n_noevs = config.get("n_noevs")
+    ent_coef = config.get("ent_coef", 0.0)
     version_tag = get_git_version()
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
@@ -272,6 +278,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "n_noevs": n_noevs,
         "n_training_units": n_training_units,
         "n_steps": n_steps,
+        "ent_coef": ent_coef,
         "execution_context": execution_context,
         "continued_from": model_load_path,
     }, log.model_save_path.replace(".zip", "_config.json"))
@@ -398,7 +405,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         wandb_entity=wandb_entity,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -424,6 +431,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
             Defaults to 123.
         eval_episodes (int, optional): The number of episodes to run during evaluation.
             Defaults to 50.
+        ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Defaults to 0.0.
 
         tuple: A tuple containing:
             - model_path (str): The file path of the trained model.
@@ -431,7 +439,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
     random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
@@ -441,20 +449,21 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    # train_and_evaluate(
-    #     scenario="same_route",
-    #     algorithm="PPO",
-    #     policy="MultiInputPolicy",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight100km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_training_units=4000,
-    #     eval_episodes=10,
-    #     random_seed_eval=54321,
-    #     execution_context="local"
-    # )
+    train_and_evaluate(
+        scenario="same_route",
+        algorithm="PPO",
+        policy="MultiInputPolicy",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight100km",
+        n_vehicles=20,
+        n_noevs=0,
+        n_training_units=300,
+        ent_coef=0.01,
+        eval_episodes=10,
+        random_seed_eval=54321,
+        execution_context="local"
+    )
 
     # train_model(
     #     scenario="same_route",
@@ -483,17 +492,17 @@ if __name__ == "__main__":
     #     random_seed=123,
     # )
 
-    evaluate_model(
-        scenario="same_route",
-        algorithm="RANDOM",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight100km",
-        n_vehicles=20,
-        n_noevs=0,
-        n_episodes=5,
-        model_load_path=None,
-        execution_context="local",
-        render_mode="human",
-        random_seed=123,
-    )
+    # evaluate_model(
+    #     scenario="same_route",
+    #     algorithm="RANDOM",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight100km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_episodes=5,
+    #     model_load_path=None,
+    #     execution_context="local",
+    #     render_mode="human",
+    #     random_seed=123,
+    # )
