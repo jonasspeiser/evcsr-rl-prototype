@@ -13,8 +13,8 @@ import logging
 logger = logging.getLogger("rl.environment") 
 # child logger of "rl", parent logger to "rl.environment.simulation", "rl.environment.vehicle", "rl.environment.rewards"
 
-OBSERVATION_SPACE_SIZE = 5000 # The number of vehicles in the observation space. This is used to create a fixed-size observation space for all environments.
-# This allows for a consistent observation space size across different environment instances, even if the number of vehicles varies.
+OBSERVATION_SPACE_SIZE = 5000 # Legacy constant — no longer used for observation space sizing. The observation space is now sized to vehicles_to_spawn (n_vehicles).
+# Legacy comment: The number of vehicles in the observation space. This is used to create a fixed-size observation space for all environments. This allows for a consistent observation space size across different environment instances, even if the number of vehicles varies.
 class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
@@ -76,7 +76,7 @@ class CustomEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
 
-        self.observation_space_ids = [f"observable_ev_{i}" for i in range(OBSERVATION_SPACE_SIZE)] # used to create a fixed-size observation space for all environments, even if the number of vehicles varies
+        self.observation_space_ids = [f"observable_ev_{i}" for i in range(vehicles_to_spawn)]  # sized to n_vehicles, not OBSERVATION_SPACE_SIZE
         self.observation_space = spaces.Dict({
             vehicle_id: single_vehicle_observation_space for vehicle_id in self.observation_space_ids
         })
