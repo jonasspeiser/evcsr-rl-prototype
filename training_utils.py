@@ -196,11 +196,10 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     )
 
     _save_run_config(log.run_dir, {
-        "git_version": get_git_version(),
+        "version_tag": version_tag,
         "mode": "training",
         "algorithm": algorithm,
         "policy": policy,
-        "version_tag": version_tag,
         "reward_strategy": reward_strategy,
         "scenario": scenario,
         "street_network": street_network,
@@ -265,13 +264,14 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         wandb_entity=wandb_entity,
     )
 
-    # Save alongside the new model file (not in run_dir root, to avoid overwriting the original run_config.json)
+    # Save alongside the new model file (not in run_dir root, to avoid overwriting the original run_config.json).
+    # base_config nests the previous run's config, so the full training history is preserved for chains of
+    # train_model -> further_train_model -> further_train_model -> ...
     _dump_to_file({
-        "git_version": version_tag,
+        "version_tag": version_tag,
         "mode": "training_continued",
         "algorithm": algorithm,
         "policy": config.get("policy"),
-        "version_tag": version_tag,
         "reward_strategy": reward_strategy,
         "scenario": scenario,
         "street_network": street_network,
@@ -282,6 +282,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "ent_coef": ent_coef,
         "execution_context": execution_context,
         "continued_from": model_load_path,
+        "base_config": config,
     }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
@@ -291,11 +292,11 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None,execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
     """
     Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
 
-    Args:        
+    Args:
         scenario (str): The scenario configuration for the environment.
         algorithm (str): The RL algorithm or baseline algorithm to evaluate.
         version_tag (str): The current environment version (current git version tag).
@@ -326,7 +327,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_episodes": n_episodes,
         "random_seed": random_seed
     }
-    
+
     # setup logging
     log = setup_run_logging(
         algorithm=algorithm,
@@ -344,12 +345,14 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         wandb_entity=wandb_entity,
     )
 
+    # Load training hyperparameters from the model's run config for traceability in the evaluation config.
+    training_config = _load_run_config(model_load_path) if model_load_path else {}
+
     # Use the same timestamp as the metrics file so configs and metrics are paired by name
     _dump_to_file({
-        "git_version": get_git_version(),
+        "version_tag": version_tag,
         "mode": "evaluation",
         "algorithm": algorithm,
-        "version_tag": version_tag,
         "reward_strategy": reward_strategy,
         "scenario": scenario,
         "street_network": street_network,
@@ -357,6 +360,9 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_noevs": n_noevs,
         "n_episodes": n_episodes,
         "random_seed": random_seed,
+        "ent_coef": training_config.get("ent_coef"),
+        "n_training_units": training_config.get("n_training_units"),
+        "n_steps": training_config.get("n_steps"),
         "model_load_path": model_load_path,
         "execution_context": execution_context,
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
