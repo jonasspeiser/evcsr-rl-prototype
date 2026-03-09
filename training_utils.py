@@ -94,13 +94,14 @@ def get_latest_model(runs_dir="runs"):
     )
     if not run_dirs:
         raise FileNotFoundError(f"No runs found in {runs_dir!r}")
-    models = sorted(
-        e for e in (os.path.join(run_dirs[-1], f) for f in os.listdir(run_dirs[-1]))
-        if e.endswith(".zip")
-    )
-    if not models:
-        raise FileNotFoundError(f"No model .zip found in {run_dirs[-1]!r}")
-    return models[-1]
+    for run_dir in reversed(run_dirs):
+        models = sorted(
+            e for e in (os.path.join(run_dir, f) for f in os.listdir(run_dir))
+            if e.endswith(".zip")
+        )
+        if models:
+            return models[-1]
+    raise FileNotFoundError(f"No model .zip found in any run directory under {runs_dir!r}")
 
 def get_git_version():
     try:
@@ -458,21 +459,21 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    train_and_evaluate(
-        scenario="same_route",
-        algorithm="PPO",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight_100km",
-        n_vehicles=20,
-        n_noevs=0,
-        n_training_units=4000,
-        ent_coef=0.01,
-        eval_episodes=10,
-        random_seed_eval=54321,
-        execution_context="local"
-    )
+    # train_and_evaluate(
+    #     scenario="same_route",
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight_120km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_training_units=300,
+    #     ent_coef=0.01,
+    #     eval_episodes=10,
+    #     random_seed_eval=54321,
+    #     execution_context="local"
+    # )
 
     # train_model(
     #     scenario="same_route",
@@ -488,11 +489,11 @@ if __name__ == "__main__":
     #     wandb_entity="evcs-rl"
     # )
 
-    # further_train_model(
-    #     model_load_path=get_latest_model(),
-    #     n_training_units=100,
-    #     execution_context="local"
-    # )
+    further_train_model(
+        model_load_path=get_latest_model(),
+        n_training_units=600,
+        execution_context="local"
+    )
 
     # evaluate_model_with_config(
     #     # model_load_path=get_latest_model(),
