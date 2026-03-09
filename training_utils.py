@@ -366,6 +366,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_steps": training_config.get("n_steps"),
         "model_load_path": model_load_path,
         "execution_context": execution_context,
+        "training_config": training_config or None,
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
