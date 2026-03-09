@@ -461,7 +461,7 @@ if __name__ == "__main__":
         street_network="straight_100km",
         n_vehicles=20,
         n_noevs=0,
-        n_training_units=300,
+        n_training_units=4000,
         ent_coef=0.01,
         eval_episodes=10,
         random_seed_eval=54321,
