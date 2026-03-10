@@ -460,21 +460,21 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    # train_and_evaluate(
-    #     scenario="same_route",
-    #     algorithm="PPO",
-    #     policy="MultiInputPolicy",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight_120km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_training_units=300,
-    #     ent_coef=0.01,
-    #     eval_episodes=10,
-    #     random_seed_eval=54321,
-    #     execution_context="local"
-    # )
+    train_and_evaluate(
+        scenario="same_route",
+        algorithm="PPO",
+        policy="MultiInputPolicy",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight_120km",
+        n_vehicles=20,
+        n_noevs=0,
+        n_training_units=1200,
+        ent_coef=0.01,
+        eval_episodes=10,
+        random_seed_eval=54321,
+        execution_context="local"
+    )
 
     # train_model(
     #     scenario="same_route",
@@ -490,11 +490,11 @@ if __name__ == "__main__":
     #     wandb_entity="evcs-rl"
     # )
 
-    further_train_model(
-        model_load_path=get_latest_model(),
-        n_training_units=600,
-        execution_context="local"
-    )
+    # further_train_model(
+    #     model_load_path=get_latest_model(),
+    #     n_training_units=600,
+    #     execution_context="local"
+    # )
 
     # evaluate_model_with_config(
     #     # model_load_path=get_latest_model(),
