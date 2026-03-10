@@ -89,7 +89,7 @@ def get_all_routes(sumo_config_path_stub: str) -> dict:
     """
     Returns all possible edge-to-edge routes in the network as a dictionary.
     This includes all pairs of edges, excluding routes that start and end on the same edge.
-    Params:
+    Args:
         sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     routes_file_path = f"{sumo_config_path_stub}.all_routes.json"
@@ -143,7 +143,7 @@ def write_all_distances_json(net_file_path: str, output_path: str):
 def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     """
     Returns the maximum possible distance between a vehicle's potential start and destination in km.
-    Params:
+    Args:
         SUMO_CONFIG_STUB (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     config_file_path = f"{SUMO_CONFIG_STUB}.config.json"
@@ -156,10 +156,28 @@ def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     return config["max_possible_distance"]
 
 
+def compute_auto_truncation_limit(street_network: str, avg_speed_kmh: float = 100, safety_factor: float = 1.2) -> int:
+    """
+    Computes a truncation limit (in simulation seconds) based on the network's maximum possible
+    distance.
+    Assumes all vehicles depart at t=0 (true for all non-BASt scenarios).
+    The BASt 24 h override in the environment is unaffected by this value.
+
+    Args:
+        street_network (str): Street network directory name, e.g. "straight_120km".
+        avg_speed_kmh (float): Assumed average travel speed in km/h. Defaults to 100.
+        safety_factor (float): Multiplier applied to the raw trip duration estimate. Defaults to 1.2.
+    """
+    sumo_config_stub = f"./street-networks/{street_network}/{street_network}"
+    max_dist = get_max_possible_distance(sumo_config_stub)
+    avg_speed_ms = avg_speed_kmh / 3.6
+    return int(max_dist / avg_speed_ms * safety_factor)
+
+
 def get_start_soc_bounds(sumo_config_path_stub: str) -> tuple:
     """
     Returns the start SOC bounds for vehicles in the network.
-    Params:
+    Args:
         sumo_config_path_stub (str): Path stub for the SUMO configuration files (without file extension). E.g. "street-networks/straight_100km/straight_100km"
     """
     config_file_path = f"{sumo_config_path_stub}.config.json"
