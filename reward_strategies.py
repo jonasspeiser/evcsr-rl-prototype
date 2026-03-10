@@ -14,7 +14,7 @@ class RewardStrategy:
             charging_ids: List of vehicle ids that are currently charging.
         
         Returns:
-            A tuple (reward, one_vehicle_just_died, all_vehicles_at_destination)
+            A step reward value.
         """
         raise NotImplementedError("calculate_step_reward must be implemented in subclasses.")
 

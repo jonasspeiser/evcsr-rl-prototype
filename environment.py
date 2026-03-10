@@ -145,7 +145,7 @@ class CustomEnv(gym.Env):
         """
         Sums up the total travel times of all vehicles.
 
-        Used for tensorboard logging.
+        Used for reward calculation and tensorboard logging.
         Args:
             current_time (float): The current simulation time.
         """
