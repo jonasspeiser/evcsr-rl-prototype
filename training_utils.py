@@ -153,7 +153,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed=None, ent_coef=0.0, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, use_custom_extractor=True, truncate_after_n_steps=None, use_wandb=False, wandb_entity=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -210,11 +210,14 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "n_steps": n_steps,
         "random_seed": random_seed,
         "ent_coef": ent_coef,
+        "use_custom_extractor": use_custom_extractor,
+        "max_vehicles": max_vehicles,
+        "truncate_after_n_steps": truncate_after_n_steps,
         "execution_context": execution_context,
     })
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or 7200)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -245,6 +248,9 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     n_vehicles = config["n_vehicles"]
     n_noevs = config.get("n_noevs")
     ent_coef = config.get("ent_coef", 0.0)
+    use_custom_extractor = config.get("use_custom_extractor", True)
+    max_vehicles = config.get("max_vehicles")
+    truncate_after_n_steps = config.get("truncate_after_n_steps")
     version_tag = get_git_version()
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
@@ -281,19 +287,22 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "n_training_units": n_training_units,
         "n_steps": n_steps,
         "ent_coef": ent_coef,
+        "use_custom_extractor": use_custom_extractor,
+        "max_vehicles": max_vehicles,
+        "truncate_after_n_steps": truncate_after_n_steps,
         "execution_context": execution_context,
         "continued_from": model_load_path,
         "base_config": config,
     }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or 7200)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode="human", random_seed=None, use_wandb=False, wandb_entity=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, truncate_after_n_steps=None, use_wandb=False, wandb_entity=None):
     """
     Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
 
@@ -309,7 +318,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         model_load_path (str, optional): The file path to the trained model .zip file   to load for evaluation. If None, the function will evaluate a baseline algorithm specified by the `algorithm` argument. Defaults to None.
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
         execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
-        render_mode (str, optional): The render mode to use for the environment during evaluation (e.g., "human", "rgb_array"). Defaults to "human".
+        render_mode (str, optional): The render mode to use for the environment during evaluation (e.g., "human", "rgb_array"). Defaults to None.
         random_seed (int, optional): Random seed for reproducibility. Defaults to None.
         use_wandb (bool, optional): Whether to log evaluation with Weights & Biases. Defaults to False.
         wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
@@ -348,6 +357,8 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
 
     # Load training hyperparameters from the model's run config for traceability in the evaluation config.
     training_config = _load_run_config(model_load_path) if model_load_path else {}
+    max_vehicles = training_config.get("max_vehicles")
+    truncate_after_n_steps = truncate_after_n_steps or training_config.get("truncate_after_n_steps")
 
     # Use the same timestamp as the metrics file so configs and metrics are paired by name
     _dump_to_file({
@@ -365,12 +376,13 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_training_units": training_config.get("n_training_units"),
         "n_steps": training_config.get("n_steps"),
         "model_load_path": model_load_path,
+        "truncate_after_n_steps": truncate_after_n_steps,
         "execution_context": execution_context,
         "training_config": training_config or None,
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or 7200)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
@@ -415,7 +427,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         wandb_entity=wandb_entity,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, use_custom_extractor=True, truncate_after_n_steps=None):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -450,31 +462,32 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, truncate_after_n_steps=truncate_after_n_steps)
     # evaluate with random and greedy
-    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
-    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
-    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval)
+    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
+    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
+    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     eval_metrics_filepath_list = [random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
     return model_path, eval_metrics_filepath_list
 
 if __name__ == "__main__":
     
-    train_and_evaluate(
-        scenario="same_route",
-        algorithm="PPO",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight_120km",
-        n_vehicles=20,
-        n_noevs=0,
-        n_training_units=1200,
-        ent_coef=0.01,
-        eval_episodes=10,
-        random_seed_eval=54321,
-        execution_context="local"
-    )
+    # train_and_evaluate(
+    #     scenario="same_route",
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight_120km",
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     n_training_units=1200,
+    #     ent_coef=0.05,
+    #     use_custom_extractor=True,
+    #     eval_episodes=10,
+    #     random_seed_eval=54321,
+    #     execution_context="local",
+    # )
 
     # train_model(
     #     scenario="same_route",
@@ -503,17 +516,18 @@ if __name__ == "__main__":
     #     random_seed=123,
     # )
 
-    # evaluate_model(
-    #     scenario="same_route",
-    #     algorithm="RANDOM",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight_100km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_episodes=5,
-    #     model_load_path=None,
-    #     execution_context="local",
-    #     render_mode="human",
-    #     random_seed=123,
-    # )
+    evaluate_model(
+        scenario="same_route",
+        algorithm="GREEDY",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight_120km",
+        n_vehicles=20,
+        n_noevs=0,
+        n_episodes=20,
+        truncate_after_n_steps=100_000,
+        model_load_path=None,
+        execution_context="local",
+        # render_mode="human",
+        random_seed=54321,
+    )

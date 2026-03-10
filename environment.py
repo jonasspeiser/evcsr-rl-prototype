@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 observation_sampling_rate=30, truncate_after_n_steps=3000, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
+                 max_vehicles=None, observation_sampling_rate=30, truncate_after_n_steps=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
