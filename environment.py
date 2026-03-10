@@ -154,7 +154,13 @@ class CustomEnv(gym.Env):
             if vehicle.departure_time is None:
                 continue
             if vehicle.arrival_time is None:
-                vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
+                if vehicle.empty:
+                    # Empty vehicles receive a fixed worst-case TTT equal to the longest possible travel time during an episode (departure_time + truncation_limit), independent of when the episode actually ended.
+                    # This prevents a bad incentive: without this, an early-empty vehicle could get an artificially short TTT if the episode terminates before the truncation limit (because all other vehicles arrived), making "go empty" look like a good strategy.
+                    vehicle.arrival_time = vehicle.departure_time + self.truncate_after_n_simulation_steps
+                else:
+                    # Non-empty vehicle still driving when truncation hit: use the actual episode-end time.
+                    vehicle.arrival_time = current_time
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
         if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
@@ -175,7 +181,12 @@ class CustomEnv(gym.Env):
             if vehicle.departure_time is None:
                 continue
             if vehicle.arrival_time is None:
-                vehicle.arrival_time = current_time # in case the episode was truncated, some vehicles never arrive. For these, we set the arrival time to the last step in the truncated episode, so that their travel time also counts into the global counter. These are often vehicles which stand are stuck and therefore have a long travel time already.
+                if vehicle.empty:
+                    # Same worst-case penalty as in _set_global_ttt (see comment there).
+                    vehicle.arrival_time = vehicle.departure_time + self.truncate_after_n_simulation_steps
+                else:
+                    # In a terminated episode all non-empty vehicles should have arrival_time set already, so this branch is only a safety fallback for unexpected states.
+                    vehicle.arrival_time = current_time
             global_ttt_only_terminated += vehicle.get_total_travel_time()
         self.global_ttt_only_terminated = global_ttt_only_terminated
         if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
@@ -409,14 +420,17 @@ class CustomEnv(gym.Env):
 
     def _check_termination_conditions(self):
         """Check if episode should terminate or truncate."""
-        all_vehicles_at_destination = all(vehicle.arrived for vehicle in self.vehicles.values())
-        terminated = all_vehicles_at_destination
+        # Episode terminates when every vehicle has either arrived or gone empty.
+        # Empty vehicles are considered done because they can no longer make progress;
+        # their TTT penalty is handled separately in _set_global_ttt(set to departure_time + truncation_limit).
+        all_vehicles_despawned = all(vehicle.arrived or vehicle.empty for vehicle in self.vehicles.values())
+        terminated = all_vehicles_despawned
         truncated = self._reached_max_simulation_steps()
-        
+
         return {
             'terminated': terminated,
             'truncated': truncated,
-            'all_vehicles_at_destination': all_vehicles_at_destination
+            'all_vehicles_despawned': all_vehicles_despawned
         }
 
     def _should_update_observation(self, loop_counter, charging_request, termination_status):
