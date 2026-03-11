@@ -466,9 +466,10 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, truncate_after_n_steps=truncate_after_n_steps)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
+    nocharge_evaluation_path = evaluate_model(scenario, "NOCHARGE", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
-    eval_metrics_filepath_list = [random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
+    eval_metrics_filepath_list = [nocharge_evaluation_path, random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
     return model_path, eval_metrics_filepath_list
 
 if __name__ == "__main__":
@@ -484,8 +485,8 @@ if __name__ == "__main__":
         n_noevs=0,
         n_training_units=600,
         # truncate_after_n_steps=7_200,
-        ent_coef=0.05,
-        use_custom_extractor=True,
+        ent_coef=0.01,
+        # use_custom_extractor=True,
         eval_episodes=10,
         random_seed_eval=54321,
         execution_context="local",
