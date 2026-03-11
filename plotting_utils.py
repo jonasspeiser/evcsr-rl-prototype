@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 import os
 from pathlib import Path
+from pprint import pprint
+
 
 def get_last_x_metrics_files(n_files,runs_dir="runs"):
     runs_path = Path(runs_dir)
@@ -214,3 +216,7 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             metric_display_name = metric[4:]
             figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_figure else None
             make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
+    
+    if run_configs:
+        print("\nRun configurations for plotted evaluations:")
+        pprint(run_configs)
