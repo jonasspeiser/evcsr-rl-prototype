@@ -147,6 +147,7 @@ class Simulation():
         self.max_capacities = {}
         self.departure_counts = Counter()
         self.just_removed_vehicle_ids = set()
+        self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
         traci.simulation.loadState("initial_state")
         self._subscribe_to_simulation()
         self.simulation_data = traci.simulation.getSubscriptionResults()
@@ -227,7 +228,7 @@ class Simulation():
             # tc.VAR_POSITION, # Current position (x, y)
             tc.VAR_STOPSTATE, # Stop state (stopped, driving, etc.)
             tc.VAR_DISTANCE, # Distance travelled since departure
-            tc.VAR_ACCUMULATED_WAITING_TIME, # Time the vehicle stood still (excl. planned stops)
+            tc.VAR_WAITING_TIME, # Current waiting time (resets when vehicle moves)
         ])
         traci.vehicle.subscribeParameterWithKey(vehicle_id, "device.battery.actualBatteryCapacity") # Current SOC
 
@@ -483,6 +484,10 @@ class Simulation():
         self.just_removed_vehicle_ids = set()
         self.vehicle_data = traci.vehicle.getAllSubscriptionResults()
         self.simulation_data = traci.simulation.getSubscriptionResults()
+        # VAR_WAITING_TIME resets to 0 when a vehicle resumes movement, so we accumulate it step-by-step to get the true total waiting time across the entire episode.
+        for vid, data in self.vehicle_data.items():
+            current_wt = data.get(tc.VAR_WAITING_TIME) or 0
+            self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + current_wt
         sim_time = self.simulation_data.get(tc.VAR_TIME)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
             logger.warning(f"Teleport start: {vid} at t={sim_time}")
@@ -609,15 +614,16 @@ class Simulation():
 
     def get_vehicle_waiting_time(self, vehicle_id):
         """
-        Return the accumulated waiting time for the vehicle. Due to traci limitations, this is only possible for online vehicles.
+        Return the total waiting time accumulated for the vehicle across all episode steps.
+        SUMO's VAR_WAITING_TIME resets to 0 when a vehicle resumes movement, so we sum it step-by-step in self.cumulative_waiting_times to capture the true total.
 
         Args:
             vehicle_id (str): The ID of the vehicle.
 
         Returns:
-            float: Accumulated waiting time in seconds.
+            float: Total accumulated waiting time in seconds.
         """
-        return self.vehicle_data.get(vehicle_id, {}).get(tc.VAR_ACCUMULATED_WAITING_TIME)
+        return self.cumulative_waiting_times.get(vehicle_id, 0)
     
 
     def _adapt_vehicle_color(self, vehicle_id, battery_soc):
