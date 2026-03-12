@@ -62,9 +62,9 @@ def _load_run_config(model_load_path):
     with open(config_path, 'r') as f:
         return json.load(f)
 
-def _run_training(*, env, log: RunLogging, model, n_steps):
+def _run_training(*, env, log: RunLogging, model, n_steps, reset_num_timesteps=True):
     try:
-        model.learn(n_steps, tb_log_name="tensorboard", callback=log.callback)
+        model.learn(n_steps, tb_log_name="tensorboard", callback=log.callback, reset_num_timesteps=reset_num_timesteps)
         model.save(log.model_save_path)
         return log.model_save_path
     except Exception as e:
@@ -307,8 +307,8 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or compute_auto_truncation_limit(street_network))
 
     # Train the agent
-    model = _load_model(model_load_path, algorithm, env)
-    return _run_training(env=env, log=log, model=model, n_steps=n_steps)
+    model = _load_model(model_load_path, algorithm, env, use_custom_extractor=use_custom_extractor)
+    return _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
 
 def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, truncate_after_n_steps=None, use_wandb=False, wandb_entity=None):
     """
