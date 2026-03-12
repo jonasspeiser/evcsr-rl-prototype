@@ -153,6 +153,7 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     # Select relevant numerical metrics for plotting. If "all" was specified instead of a list, overwrite it with all available metrics.
     if metrics_to_plot == "all":
         metrics_to_plot = [
+            "reward",
             "env/charging_stops_per_episode_mean",
             "env/global_ttt",
             "env/global_ttt_only_terminated",
@@ -212,8 +213,7 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         else:
             # Filter data for the current metric
             df_filtered = df_melted[df_melted["Metric"] == metric]
-            # Cut out the leading "env/" in the variable name
-            metric_display_name = metric[4:]
+            metric_display_name = metric[4:] if metric.startswith("env/") else metric
             figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_figure else None
             make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
     
