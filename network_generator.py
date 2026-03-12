@@ -156,7 +156,7 @@ def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     return config["max_possible_distance"]
 
 
-def compute_auto_truncation_limit(street_network: str, avg_speed_kmh: float = 100, safety_factor: float = 1.6) -> int:
+def compute_auto_truncation_limit(street_network: str, avg_speed_kmh: float = 60, safety_factor: float = 1.6) -> int:
     """
     Computes a truncation limit (in simulation seconds) based on the network's maximum possible
     distance.
