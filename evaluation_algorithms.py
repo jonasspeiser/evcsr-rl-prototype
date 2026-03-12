@@ -13,14 +13,18 @@ class EvaluationAlgorithm():
     def predict(self, observation, deterministic):
         raise NotImplementedError
 
-class NeverChargeAlgorithm(EvaluationAlgorithm):
+class FixedActionAlgorithm(EvaluationAlgorithm):
     """
-    Always returns 'do nothing' action
+    Always returns the same fixed action.
+    Use via algorithm names ACTION0, ACTION1, ACTION2, … in training_utils.
     """
+    def __init__(self, environment, action: int):
+        super().__init__(environment)
+        self.action = action
+
     def predict(self, observation, deterministic):
-        action = 0
         placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
-        return action, placeholder
+        return self.action, placeholder
 class RandomAlgorithm(EvaluationAlgorithm):
     """
     Select a random action.

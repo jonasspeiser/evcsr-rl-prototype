@@ -186,3 +186,8 @@ The datasets used in this project and their documentation can be found in the "d
 ## Modeling
 
 ## Results
+
+## How to
+### Add a new vehicle model
+### Add a new street network
+### Add a new evaluation baseline algorithm

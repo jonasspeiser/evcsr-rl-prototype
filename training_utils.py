@@ -2,7 +2,7 @@
 
 from environment import CustomEnv
 from network_generator import compute_auto_truncation_limit
-from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, NeverChargeAlgorithm
+from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -20,7 +20,6 @@ SB3_ALGOS = {
 EVAL_ALGOS = {
     "RANDOM": RandomAlgorithm,
     "GREEDY": GreedyAlgorithm,
-    "NOCHARGE": NeverChargeAlgorithm,
 }
 
 
@@ -37,6 +36,8 @@ def _load_model(model_path, algorithm, env):
             return SB3_ALGOS[algorithm].load(model_path, env=env, custom_objects={"observation_space": env.observation_space})
     if algorithm in EVAL_ALGOS:
         return EVAL_ALGOS[algorithm](environment=env)
+    if algorithm.startswith("ACTION") and algorithm[6:].isdigit():
+        return FixedActionAlgorithm(environment=env, action=int(algorithm[6:]))
     raise ValueError(f"Invalid model type: {algorithm}")
 
 
@@ -473,7 +474,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, truncate_after_n_steps=truncate_after_n_steps)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
-    nocharge_evaluation_path = evaluate_model(scenario, "NOCHARGE", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
+    nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
     eval_metrics_filepath_list = [nocharge_evaluation_path, random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
