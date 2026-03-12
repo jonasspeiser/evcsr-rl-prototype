@@ -49,7 +49,14 @@ def _save_run_config(directory, config):
     _dump_to_file(config, os.path.join(directory, "run_config.json"))
 
 def _load_run_config(model_load_path):
-    """Load run_config.json from the run directory of the given model."""
+    """Load the run config for the given model.
+
+    Check for config files saved through further_train_model first (model_load_path with _config.json suffix), then fall back to the original run_config.json in the same directory as the model .zip file.
+    """
+    model_config_path = model_load_path.replace(".zip", "_config.json")
+    if os.path.exists(model_config_path):
+        with open(model_config_path, 'r') as f:
+            return json.load(f)
     run_dir = os.path.dirname(os.path.abspath(model_load_path))
     config_path = os.path.join(run_dir, "run_config.json")
     with open(config_path, 'r') as f:
