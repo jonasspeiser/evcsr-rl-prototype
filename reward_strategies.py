@@ -18,14 +18,13 @@ class RewardStrategy:
         """
         raise NotImplementedError("calculate_step_reward must be implemented in subclasses.")
 
-    def calculate_final_reward(self, global_ttt):
+    def calculate_final_reward(self, ttt_per_ev_mean):
         """
         Calculate the final reward at the end of an episode.
         
         Parameters:
-            vehicles: List of all vehicles.
-            current_time: The current simulation timestep.
-            
+            ttt_per_ev_mean: Mean travel time per vehicle (seconds).
+
         Returns:
             A final reward value.
         """
@@ -96,7 +95,7 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
 
         return reward
 
-    def calculate_final_reward(self, global_ttt):
+    def calculate_final_reward(self, ttt_per_ev_mean):
         return 0
 
     def calculate_action_penalty(self, vehicle, context):
@@ -122,7 +121,7 @@ class BasicRewardStrategy(RewardStrategy):
     Step reward: 0
 
     Final reward:
-    The negative total travel time.
+    The negative mean travel time per vehicle.
 
     Action penalties: 0
     """
@@ -133,8 +132,8 @@ class BasicRewardStrategy(RewardStrategy):
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST died")
         return 0
 
-    def calculate_final_reward(self, global_ttt):
-        return -global_ttt
+    def calculate_final_reward(self, ttt_per_ev_mean):
+        return -ttt_per_ev_mean
     
     def calculate_action_penalty(self, vehicle, context):
         return 0
@@ -164,8 +163,8 @@ class RewardShapingStrategy(RewardStrategy):
 
         return reward
 
-    def calculate_final_reward(self, global_ttt):
-        return BasicRewardStrategy().calculate_final_reward(global_ttt)
+    def calculate_final_reward(self, ttt_per_ev_mean):
+        return BasicRewardStrategy().calculate_final_reward(ttt_per_ev_mean)
 
     def calculate_action_penalty(self, vehicle, context):
         return NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)
