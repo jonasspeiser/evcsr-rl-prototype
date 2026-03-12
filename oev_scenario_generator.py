@@ -35,13 +35,6 @@ class ScenarioGenerator():
 
         self.rng = random.Random(seed)  # random.Random(None) works as well if no seed is provided.
 
-    def _select_route(self, edge_list):
-        """
-        Selects two UNIQUE edges randomly.
-        """
-        if len(edge_list) < 2:
-            raise ValueError("edge_list must contain at least two elements.")
-        return list(self.rng.sample(edge_list, 2))
     
     def _select_soc(self, start_soc_bounds):
         soc = self.rng.randint(start_soc_bounds[0], start_soc_bounds[1])
@@ -84,20 +77,6 @@ class ScenarioGenerator():
         routes_dict = {f"trip{i}": [item["from"], item["to"]] for i, item in enumerate(selected_routes)}
         return routes_dict
 
-    def generate_routes_from_edge_list(self, amount, edge_list):
-        """
-        Generate exactly `amount` valid routes on the current SUMO network.
-        Returns a dict mapping route_id (str) -> list_of_edge_ids (list of str).        
-        Params:
-            amount (int): The amount of routes that should be generated
-            edge_list (List): A list including all of the networks edges
-        """
-        routes_dict = {}
-        for i in range(amount):
-            route_id = f"trip{i}"
-            start, end = self._select_route(edge_list)
-            routes_dict[route_id] = [start, end]
-        return routes_dict
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
         """The default implementation always returns an empty list."""
@@ -145,24 +124,26 @@ class ScenarioGenerator():
      
 class SameRouteScenario(ScenarioGenerator):
     """
-    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are random within start_soc_bounds.
+    All Vehicles have the same route. Vehicles all start at the first edge and end at the last edge of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are random within start_soc_bounds.
     """
     def __init__(self, seed=None):
         super().__init__(seed)
         self._cached_route = None
 
-    def _select_route(self, edge_list):
-        """ Vehicles all start at the first edge and end at the last edge in edge_list. """
+
+    def generate_routes_from_routes_list(self, amount, routes_list):
+        """All vehicles share the same route: the longest available route in the network."""
         if self._cached_route is None:
-            if not edge_list:
-                raise ValueError("edge_list must not be empty.")
-            # Default: first to last
-            self._cached_route = (edge_list[0], edge_list[-1])
-        return self._cached_route
+            valid_routes = [r for r in routes_list if r.get("length", 0) > 0]
+            if not valid_routes:
+                raise ValueError("No valid routes available in routes_list.")
+            longest = max(valid_routes, key=lambda r: r.get("length", 0))
+            self._cached_route = (longest["from"], longest["to"])
+        return {f"trip{i}": list(self._cached_route) for i in range(amount)}
     
 class SameSOCSameRouteScenario(SameRouteScenario):
     """
-    All Vehicles have the same route. Vehicles all start at the first edge (E0) and end at the last edge (E19) of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are equal for all vehicles (50 % of BATTERY_MAX).
+    All Vehicles have the same route. Vehicles all start at the first edge and end at the last edge of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are equal for all vehicles (50 % of the upper bound from start_soc_bounds).
     """
 
     def _select_soc(self, start_soc_bounds):
