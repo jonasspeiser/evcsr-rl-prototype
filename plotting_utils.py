@@ -165,10 +165,12 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             "env/final_simulation_time",
             "action_distribution",
             "termination_status",
+            "arrival_stats",
+            "charging_start_stats",
         ]
 
     # Melt the DataFrame to long format — special-case metrics are not plain columns, filter them out
-    SPECIAL_METRICS = {"action_distribution", "termination_status"}
+    SPECIAL_METRICS = {"action_distribution", "termination_status", "arrival_stats", "charging_start_stats"}
     meltable_metrics = [m for m in metrics_to_plot if m not in SPECIAL_METRICS]
     df_melted = df.melt(id_vars=["algorithm"],
                         value_vars=meltable_metrics,
@@ -210,6 +212,12 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         elif metric == "termination_status":
             save_path = f"{save_directory}/termination_status.png" if save_figure else None
             plot_termination_status(df, save_path=save_path)
+        elif metric == "arrival_stats":
+            save_path = f"{save_directory}/arrival_stats.png" if save_figure else None
+            plot_soc_at_arrival(df, save_path=save_path)
+        elif metric == "charging_start_stats":
+            save_path = f"{save_directory}/charging_start_stats.png" if save_figure else None
+            plot_soc_at_charging_start(df, save_path=save_path)
         else:
             # Filter data for the current metric
             df_filtered = df_melted[df_melted["Metric"] == metric]
@@ -220,3 +228,73 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     if run_configs:
         print("\nRun configurations for plotted evaluations:")
         pprint(run_configs)
+
+
+def _plot_soc_stats_combined(df, col_wh, col_m, event_label, save_path=None):
+    """Shared helper: 2-panel violin (Wh | km) for one SOC event (arrival or charging start)."""
+    _, axes = plt.subplots(1, 2, figsize=(14, 5))
+    sns.set_theme(style="whitegrid")
+
+    for ax, col, ylabel, unit in [
+        (axes[0], col_wh, "SOC (Wh)",          "Wh"),
+        (axes[1], col_m,  "Remaining range",    "km"),
+    ]:
+        if col not in df.columns or df[col].dropna().empty:
+            ax.text(0.5, 0.5, "no data", ha="center", va="center", transform=ax.transAxes)
+            ax.set_title(f"{ylabel} — {event_label}")
+            continue
+        plot_df = df[["algorithm", col]].dropna().copy()
+        if unit == "km":
+            plot_df[col] = plot_df[col] / 1000
+        sns.violinplot(x="algorithm", y=col, data=plot_df, palette="muted", cut=0, ax=ax)
+        ax.set_title(f"{ylabel} — {event_label}")
+        ax.set_xlabel("Algorithm")
+        ax.set_ylabel(unit)
+        sns.despine(ax=ax, left=True, bottom=True)
+
+    plt.tight_layout()
+    plt.show()
+    if save_path:
+        plt.savefig(save_path)
+
+
+def plot_soc_at_arrival(df, save_path=None):
+    """Violin plots of mean SOC (Wh) and remaining range (km) at vehicle arrival."""
+    _plot_soc_stats_combined(df,
+        col_wh="env/arrival_soc_wh_mean",
+        col_m="env/arrival_range_m_mean",
+        event_label="at arrival",
+        save_path=save_path,
+    )
+
+
+def plot_soc_at_charging_start(df, save_path=None):
+    """Violin plots of mean SOC (Wh) and remaining range (km) at charging stop begin."""
+    _plot_soc_stats_combined(df,
+        col_wh="env/charging_start_soc_wh_mean",
+        col_m="env/charging_start_range_m_mean",
+        event_label="at charging start",
+        save_path=save_path,
+    )
+
+
+def plot_soc_history(soc_history: dict[str, list[float]], max_capacity_wh: float = 22_390, title: str = "SOC per vehicle over episode"):
+    """
+    Plot the battery SOC (Wh) for each vehicle across all simulation steps of one episode.
+
+    Args:
+        soc_history: dict returned by simulation.get_soc_history()
+        max_capacity_wh: effective maximum battery capacity in Wh (used as reference line)
+        title: plot title
+    """
+    _, ax = plt.subplots(figsize=(14, 4))
+    for vid, history in soc_history.items():
+        ax.plot(history, label=vid, alpha=0.7)
+    ax.axhline(max_capacity_wh, color="black", linestyle="--", linewidth=1, label=f"max capacity ({max_capacity_wh:,.0f} Wh)")
+    ax.axhline(30, color="red", linestyle="--", linewidth=1, label="empty threshold (30 Wh)")
+    ax.set_xlabel("Simulation step")
+    ax.set_ylabel("SOC (Wh)")
+    ax.set_title(title)
+    ax.legend(fontsize=7, ncol=4, loc="upper right")
+    plt.tight_layout()
+    plt.show()

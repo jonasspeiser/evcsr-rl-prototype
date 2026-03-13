@@ -147,8 +147,9 @@ class Simulation():
         self.max_capacities = {}
         self.departure_counts = Counter()
         self.just_removed_vehicle_ids = set()
+        self.soc_history: dict[str, list[float]] = {}  # SOC (Wh) per vehicle per simulation step
         self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
-        self.cumulative_energy_consumed = {}  # step-by-step accumulation of VAR_ELECTRICITY_CONSUMPTION per vehicle (Wh)
+        self.cumulative_energy_consumed = {}  # step-by-step accumulation of VAR_ELECTRICITYCONSUMPTION per vehicle (Wh)
         traci.simulation.loadState("initial_state")
         self._subscribe_to_simulation()
         self.simulation_data = traci.simulation.getSubscriptionResults()
@@ -164,6 +165,7 @@ class Simulation():
             tc.VAR_DEPARTED_VEHICLES_IDS,
             tc.VAR_ARRIVED_VEHICLES_IDS,
             tc.VAR_STOP_ENDING_VEHICLES_IDS,
+            tc.VAR_STOP_STARTING_VEHICLES_IDS,
             tc.VAR_TELEPORT_STARTING_VEHICLES_IDS,
             tc.VAR_TELEPORT_ENDING_VEHICLES_IDS,
         ])
@@ -230,7 +232,7 @@ class Simulation():
             tc.VAR_STOPSTATE, # Stop state (stopped, driving, etc.)
             tc.VAR_DISTANCE, # Distance travelled since departure
             tc.VAR_WAITING_TIME, # Current waiting time (resets when vehicle moves)
-            tc.VAR_ELECTRICITY_CONSUMPTION, # Net electricity consumption this step (Wh); negative = recuperation
+            tc.VAR_ELECTRICITYCONSUMPTION, # Net electricity consumption this step (Wh); negative = recuperation
         ])
         traci.vehicle.subscribeParameterWithKey(vehicle_id, "device.battery.actualBatteryCapacity") # Current SOC
 
@@ -490,7 +492,7 @@ class Simulation():
         for vid, data in self.vehicle_data.items():
             current_wt = data.get(tc.VAR_WAITING_TIME) or 0
             self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + current_wt
-            current_ec = data.get(tc.VAR_ELECTRICITY_CONSUMPTION) or 0
+            current_ec = data.get(tc.VAR_ELECTRICITYCONSUMPTION) or 0
             self.cumulative_energy_consumed[vid] = self.cumulative_energy_consumed.get(vid, 0) + current_ec
         sim_time = self.simulation_data.get(tc.VAR_TIME)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
@@ -628,7 +630,16 @@ class Simulation():
             float: Total accumulated waiting time in seconds.
         """
         return self.cumulative_waiting_times.get(vehicle_id, 0)
-    
+
+    def get_soc_history(self) -> dict[str, list[float]]:
+        """Returns SOC (Wh) recorded each simulation step per vehicle for the current episode."""
+        return self.soc_history
+
+    def get_stop_starting_vehicle_ids(self):
+        """Returns a set of observable EV ids that begin a stop in this time step."""
+        return self._filter_set_for_observable_evs(
+            set(self.simulation_data.get(tc.VAR_STOP_STARTING_VEHICLES_IDS, []))
+        )
 
     def _adapt_vehicle_color(self, vehicle_id, battery_soc):
         """
@@ -724,6 +735,8 @@ class Simulation():
         battery_soc = float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None
         if self.gui:
             self._adapt_vehicle_color(vehicle_id, battery_soc)
+        if battery_soc is not None:
+            self.soc_history.setdefault(vehicle_id, []).append(battery_soc)
         # stop vehicle if battery is empty
         if battery_soc is not None and battery_soc <= EMPTY_SOC:
             self._simulate_empty_battery(vehicle_id)

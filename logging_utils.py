@@ -87,6 +87,10 @@ class CustomTensorboardCallback(BaseCallback):
         "cumulated_waiting_time_only_terminated",
         "empty_vehicles_per_episode",
         "final_simulation_time",
+        "arrival_soc_wh_mean",
+        "arrival_range_m_mean",
+        "charging_start_soc_wh_mean",
+        "charging_start_range_m_mean",
     ]
 
     def __init__(self, writer=None, verbose=0, rtw_size=100, wandb_run=None, wandb_prefix=""):

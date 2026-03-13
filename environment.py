@@ -204,6 +204,42 @@ class CustomEnv(gym.Env):
         )
         logger.debug(f"empty_vehicles_per_episode: {self.empty_vehicles_per_episode}")
 
+    def _set_arrival_soc_stats(self):
+        """Mean SOC and remaining range (Wh / m) across vehicles that arrived at their destination."""
+        arrived = [
+            (self.simulation.soc_history[vid][-1], self.vehicle_range_cache.get(vid))
+            for vid, v in self.vehicles.items()
+            if v.arrived and self.simulation.soc_history.get(vid)
+        ]
+        if arrived:
+            socs = [soc for soc, _ in arrived]
+            ranges = [rng for _, rng in arrived if rng is not None]
+            self.arrival_soc_wh_mean = sum(socs) / len(socs)
+            self.arrival_range_m_mean = sum(ranges) / len(ranges) if ranges else None
+        else:
+            self.arrival_soc_wh_mean = None
+            self.arrival_range_m_mean = None
+
+    def _update_charging_stop_starts(self):
+        """Record SOC and remaining range for vehicles beginning a charging stop this step."""
+        for vid in self.simulation.get_stop_starting_vehicle_ids():
+            soc = self.simulation.get_battery_soc(vid)
+            remaining_range = self.simulation.get_remaining_range(vid)
+            if soc is not None:
+                self.charging_stop_start_records[vid] = (soc, remaining_range)
+
+    def _set_charging_start_soc_stats(self):
+        """Mean SOC and remaining range (Wh / m) across all charging stop starts in this episode."""
+        all_records = list(self.charging_stop_start_records.values())
+        if all_records:
+            socs = [soc for soc, _ in all_records if soc is not None]
+            ranges = [rng for _, rng in all_records if rng is not None]
+            self.charging_start_soc_wh_mean = sum(socs) / len(socs) if socs else None
+            self.charging_start_range_m_mean = sum(ranges) / len(ranges) if ranges else None
+        else:
+            self.charging_start_soc_wh_mean = None
+            self.charging_start_range_m_mean = None
+
 
     def _add_non_observable_vehicles(self):
         """
@@ -386,14 +422,17 @@ class CustomEnv(gym.Env):
             if vid in self.vehicles:
                 self.vehicles[vid].arrived = True
 
-        # Update vehicles' battery soc
+        # Update vehicles' battery soc and cache remaining range
         for vid, vehicle in self.vehicles.items():
             if not vehicle.arrived and not vehicle.empty:
                 vehicle.fetch_and_update_battery_values()
+                self.vehicle_range_cache[vid] = self.simulation.get_remaining_range(vid)
 
         # Update vehicle times if needed
         if newly_spawned_ids or newly_arrived_ids:
             self._update_vehicle_times(newly_spawned_ids, newly_arrived_ids)
+
+        self._update_charging_stop_starts()
 
         return {
             'newly_spawned_ids': newly_spawned_ids,
@@ -462,6 +501,8 @@ class CustomEnv(gym.Env):
         self._set_cumulated_waiting_time_per_episode()
         self._set_final_simulation_time(simulation_time)
         self._set_global_ttt(simulation_time)
+        self._set_arrival_soc_stats()
+        self._set_charging_start_soc_stats()
         
         final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
         status_str = "terminated" if termination_status['terminated'] else "truncated"
@@ -562,6 +603,12 @@ class CustomEnv(gym.Env):
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
         self.low_battery_ids = set()
+        self.arrival_soc_wh_mean = None
+        self.arrival_range_m_mean = None
+        self.charging_start_soc_wh_mean = None
+        self.charging_start_range_m_mean = None
+        self.charging_stop_start_records: dict[str, tuple[float, float | None]] = {}
+        self.vehicle_range_cache: dict[str, float | None] = {}  # last known remaining range (m) per vehicle
         
         if self.non_observable_vehicles:
             self._add_non_observable_vehicles()
