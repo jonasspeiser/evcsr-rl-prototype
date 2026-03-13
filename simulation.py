@@ -148,6 +148,7 @@ class Simulation():
         self.departure_counts = Counter()
         self.just_removed_vehicle_ids = set()
         self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
+        self.cumulative_energy_consumed = {}  # step-by-step accumulation of VAR_ELECTRICITY_CONSUMPTION per vehicle (Wh)
         traci.simulation.loadState("initial_state")
         self._subscribe_to_simulation()
         self.simulation_data = traci.simulation.getSubscriptionResults()
@@ -229,6 +230,7 @@ class Simulation():
             tc.VAR_STOPSTATE, # Stop state (stopped, driving, etc.)
             tc.VAR_DISTANCE, # Distance travelled since departure
             tc.VAR_WAITING_TIME, # Current waiting time (resets when vehicle moves)
+            tc.VAR_ELECTRICITY_CONSUMPTION, # Net electricity consumption this step (Wh); negative = recuperation
         ])
         traci.vehicle.subscribeParameterWithKey(vehicle_id, "device.battery.actualBatteryCapacity") # Current SOC
 
@@ -409,14 +411,14 @@ class Simulation():
             energy_consumed = None
             energy_consumption = CONSUMPTION_DEFAULT
         else:
-            energy_consumed = float(traci.vehicle.getParameter(vehicle_id, "device.battery.totalEnergyConsumed")) # cannot use subscription here because traci only allows to subscribe to one generic parameter at a time.
+            energy_consumed = self.cumulative_energy_consumed.get(vehicle_id, 0)
             energy_consumption = energy_consumed / distance_travelled
         # Get the energy consumption in Wh/km
         try:
             remaining_capacity = self.get_battery_soc(vehicle_id)
             remaining_range_km = remaining_capacity / energy_consumption
             logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
-            logger.debug(f"vehicle {vehicle_id}: Energy consumed: {energy_consumed}, distance travelled: {distance_travelled}, remaining capacity: {remaining_capacity}, energy consumption: {energy_consumption}")
+            logger.debug(f"vehicle {vehicle_id}: energy_consumed={energy_consumed} Wh, distance={distance_travelled} m, remaining={remaining_capacity} Wh, consumption_rate={energy_consumption} Wh/m")
         except ZeroDivisionError as e:
             raise ZeroDivisionError(f"Vehicle {vehicle_id} has not moved yet, can't calculate remaining range. energy_consumed: {energy_consumed}, distance_travelled: {distance_travelled}, remaining_capacity: {remaining_capacity}, energy_consumption: {energy_consumption}")
         return remaining_range_km
@@ -488,6 +490,8 @@ class Simulation():
         for vid, data in self.vehicle_data.items():
             current_wt = data.get(tc.VAR_WAITING_TIME) or 0
             self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + current_wt
+            current_ec = data.get(tc.VAR_ELECTRICITY_CONSUMPTION) or 0
+            self.cumulative_energy_consumed[vid] = self.cumulative_energy_consumed.get(vid, 0) + current_ec
         sim_time = self.simulation_data.get(tc.VAR_TIME)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
             logger.warning(f"Teleport start: {vid} at t={sim_time}")
