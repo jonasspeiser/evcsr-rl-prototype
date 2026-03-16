@@ -666,10 +666,13 @@ class Simulation():
     def _simulate_empty_battery(self, vehicle_id):
         """
         Removes the vehicle from simulation when its battery is empty.
+        Idempotent: Simply returns if the vehicle was already removed.
 
         Args:
             vehicle_id (str): The ID of the vehicle.
         """
+        if vehicle_id in self.just_removed_vehicle_ids:
+            return
         logger.info(f"Battery empty, vehicle {vehicle_id} will be removed from simulation")
         traci.vehicle.unsubscribe(vehicle_id)
         traci.vehicle.remove(vehicle_id)

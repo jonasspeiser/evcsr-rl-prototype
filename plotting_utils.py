@@ -253,9 +253,9 @@ def _plot_soc_stats_combined(df, col_wh, col_m, event_label, save_path=None):
         sns.despine(ax=ax, left=True, bottom=True)
 
     plt.tight_layout()
-    plt.show()
     if save_path:
         plt.savefig(save_path)
+    plt.show()
 
 
 def plot_soc_at_arrival(df, save_path=None):
