@@ -888,7 +888,7 @@ if __name__ == "__main__":
 
 
     def driving_in_circles():
-        cs_id = "cs_0"
+        cs_id = "cs_1"
 
         simulation.add_vehicles(50)
 
@@ -909,7 +909,7 @@ if __name__ == "__main__":
         simulation.close()
 
     def test_simulation_end():
-        cs_id = "cs_0"
+        cs_id = "cs_1"
         simulation.add_vehicles(50)
         print("vehicles added")
         # while simulation_time < 24

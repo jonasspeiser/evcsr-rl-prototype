@@ -54,7 +54,7 @@ class CustomEnv(gym.Env):
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
 
         # --- Define action space ---        
-        # We have 5 actions for each vehicle: do nothing (0), send charging to cs_0 (1), send charging to cs_1 (2), ...
+        # We have 5 actions for each vehicle: do nothing (0), send charging to cs_1 (1), send charging to cs_2 (2), ...
         actions_per_vehicle = 5
         self.action_space = spaces.Discrete(actions_per_vehicle)
 

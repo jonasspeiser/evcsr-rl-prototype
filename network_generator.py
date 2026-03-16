@@ -350,7 +350,7 @@ if __name__ == "__main__":
 
         for i, cs in enumerate(charging_spots):
             lane_id = f"cs{cs}_main_0"
-            f.write(f'  <chargingStation id="cs_{i}" lane="{lane_id}" '
+            f.write(f'  <chargingStation id="cs_{i+1}" lane="{lane_id}" '
                     f'startPos="{charging_params["startPos"]}" '
                     f'endPos="{charging_params["endPos"]}" '
                     f'chargeDelay="{charging_params["chargeDelay"]}" '

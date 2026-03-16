@@ -5,8 +5,8 @@
 
 <additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
     <!-- StoppingPlaces -->
-    <chargingStation id="cs_0" lane="E3_0" startPos="40.55" endPos="50.55" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
-    <chargingStation id="cs_1" lane="E8_0" startPos="51.71" endPos="61.71" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
-    <chargingStation id="cs_2" lane="E13_0" startPos="81.18" endPos="91.18" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
-    <chargingStation id="cs_3" lane="E18_0" startPos="25.22" endPos="35.22" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
+    <chargingStation id="cs_1" lane="E3_0" startPos="40.55" endPos="50.55" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
+    <chargingStation id="cs_2" lane="E8_0" startPos="51.71" endPos="61.71" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
+    <chargingStation id="cs_3" lane="E13_0" startPos="81.18" endPos="91.18" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
+    <chargingStation id="cs_4" lane="E18_0" startPos="25.22" endPos="35.22" chargeDelay="2" chargeInTransit="0" power="200000" efficiency="0.95"/>
 </additional>

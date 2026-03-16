@@ -137,7 +137,7 @@ class Vehicle:
 
         if action in (1, 2, 3, 4): # action is "charge"
             charging_stations = self.simulation.get_all_charging_station_ids()
-            cs_id = charging_stations[action - 1] # action 1 means: go to cs_0 -> action-1 gives us the list index
+            cs_id = charging_stations[action - 1] # action 1 means: go to cs_1 -> action-1 gives us the list index
             context['target_cs'] = cs_id
             context['next_charging_stop'] = next_charging_stop
 
