@@ -149,7 +149,7 @@ class Simulation():
         self.just_removed_vehicle_ids = set()
         self.soc_history: dict[str, list[float]] = {}  # SOC (Wh) per vehicle per simulation step
         self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
-        self.cumulative_energy_consumed = {}  # step-by-step accumulation of VAR_ELECTRICITYCONSUMPTION per vehicle (Wh)
+        self.driving_segment_baseline: dict[str, tuple[float, float]] = {}  # (soc_Wh, distance_m) at start of current driving segment; reset after charging stops
         traci.simulation.loadState("initial_state")
         self._subscribe_to_simulation()
         self.simulation_data = traci.simulation.getSubscriptionResults()
@@ -232,7 +232,6 @@ class Simulation():
             tc.VAR_STOPSTATE, # Stop state (stopped, driving, etc.)
             tc.VAR_DISTANCE, # Distance travelled since departure
             tc.VAR_WAITING_TIME, # Current waiting time (resets when vehicle moves)
-            tc.VAR_ELECTRICITYCONSUMPTION, # Net electricity consumption this step (Wh); negative = recuperation
         ])
         traci.vehicle.subscribeParameterWithKey(vehicle_id, "device.battery.actualBatteryCapacity") # Current SOC
 
@@ -394,36 +393,50 @@ class Simulation():
 
     def get_remaining_range(self, vehicle_id):
         """
-        Returns the estimated remaining range of given vehicle in km.
+        Returns the estimated remaining range of given vehicle in meters.
+
+        Computes consumption from actual battery SOC changes (device.battery.actualBatteryCapacity)
+        over the current driving segment (since spawn or since the last charging stop ended).
+        Falls back to CONSUMPTION_DEFAULT when the segment is too short for a reliable estimate.
 
         Args:
             vehicle_id (str): The ID of the vehicle.
 
         Returns:
-            float or None: Remaining range in km, or None if it can't be calculated.
+            float or None: Remaining range in meters, or None if SOC is unavailable.
         """
         DISTANCE_THRESHOLD = 100 # the threshold under which the energy consumption calculation is deemed too unprecise
-        CONSUMPTION_DEFAULT = 0.24 # the default value for energy consumption, used until the live-calculation is deemed precise enough
+        CONSUMPTION_DEFAULT = 0.24 # Wh/m = 240 Wh/km, the default value for energy consumption, used until the live-calculation is deemed precise enough
 
-        distance_travelled = float(self.vehicle_data.get(vehicle_id, {}).get(tc.VAR_DISTANCE, 0))
-        # Return None if remaining range can't be calculated (-> division by zero)
-        if distance_travelled == 0:
+        remaining_soc = self.get_battery_soc(vehicle_id)
+        if remaining_soc is None:
             return None
-        if distance_travelled < DISTANCE_THRESHOLD:
-            energy_consumed = None
-            energy_consumption = CONSUMPTION_DEFAULT
-        else:
-            energy_consumed = self.cumulative_energy_consumed.get(vehicle_id, 0)
-            energy_consumption = energy_consumed / distance_travelled
-        # Get the energy consumption in Wh/km
-        try:
-            remaining_capacity = self.get_battery_soc(vehicle_id)
-            remaining_range_km = remaining_capacity / energy_consumption
-            logger.debug(f"Remaining range of vehicle {vehicle_id}: {remaining_range_km} km")
-            logger.debug(f"vehicle {vehicle_id}: energy_consumed={energy_consumed} Wh, distance={distance_travelled} m, remaining={remaining_capacity} Wh, consumption_rate={energy_consumption} Wh/m")
-        except ZeroDivisionError as e:
-            raise ZeroDivisionError(f"Vehicle {vehicle_id} has not moved yet, can't calculate remaining range. energy_consumed: {energy_consumed}, distance_travelled: {distance_travelled}, remaining_capacity: {remaining_capacity}, energy_consumption: {energy_consumption}")
-        return remaining_range_km
+
+        # Lazily initialise baseline from the first SOC reading of this episode.
+        baseline = self.driving_segment_baseline.get(vehicle_id)
+        if baseline is None:
+            soc_hist = self.soc_history.get(vehicle_id, [])
+            if soc_hist:
+                baseline = (soc_hist[0], 0.0)
+                self.driving_segment_baseline[vehicle_id] = baseline
+
+        if baseline is not None:
+            baseline_soc, baseline_distance = baseline
+            current_distance = float(self.vehicle_data.get(vehicle_id, {}).get(tc.VAR_DISTANCE, 0))
+            segment_distance = current_distance - baseline_distance
+            segment_consumed = baseline_soc - remaining_soc  # positive = energy drawn
+
+            if segment_distance >= DISTANCE_THRESHOLD and segment_consumed > 0:
+                consumption = segment_consumed / segment_distance
+                remaining_range_m = remaining_soc / consumption
+                logger.debug(f"Remaining range of {vehicle_id}: {remaining_range_m:.0f} m "
+                             f"(measured {consumption:.4f} Wh/m over {segment_distance:.0f} m)")
+                return remaining_range_m
+
+        # Fallback: not enough driving data yet, or SOC temporarily above baseline after charging
+        remaining_range_m = remaining_soc / CONSUMPTION_DEFAULT
+        logger.debug(f"Remaining range of {vehicle_id}: {remaining_range_m:.0f} m (default rate)")
+        return remaining_range_m
 
     def get_max_battery_capacity(self, vehicle_id):
         """
@@ -492,8 +505,16 @@ class Simulation():
         for vid, data in self.vehicle_data.items():
             current_wt = data.get(tc.VAR_WAITING_TIME) or 0
             self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + current_wt
-            current_ec = data.get(tc.VAR_ELECTRICITYCONSUMPTION) or 0
-            self.cumulative_energy_consumed[vid] = self.cumulative_energy_consumed.get(vid, 0) + current_ec
+        # When an observable EV ends a charging stop its SOC has been replenished, so reset the
+        # driving segment baseline so get_remaining_range() uses only post-charge SOC changes.
+        for vid in self._filter_set_for_observable_evs(
+                set(self.simulation_data.get(tc.VAR_STOP_ENDING_VEHICLES_IDS, []))):
+            data = self.vehicle_data.get(vid, {})
+            soc_data = data.get(tc.VAR_PARAMETER_WITH_KEY)
+            distance = float(data.get(tc.VAR_DISTANCE, 0))
+            if soc_data and soc_data[0] == "device.battery.actualBatteryCapacity":
+                self.driving_segment_baseline[vid] = (float(soc_data[1]), distance)
+                logger.debug(f"Driving segment baseline reset for {vid}: soc={soc_data[1]} Wh, dist={distance:.0f} m")
         sim_time = self.simulation_data.get(tc.VAR_TIME)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
             logger.warning(f"Teleport start: {vid} at t={sim_time}")
