@@ -42,7 +42,7 @@ class Vehicle:
         if not self.spawned or self.arrived or self.empty:
             self.battery_soc = None
             return
-        self.battery_soc = self.simulation.get_battery_soc(self.vehicle_id)
+        self.battery_soc = self.simulation.update_vehicle_soc(self.vehicle_id)
         if self.battery_soc is None:
             logger.warning(f"{self.vehicle_id}: Unwanted behaviour: Simulation responded with battery_soc=None although python flags are spawned=True, empty=False, arrived=False.")
             return

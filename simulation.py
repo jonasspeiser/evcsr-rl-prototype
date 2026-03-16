@@ -720,43 +720,41 @@ class Simulation():
             distance_dict[station_id] = float(distance) if distance is not None else None
         return distance_dict
 
-    def get_battery_soc(self, vehicle_id):
+    def get_battery_soc(self, vehicle_id) -> float | None:
         """
-        Returns the actual battery capacity of the vehicle.
+        Returns the current battery SOC (Wh) for the vehicle.
 
         Args:
             vehicle_id (str): The ID of the vehicle.
 
         Returns:
-            float or None: Actual battery capacity, or None if not found.
+            float or None: Actual battery capacity in Wh, or None if not found.
         """
         data = self.vehicle_data.get(vehicle_id)
         if data is None:
             logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
             return None
         parameter_data = data.get(tc.VAR_PARAMETER_WITH_KEY, {})
-        battery_soc = float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None
+        return float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None
+
+    def update_vehicle_soc(self, vehicle_id) -> float | None:
+        """
+        Reads the vehicle's battery SOC and runs all per-step side effects:
+        records to soc_history, updates GUI colour, and removes the vehicle
+        if the battery is empty. Should be called exactly once per vehicle per step.
+
+        Returns:
+            float or None: The SOC in Wh, or None if vehicle not found.
+        """
+        battery_soc = self.get_battery_soc(vehicle_id)
+        if battery_soc is None:
+            return None
         if self.gui:
             self._adapt_vehicle_color(vehicle_id, battery_soc)
-        if battery_soc is not None:
-            self.soc_history.setdefault(vehicle_id, []).append(battery_soc)
-        # stop vehicle if battery is empty
-        if battery_soc is not None and battery_soc <= EMPTY_SOC:
+        self.soc_history.setdefault(vehicle_id, []).append(battery_soc)
+        if battery_soc <= EMPTY_SOC:
             self._simulate_empty_battery(vehicle_id)
         return battery_soc
-        # WITH DIRECT TRACI CALLS:
-        # try:
-        #     battery_soc = float(traci.vehicle.getParameter(vehicle_id, "device.battery.actualBatteryCapacity"))
-        #     logger.debug(f"get_battery_soc(): {vehicle_id}: battery_soc {battery_soc}")
-        #     if self.gui:
-        #         self._adapt_vehicle_color(vehicle_id, battery_soc)
-        #     # stop vehicle if battery is empty
-        #     if battery_soc <= EMPTY_SOC:
-        #         self._simulate_empty_battery(vehicle_id)
-        #     return battery_soc
-        # except traci.exceptions.TraCIException: 
-        #     logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
-        #     return None
 
     def get_vehicle_state(self, vehicle_id):
         """
