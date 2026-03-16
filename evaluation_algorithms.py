@@ -56,9 +56,10 @@ class GreedyAlgorithm(EvaluationAlgorithm):
         if normalized_battery_soc is None:
             raise UnboundLocalError(f"battery_soc is None for the vehicle with active_charging_request {active_vehicle}. This shouldn't be possible.")
         
-        if normalized_battery_soc > 0.07:  # 0.07 ≈ 7,000 Wh = 25 km range at 240 Wh/km + ~16% headroom
+        if normalized_battery_soc > 0.15:  # 0.15 × 64 kWh = 9,600 Wh ≈ 40 km at 240 Wh/km
+            # — enough headroom to bridge any 25 km station gap on straight_120km
             logger.info(f"greedy → do nothing for {active_vehicle} (normalized soc={normalized_battery_soc:.3f})")
-            return 0, placeholder # "do nothing"
+            return 0, placeholder
 
         # Unreachable stations are encoded as -1; same-edge stations as 0 (vehicle already past them).
         # Stations beyond the destination are also useless. Treat all such cases as infinitely far
