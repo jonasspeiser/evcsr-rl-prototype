@@ -153,6 +153,8 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     # Select relevant numerical metrics for plotting. If "all" was specified instead of a list, overwrite it with all available metrics.
     if metrics_to_plot == "all":
         metrics_to_plot = [
+            "action_distribution",
+            "termination_status",
             "reward",
             "env/charging_stops_per_episode_mean",
             "env/global_ttt",
@@ -163,8 +165,6 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             "env/cumulated_waiting_time_only_terminated",
             "env/empty_vehicles_per_episode",
             "env/final_simulation_time",
-            "action_distribution",
-            "termination_status",
             "arrival_stats",
             "charging_start_stats",
         ]
@@ -230,52 +230,42 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         pprint(run_configs)
 
 
-def _plot_soc_stats_combined(df, col_wh, col_m, event_label, save_path=None):
-    """Shared helper: 2-panel violin (Wh | km) for one SOC event (arrival or charging start)."""
-    _, axes = plt.subplots(1, 2, figsize=(14, 5))
-    sns.set_theme(style="whitegrid")
-
-    for ax, col, ylabel, unit in [
-        (axes[0], col_wh, "SOC (Wh)",          "Wh"),
-        (axes[1], col_m,  "Remaining range",    "km"),
-    ]:
-        if col not in df.columns or df[col].dropna().empty:
-            ax.text(0.5, 0.5, "no data", ha="center", va="center", transform=ax.transAxes)
-            ax.set_title(f"{ylabel} — {event_label}")
-            continue
-        plot_df = df[["algorithm", col]].dropna().copy()
-        if unit == "km":
-            plot_df[col] = plot_df[col] / 1000
-        sns.violinplot(x="algorithm", y=col, data=plot_df, palette="muted", cut=0, ax=ax)
-        ax.set_title(f"{ylabel} — {event_label}")
-        ax.set_xlabel("Algorithm")
-        ax.set_ylabel(unit)
-        sns.despine(ax=ax, left=True, bottom=True)
-
-    plt.tight_layout()
-    if save_path:
-        plt.savefig(save_path)
-    plt.show()
-
-
 def plot_soc_at_arrival(df, save_path=None):
     """Violin plots of mean SOC (Wh) and remaining range (km) at vehicle arrival."""
-    _plot_soc_stats_combined(df,
-        col_wh="env/arrival_soc_wh_mean",
-        col_m="env/arrival_range_m_mean",
-        event_label="at arrival",
-        save_path=save_path,
-    )
+    base = Path(save_path) if save_path else None
+
+    col_wh = "env/arrival_soc_wh_mean"
+    if col_wh in df.columns and not df[col_wh].dropna().empty:
+        plot_df = df[["algorithm", col_wh]].dropna().rename(columns={col_wh: "Value"})
+        sp = str(base.with_name(base.stem + "_soc_wh" + base.suffix)) if base else None
+        make_violinplot(plot_df, metric_name="SOC at arrival (Wh)", save_path=sp)
+
+    col_m = "env/arrival_range_m_mean"
+    if col_m in df.columns and not df[col_m].dropna().empty:
+        plot_df = df[["algorithm", col_m]].dropna().copy()
+        plot_df[col_m] = plot_df[col_m] / 1000
+        plot_df = plot_df.rename(columns={col_m: "Value"})
+        sp = str(base.with_name(base.stem + "_range_km" + base.suffix)) if base else None
+        make_violinplot(plot_df, metric_name="Remaining range at arrival (km)", save_path=sp)
 
 
 def plot_soc_at_charging_start(df, save_path=None):
     """Violin plots of mean SOC (Wh) and remaining range (km) at charging stop begin."""
-    _plot_soc_stats_combined(df,
-        col_wh="env/charging_start_soc_wh_mean",
-        col_m="env/charging_start_range_m_mean",
-        event_label="at charging start",
-        save_path=save_path,
-    )
+    base = Path(save_path) if save_path else None
+
+    col_wh = "env/charging_start_soc_wh_mean"
+    if col_wh in df.columns and not df[col_wh].dropna().empty:
+        plot_df = df[["algorithm", col_wh]].dropna().rename(columns={col_wh: "Value"})
+        sp = str(base.with_name(base.stem + "_soc_wh" + base.suffix)) if base else None
+        make_violinplot(plot_df, metric_name="SOC at charging start (Wh)", save_path=sp)
+
+    col_m = "env/charging_start_range_m_mean"
+    if col_m in df.columns and not df[col_m].dropna().empty:
+        plot_df = df[["algorithm", col_m]].dropna().copy()
+        plot_df[col_m] = plot_df[col_m] / 1000
+        plot_df = plot_df.rename(columns={col_m: "Value"})
+        sp = str(base.with_name(base.stem + "_range_km" + base.suffix)) if base else None
+        make_violinplot(plot_df, metric_name="Remaining range at charging start (km)", save_path=sp)
 
 
 def plot_soc_history(soc_history: dict[str, list[float]], max_capacity_wh: float = 22_390, title: str = "SOC per vehicle over episode"):
