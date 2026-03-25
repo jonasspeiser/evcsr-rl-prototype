@@ -149,14 +149,14 @@ def main() -> int:
                 scenario="all_random",
                 algorithm="PPO",
                 policy="MultiInputPolicy",
-                version_tag="v0.8.0",
+                version_tag="testv0.9",
                 reward_strategy="basic",
-                street_network="straight100Test",
+                street_network="straight_100km",
                 n_vehicles=2,
-                n_steps=1,
+                n_training_units=1,
                 execution_context="local",
                 random_seed=None,
-                use_wandb=True, wandb_entity="evcs-rl", wandb_project="v0.8.0_straight100Test_PPO"
+                use_wandb=False
             )
         except TypeError as e:
             # if not is_signature_typeerror(e):
@@ -168,9 +168,9 @@ def main() -> int:
                 train_model(
                     algorithm="PPO",
                     policy="MultiInputPolicy",
-                    version="v0.7.9",
+                    version="testv0.7.9",
                     env_version="basic",
-                    street_network="straight100Test",
+                    street_network="straight_100km",
                     n_vehicles=2,
                     n_steps=1,
                     execution_context="local",
