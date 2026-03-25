@@ -45,7 +45,7 @@ def test_remaining_range_calculation() -> int:
             vehicles_to_spawn=2,
             street_network="straight_120km",
             random_seed=42,
-            truncate_after_n_steps=500,
+            longest_route_duration=500,
         )
         env.reset()
         sim = env.simulation

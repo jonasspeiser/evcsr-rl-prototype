@@ -156,12 +156,10 @@ def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     return config["max_possible_distance"]
 
 
-def compute_auto_truncation_limit(street_network: str, avg_speed_kmh: float = 30, safety_factor: float = 1.2) -> int:
+def get_longest_route_duration(street_network: str, avg_speed_kmh: float = 30, safety_factor: float = 1.2) -> int:
     """
-    Computes a truncation limit (in simulation seconds) based on the network's maximum possible
+    Computes the duration (in simulation seconds) it takes to travel the network's maximum possible
     distance.
-    Assumes all vehicles depart at t=0 (true for all non-BASt scenarios).
-    The BASt 24 h override in the environment is unaffected by this value.
 
     Args:
         street_network (str): Street network directory name, e.g. "straight_120km".

@@ -1,7 +1,7 @@
 """Script containing utility functions for training and evaluating RL models."""
 
 from environment import CustomEnv
-from network_generator import compute_auto_truncation_limit
+from network_generator import get_longest_route_duration
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
@@ -162,7 +162,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, use_custom_extractor=True, truncate_after_n_steps=None, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, use_custom_extractor=True, longest_route_duration=None, use_wandb=False, wandb_entity=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -181,6 +181,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Higher values encourage
             more exploration by penalizing overconfident policies. 0.01 is a typical starting point.
             Defaults to 0.0 (SB3 default, no entropy bonus). Not used for DQN.
+        longest_route_duration (int, optional): The maximum route duration in seconds for the given street network. Used for episode truncation and as the upper bound in the shaping reward. Defaults to the value returned by get_longest_route_duration(street_network).
         use_wandb (bool, optional): Whether to log training with Weights & Biases. Defaults to False.
         wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
 
@@ -221,12 +222,12 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "ent_coef": ent_coef,
         "use_custom_extractor": use_custom_extractor,
         "max_vehicles": max_vehicles,
-        "truncate_after_n_steps": truncate_after_n_steps,
+        "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
     })
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or compute_auto_truncation_limit(street_network))
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network))
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -259,7 +260,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     ent_coef = config.get("ent_coef", 0.0)
     use_custom_extractor = config.get("use_custom_extractor", True)
     max_vehicles = config.get("max_vehicles")
-    truncate_after_n_steps = config.get("truncate_after_n_steps")
+    longest_route_duration = config.get("longest_route_duration")
     version_tag = get_git_version()
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
@@ -298,20 +299,20 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "ent_coef": ent_coef,
         "use_custom_extractor": use_custom_extractor,
         "max_vehicles": max_vehicles,
-        "truncate_after_n_steps": truncate_after_n_steps,
+        "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
         "continued_from": model_load_path,
         "base_config": config,
     }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or compute_auto_truncation_limit(street_network))
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network))
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env, use_custom_extractor=use_custom_extractor)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, truncate_after_n_steps=None, use_wandb=False, wandb_entity=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None):
     """
     Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
 
@@ -329,6 +330,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
         render_mode (str, optional): The render mode to use for the environment during evaluation (e.g., "human", "rgb_array"). Defaults to None.
         random_seed (int, optional): Random seed for reproducibility. Defaults to None.
+        longest_route_duration (int, optional): The maximum route duration in seconds for the given street network. Used for episode truncation and as the upper bound in the shaping reward. Defaults to the value from the model's run config, or get_longest_route_duration(street_network) if not set.
         use_wandb (bool, optional): Whether to log evaluation with Weights & Biases. Defaults to False.
         wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
 
@@ -367,7 +369,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     # Load training hyperparameters from the model's run config for traceability in the evaluation config.
     training_config = _load_run_config(model_load_path) if model_load_path else {}
     max_vehicles = training_config.get("max_vehicles")
-    truncate_after_n_steps = truncate_after_n_steps or training_config.get("truncate_after_n_steps")
+    longest_route_duration = longest_route_duration or training_config.get("longest_route_duration")
 
     # Use the same timestamp as the metrics file so configs and metrics are paired by name
     _dump_to_file({
@@ -385,13 +387,13 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_training_units": training_config.get("n_training_units"),
         "n_steps": training_config.get("n_steps"),
         "model_load_path": model_load_path,
-        "truncate_after_n_steps": truncate_after_n_steps,
+        "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
         "training_config": training_config or None,
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, truncate_after_n_steps=truncate_after_n_steps or compute_auto_truncation_limit(street_network))
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network))
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
@@ -436,7 +438,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         wandb_entity=wandb_entity,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, use_custom_extractor=True, truncate_after_n_steps=None):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, use_custom_extractor=True, longest_route_duration=None):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -464,6 +466,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
         eval_episodes (int, optional): The number of episodes to run during evaluation.
             Defaults to 50.
         ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Defaults to 0.0.
+        longest_route_duration (int, optional): The maximum route duration in seconds for the given street network. Passed to both train_model and evaluate_model. Defaults to get_longest_route_duration(street_network).
 
         tuple: A tuple containing:
             - model_path (str): The file path of the trained model.
@@ -471,12 +474,12 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, truncate_after_n_steps=truncate_after_n_steps)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, longest_route_duration=longest_route_duration)
     # evaluate with random and greedy
-    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
-    nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
-    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
-    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, truncate_after_n_steps=truncate_after_n_steps)
+    model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
+    nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
+    random_evaluation_path = evaluate_model(scenario, "RANDOM", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
+    greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
     eval_metrics_filepath_list = [nocharge_evaluation_path, random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
     return model_path, eval_metrics_filepath_list
 
@@ -492,7 +495,7 @@ if __name__ == "__main__":
         n_vehicles=20,
         n_noevs=0,
         n_training_units=600,
-        # truncate_after_n_steps=7_200,
+        # longest_route_duration=7_200,
         ent_coef=0.01,
         # use_custom_extractor=True,
         eval_episodes=10,
@@ -536,7 +539,7 @@ if __name__ == "__main__":
     #     n_vehicles=20,
     #     n_noevs=0,
     #     n_episodes=20,
-    #     truncate_after_n_steps=6_000,
+    #     longest_route_duration=6_000,
     #     model_load_path=None,
     #     execution_context="local",
     #     # render_mode="human",

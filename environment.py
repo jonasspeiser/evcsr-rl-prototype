@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 max_vehicles=None, observation_sampling_rate=30, truncate_after_n_steps=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
+                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -29,7 +29,7 @@ class CustomEnv(gym.Env):
             reward_strategy (str, optional): The version of the environment to use. Can be "basic", "noTime", or "shaping". "basic" uses the BasicRewardStrategy, which rewards the agent for reaching the destination and penalizes it for waiting. "noTime" uses the NoTimeComponentRewardStrategy, which does not consider the travel time in the reward calculation. "shaping" uses the RewardShapingStrategy, which rewards the agent for reaching the destination and penalizes it for waiting, but also considers the travel time in a more sophisticated way.
             vehicles_to_spawn (int, optional): The number of vehicles to spawn in the simulation. This is the number of observable vehicles (OEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
             observation_sampling_rate (int, optional): The rate at which the observation is sampled (i.e. every x simulation steps).
-            truncate_after_n_steps (int, optional): The number of simulation steps after which the episode is truncated if no charging request is triggered.
+            longest_route_duration (int, optional): The maximum duration of a route in seconds. Used for some reward strategies and episode truncation in scenarios with random data generation. If an episode in a random data scenario exceeds this duration, the episode is truncated.
             non_observable_vehicles (int, optional): The number of non-observable vehicles (i.e. not observable by the agent) to spawn in the simulation.
             random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
         """
@@ -39,7 +39,7 @@ class CustomEnv(gym.Env):
         if str(scenario_generator).lower() == "bast":
             self.truncate_after_n_simulation_steps = 24 * 3600 # set timeout to 24 h if BASt scenario is used
         else:
-            self.truncate_after_n_simulation_steps = truncate_after_n_steps # abort the episode if it takes too long without a charging request being triggered
+            self.truncate_after_n_simulation_steps = longest_route_duration # abort the episode if it takes too long without a charging request being triggered
         
         gui = (self.render_mode == "human")
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed, sumo_log_path=sumo_log_path, street_network=street_network)
@@ -48,7 +48,7 @@ class CustomEnv(gym.Env):
         self.non_observable_vehicles = non_observable_vehicles
         if non_observable_vehicles:
             # self.noev_data_provider = Obelis_Data_Provider()
-            self.noev_data_provider = Random_Data_Provider(n_noevs=self.non_observable_vehicles, n_cs=4, max_simulation_time=truncate_after_n_steps, seed=random_seed)
+            self.noev_data_provider = Random_Data_Provider(n_noevs=self.non_observable_vehicles, n_cs=4, max_simulation_time=self.truncate_after_n_simulation_steps, seed=random_seed)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
@@ -89,7 +89,10 @@ class CustomEnv(gym.Env):
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif reward_strategy == "shaping":
-            self.reward_strategy = RewardShapingStrategy()
+            # longest_route_duration doubles as the reward upper bound: since episodes are truncated
+            # at this limit, no vehicle can arrive with TTT > longest_route_duration, so the
+            # arrival reward (longest_route_duration - TTT) is always non-negative.
+            self.reward_strategy = RewardShapingStrategy(max_allowed_ttt=longest_route_duration)
         else:
             raise ValueError(f"Unknown reward_strategy: {reward_strategy}")
 
