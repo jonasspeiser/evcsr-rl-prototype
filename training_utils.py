@@ -162,7 +162,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, use_custom_extractor=True, longest_route_duration=None, use_wandb=False, wandb_entity=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -220,7 +220,6 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "n_steps": n_steps,
         "random_seed": random_seed,
         "ent_coef": ent_coef,
-        "use_custom_extractor": use_custom_extractor,
         "max_vehicles": max_vehicles,
         "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
@@ -258,7 +257,6 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     n_vehicles = config["n_vehicles"]
     n_noevs = config.get("n_noevs")
     ent_coef = config.get("ent_coef", 0.0)
-    use_custom_extractor = config.get("use_custom_extractor", True)
     max_vehicles = config.get("max_vehicles")
     longest_route_duration = config.get("longest_route_duration")
     version_tag = get_git_version()
@@ -297,7 +295,6 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "n_training_units": n_training_units,
         "n_steps": n_steps,
         "ent_coef": ent_coef,
-        "use_custom_extractor": use_custom_extractor,
         "max_vehicles": max_vehicles,
         "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
@@ -309,7 +306,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network))
 
     # Train the agent
-    model = _load_model(model_load_path, algorithm, env, use_custom_extractor=use_custom_extractor)
+    model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
 
 def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None):
@@ -438,7 +435,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         wandb_entity=wandb_entity,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, use_custom_extractor=True, longest_route_duration=None):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -474,7 +471,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, use_custom_extractor=use_custom_extractor, longest_route_duration=longest_route_duration)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, longest_route_duration=longest_route_duration)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
     nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
@@ -497,7 +494,6 @@ if __name__ == "__main__":
         n_training_units=600,
         # longest_route_duration=7_200,
         ent_coef=0.01,
-        # use_custom_extractor=True,
         eval_episodes=10,
         random_seed_eval=54321,
         execution_context="local",
