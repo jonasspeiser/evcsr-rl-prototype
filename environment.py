@@ -19,7 +19,7 @@ class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km"):
+                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_strategy_kwargs=None):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -84,10 +84,11 @@ class CustomEnv(gym.Env):
         self.episode_count = 0
 
         # Instantiate the reward strategy based on reward_strategy.
+        kwargs = reward_strategy_kwargs or {}
         if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
         elif reward_strategy == "basicCongestion":
-            self.reward_strategy = BasicWithCongestionPenaltyStrategy(congestion_threshold_m=33600, congestion_penalty=1.0)
+            self.reward_strategy = BasicWithCongestionPenaltyStrategy(**kwargs)
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif reward_strategy == "shaping":
