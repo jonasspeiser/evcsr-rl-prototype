@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
-from vehicle import Vehicle, get_padded_observation
+from vehicle import Vehicle
 from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
@@ -44,6 +44,7 @@ class CustomEnv(gym.Env):
         gui = (self.render_mode == "human")
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed, sumo_log_path=sumo_log_path, street_network=street_network)
         self.vehicles_to_spawn = vehicles_to_spawn
+        self.max_vehicles = max_vehicles if max_vehicles is not None else vehicles_to_spawn
 
         self.non_observable_vehicles = non_observable_vehicles
         if non_observable_vehicles:
@@ -60,25 +61,32 @@ class CustomEnv(gym.Env):
 
 
         # --- Define observation space ---
-        # Types of observations per vehicle: [0] current state of the battery, [1] current distance to destination, [2:6] current distance to each charging station, [6] last selected action, [7] arrived at destination, [8] request pending
-        # battery soc is in between 0 and 100000 Wh, distance to destination and distance to each of the charging stations in meters is between 0 and the maximum drivable distance in the simulated network.
-        # These values are normalized.
-        # The last selected action is 0 for "do_nothing" or 1-4 for the corresponding CS (cf. handle_action())
-        # A binary value informs wether the vehicle has (1) or has not (0) reached its destination yet
-        # A binary value signals the "active" vehicle which filed the current charging request (with a 1, otherwise 0)
-        # -1 is used to signal that the vehicle is not spawned yet ("padding")
-        single_vehicle_observation_space = spaces.Box(
-            low=np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0]),
-            high=np.array([1, 1, 1, 1, 1, 1, 4, 1, 1]),
-            dtype=np.float32
-        )
+        # Each vehicle row has 12 features:
+        #   [0]   battery_soc             normalized [0, 1]; -1 if unavailable
+        #   [1]   distance_to_destination normalized [0, 1]; -1 if unavailable
+        #   [2:6] distance_to_cs_1..4     normalized [0, 1]; -1 if unreachable
+        #   [6:11] last_action one-hot    {0,1} x 5 (actions 0=do_nothing, 1-4=station)
+        #   [11]  arrived_at_destination  {0, 1}
+        # "active_vehicle": the vehicle filing the current charging request (shape (12,))
+        # "other_vehicles": all other spawned vehicles, zero-padded to max_vehicles rows
+        # "vehicle_mask": 1 for valid rows in other_vehicles, 0 for padding
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
 
-        self.observation_space_ids = [f"observable_ev_{i}" for i in range(vehicles_to_spawn)]  # sized to n_vehicles, not OBSERVATION_SPACE_SIZE
         self.observation_space = spaces.Dict({
-            vehicle_id: single_vehicle_observation_space for vehicle_id in self.observation_space_ids
+            "active_vehicle": spaces.Box(
+                low=-1.0, high=1.0,
+                shape=(12,), dtype=np.float32
+            ),
+            "other_vehicles": spaces.Box(
+                low=-1.0, high=1.0,
+                shape=(self.max_vehicles, 12), dtype=np.float32
+            ),
+            "vehicle_mask": spaces.Box(
+                low=0.0, high=1.0,
+                shape=(self.max_vehicles,), dtype=np.float32
+            ),
         })
 
         self.episode_count = 0
@@ -260,25 +268,30 @@ class CustomEnv(gym.Env):
 
     def _update_and_get_observation(self):
         """
-        Build the observation dictionary by updating and collecting each vehicle's observation.
+        Build the observation dict with three keys:
+          "active_vehicle": (12,) features of the vehicle filing the current charging request
+          "other_vehicles": (max_vehicles, 12) features of all other spawned vehicles, zero-padded
+          "vehicle_mask":   (max_vehicles,) — 1 for valid rows in other_vehicles, 0 for padding
 
         Returns:
-            dict: The observation dictionary for all vehicles.
+            dict: {"active_vehicle": np.ndarray, "other_vehicles": np.ndarray, "vehicle_mask": np.ndarray}
         """
-        observation = {}
-        # Actual vehicle state updates
+        active_vehicle_obs = np.zeros(12, dtype=np.float32)
+        other_vehicles_arr = np.zeros((self.max_vehicles, 12), dtype=np.float32)
+        vehicle_mask = np.zeros(self.max_vehicles, dtype=np.float32)
+        other_idx = 0
         for vehicle_id, vehicle in self.vehicles.items():
             if not vehicle.arrived and not vehicle.empty:
                 vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
                 vehicle.update_from_state(vehicle_state)
-            # Mark the vehicle as active if it filed the current charging request.
-            is_active = (vehicle_id == self.active_charging_request_vehicle_id)
-            observation[vehicle_id] = vehicle.get_observation(is_active=is_active)
-        # Pad the the remaining observation space to ensure it has a fixed size.
-        for vehicle_id in self.observation_space_ids:
-            if vehicle_id not in observation:
-                observation[vehicle_id] = get_padded_observation()
-        return observation
+            obs = vehicle.get_observation()
+            if vehicle_id == self.active_charging_request_vehicle_id:
+                active_vehicle_obs = obs
+            else:
+                other_vehicles_arr[other_idx] = obs
+                vehicle_mask[other_idx] = 1.0
+                other_idx += 1
+        return {"active_vehicle": active_vehicle_obs, "other_vehicles": other_vehicles_arr, "vehicle_mask": vehicle_mask}
     
     def _get_info(self):
         """

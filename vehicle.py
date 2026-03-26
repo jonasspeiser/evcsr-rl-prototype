@@ -5,11 +5,6 @@ from simulation import Simulation, PointlessRecommendationError, BadTimingRoutin
 import logging
 logger = logging.getLogger("rl.environment.vehicle")
 
-def get_padded_observation():
-    """
-    Returns a padded observation for vehicles that are not present in the current observation.
-    """
-    return np.array([-1, -1, -1, -1, -1, -1, -1, 0, 0], dtype=np.float32)
 
 class Vehicle:
 
@@ -67,32 +62,35 @@ class Vehicle:
             self.distance_to_destination = state.get("distance_to_destination")
             self.spawned = True
 
-    def get_observation(self, is_active=False):
+    def get_observation(self):
         """
-        Returns the observation for this vehicle as a NumPy array.
-        Observation format:
-          [normalized_soc] + 4 normalized distances + [last_action] + [destination_reached] + [active_charging_request]
-        If the vehicle is not spawned yet, a padded observation is returned.
+        Returns the observation for this vehicle as a NumPy array of shape (12,).
+        Observation format (12 features):
+          [soc, dist_destination, dist_cs_1..4, last_action_one_hot_0..4, arrived]
+        If the vehicle is not spawned yet, returns zeros (the environment sets vehicle_mask=0).
         """
-        vehicle_is_offline = self.distance_to_cs_dict is None
-        if vehicle_is_offline:
-            # Use -1 as padding to indicate that the vehicle is not spawned.
-            return get_padded_observation()
-        normalized_soc = self.battery_soc / self.CAPACITY_NORMALIZATION_VALUE if self.battery_soc is not None else -1 
+        if self.distance_to_cs_dict is None:
+            return np.zeros(12, dtype=np.float32)
+        normalized_soc = self.battery_soc / self.CAPACITY_NORMALIZATION_VALUE if self.battery_soc is not None else -1
         dist_destination = self.distance_to_destination / self.DISTANCE_NORMALIZATION_VALUE if self.distance_to_destination is not None else -1
-        # Ensure a fixed order by sorting charging station ids; pad if needed.
+        # Ensure a fixed order by sorting charging station ids; pad with -1 if needed.
         distances = [
-            -1 if self.distance_to_cs_dict[k] is None # if distance is None, the target is not reachable. Thus return -1
-            else self.distance_to_cs_dict[k] / self.DISTANCE_NORMALIZATION_VALUE # if reachable, normalise distance
+            -1 if self.distance_to_cs_dict[k] is None
+            else self.distance_to_cs_dict[k] / self.DISTANCE_NORMALIZATION_VALUE
             for k in sorted(self.distance_to_cs_dict.keys())
-            ]
+        ]
         while len(distances) < 4:
             distances.append(-1)
-        # destination_reached flag (1 if arrived, 0 otherwise)
-        destination_reached = int(self.arrived)
-        # active charging request flag is provided via the is_active parameter
-        obs = [normalized_soc] + [dist_destination] + distances[:4] + [self.last_action, destination_reached, int(is_active)]
-        return np.array(obs, dtype=np.float32)
+        # One-hot encode last_action (0=do_nothing, 1-4=charging station); -1 (no action yet) → all zeros
+        last_action_oh = np.zeros(5, dtype=np.float32)
+        if 0 <= self.last_action <= 4:
+            last_action_oh[self.last_action] = 1.0
+        return np.concatenate([
+            [normalized_soc, dist_destination],
+            distances[:4],
+            last_action_oh,
+            [float(self.arrived)],
+        ]).astype(np.float32)
 
     def get_info(self):
         """

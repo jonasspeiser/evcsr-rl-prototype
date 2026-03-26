@@ -178,6 +178,9 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         n_noevs (int, optional): The number of NOEVs (non observable electric vehicles). Defaults to None.
         execution_context (str, optional): The execution context (e.g., "local", "remote"). Defaults to "local".
         random_seed (int, optional): Random seed for reproducibility. Defaults to None.
+        max_vehicles (int, optional): Size of the observation space vehicle dimension. Must be >= n_vehicles.
+            When None, defaults to n_vehicles. Set to a larger value to allow evaluating on more vehicles
+            than were trained with (cross-N generalization), as long as max_vehicles stays constant.
         ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Higher values encourage
             more exploration by penalizing overconfident policies. 0.01 is a typical starting point.
             Defaults to 0.0 (SB3 default, no entropy bonus). Not used for DQN.
