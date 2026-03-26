@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle, get_padded_observation
-from reward_strategies import BasicRewardStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
+from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -86,6 +86,8 @@ class CustomEnv(gym.Env):
         # Instantiate the reward strategy based on reward_strategy.
         if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
+        elif reward_strategy == "basicCongestion":
+            self.reward_strategy = BasicWithCongestionPenaltyStrategy(congestion_threshold_m=33600, congestion_penalty=1.0)
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif reward_strategy == "shaping":
@@ -449,7 +451,7 @@ class CustomEnv(gym.Env):
         """Process the action for the active charging request vehicle."""
         if self.active_charging_request_vehicle_id in self.vehicles:
             vehicle = self.vehicles[self.active_charging_request_vehicle_id]
-            action_penalty = vehicle.handle_action(action, self.reward_strategy)
+            action_penalty = vehicle.handle_action(action, self.reward_strategy, extra_context={'all_vehicles': self.vehicles})
             return action_penalty
         return 0
 

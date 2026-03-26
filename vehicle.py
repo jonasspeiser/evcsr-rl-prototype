@@ -24,6 +24,7 @@ class Vehicle:
         self.vehicle_id = vehicle_id
         self.simulation = simulation
         self.last_action = -1
+        self.target_cs_id = None  # CS the vehicle is currently routed to (None if no charging stop planned)
         self.spawned = False
         self.arrived = False
         self.empty = False
@@ -107,7 +108,7 @@ class Vehicle:
         # "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination
         return state
     
-    def handle_action(self, action, reward_strategy):
+    def handle_action(self, action, reward_strategy, extra_context=None):
         """
         Handle the action (e.g. rerouting, removing stops) and then delegate
         the penalty calculation to the reward strategy.
@@ -149,10 +150,11 @@ class Vehicle:
             try:
                 self.simulation.reroute_for_charging(self.vehicle_id, cs_id)
                 logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
+                self.target_cs_id = cs_id
                 context.update({
                     'reroute_successful': True,
                     'sufficient_range': self.is_remaining_range_sufficient(buffer=0),
-                }) 
+                })
             except (ImpossibleRoutingError, BadTimingRoutingError) as e:
                 logger.error(f"{type(e).__name__}: {e}")
                 context['reroute_successful'] = False
@@ -166,11 +168,14 @@ class Vehicle:
 
 
         elif action == 0: # action is "do nothing"
+            self.target_cs_id = None
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(self.vehicle_id)
                 logger.debug(f"Vehicle {self.vehicle_id}: removed planned charging stop")
 
         # Delegate penalty calculation to the reward strategy.
+        if extra_context:
+            context.update(extra_context)
         action_penalty = reward_strategy.calculate_action_penalty(self, context)
         return action_penalty
 

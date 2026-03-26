@@ -487,7 +487,7 @@ if __name__ == "__main__":
         algorithm="PPO",
         policy="MultiInputPolicy",
         version_tag=get_git_version(),
-        reward_strategy="basic",
+        reward_strategy="basicCongestion",
         street_network="straight_120km",
         n_vehicles=20,
         n_noevs=0,

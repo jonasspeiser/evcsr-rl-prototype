@@ -125,7 +125,7 @@ class BasicRewardStrategy(RewardStrategy):
     Action penalties: 0
     """
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        # This is just here to trigger the vehicle.battery_jus_died() function and therefore get the info if a vehicle died during the current step
+        # This is just here to trigger the vehicle.battery_just_died() function and therefore get the info if a vehicle died during the current step
         for vehicle in vehicles.values():
             if vehicle.battery_just_died():
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST died")
@@ -136,6 +136,56 @@ class BasicRewardStrategy(RewardStrategy):
     
     def calculate_action_penalty(self, vehicle, context):
         return 0
+
+
+class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
+    """
+    Extends BasicRewardStrategy with an action-time congestion penalty.
+
+    When a vehicle is successfully routed to a CS, a penalty is applied for each other vehicle
+    that is already heading to the same CS and will arrive within a similar time window
+    (approximated by distance at constant highway speed).
+
+    Step reward: 0 (inherited)
+
+    Final reward: negative mean travel time (inherited)
+
+    Action penalties:
+    - congestion_penalty per conflicting vehicle whose distance to the target CS differs by less
+      than congestion_threshold_m (default 33600 m ≈ 100 km/h × 20 min charging stop).
+
+    Args:
+            congestion_threshold_m: Distance window (meters) within which two vehicles heading to the
+                same CS are considered to conflict. Default 33600 m ≈ 100 km/h × 20 min charging stop.
+            congestion_penalty: Penalty applied per conflicting vehicle.
+    """
+    def __init__(self, congestion_threshold_m=33600, congestion_penalty=1.0):
+        self.congestion_threshold_m = congestion_threshold_m
+        self.congestion_penalty = congestion_penalty
+
+    def calculate_action_penalty(self, vehicle, context):
+        if not context.get('reroute_successful'):
+            return 0
+        target_cs = context.get('target_cs')
+        dist_self = vehicle.distance_to_cs_dict.get(target_cs) if vehicle.distance_to_cs_dict else None
+        if dist_self is None:
+            return 0
+        all_vehicles = context.get('all_vehicles', {})
+        penalty = 0
+        for other in all_vehicles.values():
+            if other.vehicle_id == vehicle.vehicle_id:
+                continue
+            if other.arrived or other.empty or not other.spawned:
+                continue
+            if other.target_cs_id != target_cs:
+                continue
+            dist_other = other.distance_to_cs_dict.get(target_cs) if other.distance_to_cs_dict else None
+            if dist_other is None:
+                continue
+            if abs(dist_self - dist_other) < self.congestion_threshold_m:
+                logger.info(f"Vehicle {vehicle.vehicle_id}: congestion penalty for routing to {target_cs} (conflict with {other.vehicle_id})")
+                penalty -= self.congestion_penalty
+        return penalty
 
 class RewardShapingStrategy(RewardStrategy):
     def __init__(self, max_allowed_ttt):
