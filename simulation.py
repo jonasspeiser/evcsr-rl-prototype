@@ -97,8 +97,9 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 
 class Simulation():
 
-    def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None, street_network = DEFAULT_STREET_NETWORK):
+    def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None, street_network = DEFAULT_STREET_NETWORK, start_soc_bounds = None):
         self.sumo_config_stub = f"./street-networks/{street_network}/{street_network}"
+        self.start_soc_bounds = start_soc_bounds
 
         with open(f"{self.sumo_config_stub}.all_distances.json", "r") as f:
             self.all_distances = json.load(f)
@@ -206,7 +207,7 @@ class Simulation():
         """
         # edge_list = traci.edge.getIDList()
         all_routes = network_generator.get_all_routes(self.sumo_config_stub)
-        start_soc_bounds = network_generator.get_start_soc_bounds(self.sumo_config_stub)
+        start_soc_bounds = self.start_soc_bounds or network_generator.get_start_soc_bounds(self.sumo_config_stub)
         routes_dict = self.scenario_generator.generate_routes_from_routes_list(amount, all_routes)
         routes_id_list = list(routes_dict.keys())
         vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds, scenario_id)
