@@ -522,27 +522,31 @@ if __name__ == "__main__":
 
     # further_train_model(
     #     model_load_path=get_latest_model(),
-    #     n_training_units=600,
+    #     n_training_units=7000,
     #     execution_context="local"
     # )
 
     # evaluate_model_with_config(
-    #     # model_load_path=get_latest_model(),
-    #     model_load_path="runs/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO.zip",
-    #     n_episodes=5,
-    #     random_seed=123,
+    #     model_load_path=get_latest_model(),
+    #     # model_load_path="runs/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO/2026-03-05_22-28-05_v0.9.5-5-g631ed03_basic_same_route_straight100km_PPO.zip",
+    #     n_episodes=20,
+    #     longest_route_duration=6_000,
+    #     model_load_path=None,
+    #     execution_context="local",
+    #     # render_mode="human",
+    #     random_seed=54321,
     # )
 
     # evaluate_model(
     #     scenario="same_route",
     #     algorithm="GREEDY",
     #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
+    #     reward_strategy="shaping",
     #     street_network="straight_120km",
     #     n_vehicles=20,
     #     n_noevs=0,
     #     n_episodes=20,
-    #     longest_route_duration=6_000,
+    #     truncate_after_n_steps=6_000,
     #     model_load_path=None,
     #     execution_context="local",
     #     # render_mode="human",
