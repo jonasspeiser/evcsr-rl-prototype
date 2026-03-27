@@ -70,6 +70,7 @@ class CustomEnv(gym.Env):
         # "active_vehicle": the vehicle filing the current charging request (shape (12,))
         # "other_vehicles": all other spawned vehicles, zero-padded to max_vehicles rows
         # "vehicle_mask": 1 for valid rows in other_vehicles, 0 for padding
+        # "simulation_time": current simulation time normalized to [0, 1] by truncate_after_n_simulation_steps
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
@@ -86,6 +87,10 @@ class CustomEnv(gym.Env):
             "vehicle_mask": spaces.Box(
                 low=0.0, high=1.0,
                 shape=(self.max_vehicles,), dtype=np.float32
+            ),
+            "simulation_time": spaces.Box(
+                low=0.0, high=1.0,
+                shape=(1,), dtype=np.float32
             ),
         })
 
@@ -268,13 +273,14 @@ class CustomEnv(gym.Env):
 
     def _update_and_get_observation(self):
         """
-        Build the observation dict with three keys:
-          "active_vehicle": (12,) features of the vehicle filing the current charging request
-          "other_vehicles": (max_vehicles, 12) features of all other spawned vehicles, zero-padded
-          "vehicle_mask":   (max_vehicles,) — 1 for valid rows in other_vehicles, 0 for padding
+        Build the observation dict with four keys:
+          "active_vehicle":  (12,) features of the vehicle filing the current charging request
+          "other_vehicles":  (max_vehicles, 12) features of all other spawned vehicles, zero-padded
+          "vehicle_mask":    (max_vehicles,) — 1 for valid rows in other_vehicles, 0 for padding
+          "simulation_time": (1,) current simulation time normalized to [0, 1]
 
         Returns:
-            dict: {"active_vehicle": np.ndarray, "other_vehicles": np.ndarray, "vehicle_mask": np.ndarray}
+            dict: {"active_vehicle": np.ndarray, "other_vehicles": np.ndarray, "vehicle_mask": np.ndarray, "simulation_time": np.ndarray}
         """
         active_vehicle_obs = np.zeros(12, dtype=np.float32)
         other_vehicles_arr = np.zeros((self.max_vehicles, 12), dtype=np.float32)
@@ -291,7 +297,11 @@ class CustomEnv(gym.Env):
                 other_vehicles_arr[other_idx] = obs
                 vehicle_mask[other_idx] = 1.0
                 other_idx += 1
-        return {"active_vehicle": active_vehicle_obs, "other_vehicles": other_vehicles_arr, "vehicle_mask": vehicle_mask}
+        simulation_time = np.array(
+            [self.simulation.get_current_time_step() / self.truncate_after_n_simulation_steps],
+            dtype=np.float32
+        )
+        return {"active_vehicle": active_vehicle_obs, "other_vehicles": other_vehicles_arr, "vehicle_mask": vehicle_mask, "simulation_time": simulation_time}
     
     def _get_info(self):
         """
