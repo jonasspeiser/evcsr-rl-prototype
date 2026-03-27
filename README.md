@@ -208,11 +208,10 @@ Configured via the `scenario` parameter of `CustomEnv` / `train_model`:
 |----------|-------------|
 | `"all_random"` | Random routes, random start SOCs (200–500 Wh) |
 | `"same_route"` | All vehicles use the network's longest route; random SOCs |
-| `"same_soc_same_route"` | Same route, fixed SOC at 50% of battery upper bound (~11,195 Wh) |
 | `"custom_distribution"` | Custom departure-time distribution (subclass to implement) |
 | `"bast"` | Real German BASt traffic data (2022 dates); hourly traffic patterns |
 
-For training and benchmarking, `"same_route"` and `"same_soc_same_route"` are the most commonly used as they reduce variance.
+For testing and benchmarking, `"same_route"` with a fixed start_soc_boundaries parameter is the most commonly used as it reduces variance.
 
 ### Street Networks
 

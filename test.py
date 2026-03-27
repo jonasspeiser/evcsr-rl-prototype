@@ -41,7 +41,7 @@ def test_remaining_range_calculation() -> int:
     env = None
     try:
         env = CustomEnv(
-            scenario_generator="same_soc_same_route",
+            scenario_generator="same_route",
             vehicles_to_spawn=2,
             street_network="straight_120km",
             random_seed=42,

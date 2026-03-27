@@ -141,15 +141,6 @@ class SameRouteScenario(ScenarioGenerator):
             self._cached_route = (longest["from"], longest["to"])
         return {f"trip{i}": list(self._cached_route) for i in range(amount)}
     
-class SameSOCSameRouteScenario(SameRouteScenario):
-    """
-    All Vehicles have the same route. Vehicles all start at the first edge and end at the last edge of the network. Vehicles are starting directly one after the other on simulation start. Start battery values are equal for all vehicles (50 % of the upper bound from start_soc_bounds).
-    """
-
-    def _select_soc(self, start_soc_bounds):
-        battery_max = start_soc_bounds[1]
-        soc = battery_max / 2
-        return soc
 
 class CustomDistributionScenario(ScenarioGenerator):
     """

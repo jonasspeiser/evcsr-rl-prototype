@@ -7,7 +7,7 @@ import traci
 from traci import constants as tc
 from sumolib import checkBinary
 from collections import Counter
-from oev_scenario_generator import ScenarioGenerator, SameRouteScenario, SameSOCSameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
+from oev_scenario_generator import ScenarioGenerator, SameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
 import network_generator 
 
 
@@ -86,8 +86,6 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
             return ScenarioGenerator(seed=random_seed)
         case "same_route":
             return SameRouteScenario(seed=random_seed)
-        case "same_soc_same_route":
-            return SameSOCSameRouteScenario(seed=random_seed)
         case "custom_distribution":
             return CustomDistributionScenario(seed=random_seed)
         case "bast":
