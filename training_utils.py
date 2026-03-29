@@ -121,7 +121,7 @@ def get_git_version():
     except Exception:
         return "unknown"
 
-def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed):
+def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed, deterministic=True):
     metrics_list = []
     total_step = 0
 
@@ -139,7 +139,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
 
         action_counts = Counter()
         while not (terminated or truncated):
-            action, _ = model.predict(observation, deterministic=True)
+            action, _ = model.predict(observation, deterministic=deterministic)
             action_counts[int(action)] += 1
             observation, reward, terminated, truncated, info = env.step(action)
             total_step += 1
@@ -320,7 +320,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     model = _load_model(model_load_path, algorithm, env)
     return _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None, start_soc_bounds=None):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None, start_soc_bounds=None, deterministic=True):
     """
     Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
 
@@ -399,6 +399,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "n_steps": training_config.get("n_steps"),
         "model_load_path": model_load_path,
         "longest_route_duration": longest_route_duration,
+        "deterministic": deterministic,
         "execution_context": execution_context,
         "training_config": training_config or None,
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
@@ -411,7 +412,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
 
     # Evaluate the agent
     try:
-        metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=log.callback, metadata=metadata, random_seed=random_seed)
+        metrics_dict = evaluate_policy(model, env, n_eval_episodes=n_episodes, callback=log.callback, metadata=metadata, random_seed=random_seed, deterministic=deterministic)
         # print(f"mean_reward: {mean_reward}, std_reward: {std_reward}")
         evaluation_path = f"{log.run_dir}/evaluation/metrics{current_time}.json"
         _dump_to_file(metrics_dict, evaluation_path)
@@ -425,7 +426,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         env.close()
         log.close()
 
-def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None):
+def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None, deterministic=True):
     """Evaluate a trained model, loading scenario/algorithm/etc. from its run_config.json.
 
     Returns:
@@ -447,6 +448,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         execution_context=execution_context,
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
+        deterministic=deterministic,
     )
 
 def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, reward_strategy_kwargs=None, start_soc_bounds=None):
