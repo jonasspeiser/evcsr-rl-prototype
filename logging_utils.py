@@ -117,6 +117,13 @@ class CustomTensorboardCallback(BaseCallback):
                 metrics[key] = value
         return metrics
     
+    def _on_rollout_end(self) -> None:
+        """Log action frequency distribution over the completed rollout buffer."""
+        actions = self.model.rollout_buffer.actions.flatten().astype(int)
+        n_actions = self.model.action_space.n
+        for a in range(n_actions):
+            self.logger.record(f"train/action_{a}_freq", (actions == a).mean())
+
     def _on_step(self):
         """Called at every step during training to update Tensorboard metrics."""
         self.logger_rl.debug("Agent Step {}".format(self.num_timesteps))
