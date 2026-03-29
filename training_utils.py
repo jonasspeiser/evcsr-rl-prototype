@@ -194,6 +194,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         The file path of the saved model (.zip).
     """
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
+    longest_route_duration = longest_route_duration or get_longest_route_duration(street_network)
 
     # setup logging
     log = setup_run_logging(
@@ -233,7 +234,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     })
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network), reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -265,7 +266,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     n_noevs = config.get("n_noevs")
     ent_coef = config.get("ent_coef", 0.0)
     max_vehicles = config.get("max_vehicles")
-    longest_route_duration = config.get("longest_route_duration")
+    longest_route_duration = config.get("longest_route_duration") or get_longest_route_duration(street_network)
     reward_strategy_kwargs = config.get("reward_strategy_kwargs")
     start_soc_bounds = config.get("start_soc_bounds")
     version_tag = get_git_version()
@@ -314,7 +315,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     }, log.model_save_path.replace(".zip", "_config.json"))
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network), reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -378,7 +379,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     # Load training hyperparameters from the model's run config for traceability in the evaluation config.
     training_config = _load_run_config(model_load_path) if model_load_path else {}
     max_vehicles = training_config.get("max_vehicles")
-    longest_route_duration = longest_route_duration or training_config.get("longest_route_duration")
+    longest_route_duration = longest_route_duration or training_config.get("longest_route_duration") or get_longest_route_duration(street_network)
     reward_strategy_kwargs = training_config.get("reward_strategy_kwargs")
     start_soc_bounds = start_soc_bounds or training_config.get("start_soc_bounds")
 
@@ -402,7 +403,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration or get_longest_route_duration(street_network), reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
