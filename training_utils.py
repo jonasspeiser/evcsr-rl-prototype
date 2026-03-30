@@ -147,7 +147,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
             episode_length += 1
 
         # Retrieve metrics from the environment after an episode ends.
-        episode_metrics = callback.log_evaluation(env, total_step)
+        episode_metrics = callback.log_evaluation(env, total_step, episode_length=episode_length, episode_reward=episode_reward)
         episode_metrics.update({
             "episode": episode,
             "episode_length": episode_length,

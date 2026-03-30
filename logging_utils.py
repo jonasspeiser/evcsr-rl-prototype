@@ -156,7 +156,7 @@ class CustomTensorboardCallback(BaseCallback):
 
         return True
 
-    def log_evaluation(self, env, step):
+    def log_evaluation(self, env, step, episode_length=None, episode_reward=None):
         """Log evaluation metrics when running independently (e.g., for a random algorithm)."""
         metrics = self.get_metrics(env)
 
@@ -164,6 +164,10 @@ class CustomTensorboardCallback(BaseCallback):
         if self.writer is not None:
             for metric_name, value in metrics.items():
                 self.writer.add_scalar(metric_name, value, step)
+            if episode_length is not None:
+                self.writer.add_scalar("eval/episode_length", episode_length, step)
+            if episode_reward is not None:
+                self.writer.add_scalar("eval/episode_reward", episode_reward, step)
             self.writer.flush()
 
         # logging to W&B (optional)
