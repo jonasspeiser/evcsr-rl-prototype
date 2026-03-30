@@ -8,6 +8,7 @@ from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
 import json
 import os
+import time
 from logging_utils import RunLogging, setup_run_logging
 import subprocess
 
@@ -65,9 +66,11 @@ def _load_run_config(model_load_path):
 
 def _run_training(*, env, log: RunLogging, model, n_steps, reset_num_timesteps=True):
     try:
+        t_start = time.monotonic()
         model.learn(n_steps, tb_log_name="tensorboard", callback=log.callback, reset_num_timesteps=reset_num_timesteps)
+        duration_s = time.monotonic() - t_start
         model.save(log.model_save_path)
-        return log.model_save_path
+        return log.model_save_path, duration_s
     except Exception as e:
         try:
             # Ensure that the model is saved even if an error occurs during training
@@ -213,6 +216,17 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         wandb_entity=wandb_entity,
     )
 
+    # initiate environment
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+
+    # Train the agent
+    algorithm_class = SB3_ALGOS.get(algorithm)
+    if algorithm_class is None:
+        raise ValueError(f"Invalid model type for training: {algorithm}")
+    algo_kwargs = {"ent_coef": ent_coef} if algorithm in ("PPO", "A2C") else {}
+    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
+    model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps)
+
     _save_run_config(log.run_dir, {
         "version_tag": version_tag,
         "mode": "training",
@@ -233,18 +247,10 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "reward_strategy_kwargs": reward_strategy_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
+        "training_duration_s": round(duration_s),
     })
 
-    # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
-
-    # Train the agent
-    algorithm_class = SB3_ALGOS.get(algorithm)
-    if algorithm_class is None:
-        raise ValueError(f"Invalid model type for training: {algorithm}")
-    algo_kwargs = {"ent_coef": ent_coef} if algorithm in ("PPO", "A2C") else {}
-    model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
-    return _run_training(env=env, log=log, model=model, n_steps=n_steps)
+    return model_path
 
 def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None):
     """Continue training an existing model, loading scenario/algorithm/etc. from its run_config.json.
@@ -292,6 +298,13 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         wandb_entity=wandb_entity,
     )
 
+    # initiate environment
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+
+    # Train the agent
+    model = _load_model(model_load_path, algorithm, env)
+    model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
+
     # Save alongside the new model file (not in run_dir root, to avoid overwriting the original run_config.json).
     # base_config nests the previous run's config, so the full training history is preserved for chains of
     # train_model -> further_train_model -> further_train_model -> ...
@@ -314,16 +327,12 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "reward_strategy_kwargs": reward_strategy_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
+        "training_duration_s": round(duration_s),
         "continued_from": model_load_path,
         "base_config": config,
     }, log.model_save_path.replace(".zip", "_config.json"))
 
-    # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_strategy_kwargs=reward_strategy_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
-
-    # Train the agent
-    model = _load_model(model_load_path, algorithm, env)
-    return _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
+    return model_path
 
 def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None, start_soc_bounds=None, deterministic=True):
     """
