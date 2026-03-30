@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle
-from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy
+from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, arrive_concurrently
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -71,6 +71,10 @@ class CustomEnv(gym.Env):
         # "other_vehicles": all other spawned vehicles, zero-padded to max_vehicles rows
         # "vehicle_mask": 1 for valid rows in other_vehicles, 0 for padding
         # "simulation_time": current simulation time normalized to [0, 1] by truncate_after_n_simulation_steps
+        # "station_assignment_counts": per-station count of vehicles assigned to that station whose
+        #   distance to it is within congestion_threshold_m of the active vehicle's distance (i.e.
+        #   will arrive at roughly the same time). Falls back to raw assigned count if threshold is
+        #   None or active vehicle has no distances yet. Normalized to [0, 1] by max_vehicles (shape (4,))
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
@@ -92,9 +96,14 @@ class CustomEnv(gym.Env):
                 low=0.0, high=1.0,
                 shape=(1,), dtype=np.float32
             ),
+            "station_assignment_counts": spaces.Box(
+                low=0.0, high=1.0,
+                shape=(4,), dtype=np.float32
+            ),
         })
 
         self.episode_count = 0
+        self.congestion_threshold_m = (reward_strategy_kwargs or {}).get('congestion_threshold_m')
 
         # Instantiate the reward strategy based on reward_strategy.
         kwargs = reward_strategy_kwargs or {}
@@ -271,19 +280,14 @@ class CustomEnv(gym.Env):
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
 
-    def _update_and_get_observation(self):
-        """
-        Build the observation dict with four keys:
-          "active_vehicle":  (12,) features of the vehicle filing the current charging request
-          "other_vehicles":  (max_vehicles, 12) features of all other spawned vehicles, zero-padded
-          "vehicle_mask":    (max_vehicles,) — 1 for valid rows in other_vehicles, 0 for padding
-          "simulation_time": (1,) current simulation time normalized to [0, 1]
+    def _build_vehicle_observations(self):
+        """Update vehicle states from simulation and build the per-vehicle observation arrays.
 
         Returns:
-            dict: {"active_vehicle": np.ndarray, "other_vehicles": np.ndarray, "vehicle_mask": np.ndarray, "simulation_time": np.ndarray}
+            tuple: (active_vehicle_obs, other_vehicles_obs, vehicle_mask)
         """
         active_vehicle_obs = np.zeros(12, dtype=np.float32)
-        other_vehicles_arr = np.zeros((self.max_vehicles, 12), dtype=np.float32)
+        other_vehicles_obs = np.zeros((self.max_vehicles, 12), dtype=np.float32)
         vehicle_mask = np.zeros(self.max_vehicles, dtype=np.float32)
         other_idx = 0
         for vehicle_id, vehicle in self.vehicles.items():
@@ -294,14 +298,74 @@ class CustomEnv(gym.Env):
             if vehicle_id == self.active_charging_request_vehicle_id:
                 active_vehicle_obs = obs
             else:
-                other_vehicles_arr[other_idx] = obs
+                other_vehicles_obs[other_idx] = obs
                 vehicle_mask[other_idx] = 1.0
                 other_idx += 1
-        simulation_time = np.array(
+        return active_vehicle_obs, other_vehicles_obs, vehicle_mask
+
+    def _get_normalized_simulation_time(self):
+        """Return the current simulation time normalized to [0, 1].
+
+        Returns:
+            np.ndarray: shape (1,)
+        """
+        return np.array(
             [self.simulation.get_current_time_step() / self.truncate_after_n_simulation_steps],
             dtype=np.float32
         )
-        return {"active_vehicle": active_vehicle_obs, "other_vehicles": other_vehicles_arr, "vehicle_mask": vehicle_mask, "simulation_time": simulation_time}
+
+    def _get_normalized_station_assignment_counts(self):
+        """Return per-station count of vehicles that would arrive concurrently with the active vehicle.
+
+        For each station, counts vehicles currently assigned to it whose distance to the station
+        is within congestion_threshold_m of the active vehicle's distance (same arrival window).
+        Falls back to raw assigned count if threshold is None or active vehicle has no distances yet.
+        Normalized to [0, 1] by max_vehicles.
+
+        Returns:
+            np.ndarray: shape (4,)
+        """
+        cs_ids = self.simulation.get_all_charging_station_ids()
+        threshold = self.congestion_threshold_m
+        active_vehicle = self.vehicles.get(self.active_charging_request_vehicle_id)
+        active_dists = active_vehicle.distance_to_cs_dict if (active_vehicle and active_vehicle.distance_to_cs_dict) else None
+        station_counts = np.zeros(len(cs_ids), dtype=np.float32)
+        for i, cs_id in enumerate(cs_ids):
+            active_dist = active_dists.get(cs_id) if active_dists else None
+            for vehicle in self.vehicles.values():
+                if vehicle.vehicle_id == self.active_charging_request_vehicle_id:
+                    continue
+                if vehicle.arrived or vehicle.empty or not vehicle.spawned:
+                    continue
+                if vehicle.target_cs_id != cs_id:
+                    continue
+                if threshold is not None and active_dist is not None:
+                    dist_other = vehicle.distance_to_cs_dict.get(cs_id) if vehicle.distance_to_cs_dict else None
+                    if dist_other is None or not arrive_concurrently(dist_other, active_dist, threshold):
+                        continue
+                station_counts[i] += 1
+        return station_counts / self.max_vehicles
+
+    def _update_and_get_observation(self):
+        """
+        Build the observation dict:
+          "active_vehicle":           (12,) features of the vehicle filing the current charging request
+          "other_vehicles":           (max_vehicles, 12) features of all other spawned vehicles, zero-padded
+          "vehicle_mask":             (max_vehicles,) — 1 for valid rows in other_vehicles, 0 for padding
+          "simulation_time":          (1,) current simulation time normalized to [0, 1]
+          "station_assignment_counts": (4,) per-station concurrent-arrival count, normalized by max_vehicles
+
+        Returns:
+            dict: observation dictionary
+        """
+        active_vehicle_obs, other_vehicles_obs, vehicle_mask = self._build_vehicle_observations()
+        return {
+            "active_vehicle": active_vehicle_obs,
+            "other_vehicles": other_vehicles_obs,
+            "vehicle_mask": vehicle_mask,
+            "simulation_time": self._get_normalized_simulation_time(),
+            "station_assignment_counts": self._get_normalized_station_assignment_counts(),
+        }
     
     def _get_info(self):
         """

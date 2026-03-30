@@ -2,6 +2,13 @@
 import logging
 logger = logging.getLogger("rl.environment.rewards")
 
+
+def arrive_concurrently(dist_a_m, dist_b_m, threshold_m):
+    """Return True if two vehicles are close enough in distance to a station that they will
+    arrive within the same congestion window (approximated by distance at constant highway speed)."""
+    return abs(dist_a_m - dist_b_m) < threshold_m
+
+
 class RewardStrategy:
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
         """
@@ -182,7 +189,7 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
             dist_other = other.distance_to_cs_dict.get(target_cs) if other.distance_to_cs_dict else None
             if dist_other is None:
                 continue
-            if abs(dist_self - dist_other) < self.congestion_threshold_m:
+            if arrive_concurrently(dist_self, dist_other, self.congestion_threshold_m):
                 logger.info(f"Vehicle {vehicle.vehicle_id}: congestion penalty for routing to {target_cs} (conflict with {other.vehicle_id})")
                 penalty -= self.congestion_penalty
         return penalty
