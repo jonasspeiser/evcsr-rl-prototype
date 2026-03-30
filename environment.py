@@ -93,6 +93,8 @@ class CustomEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
 
+        self.obs_features = frozenset(obs_features) if obs_features is not None else frozenset()
+
         obs_space_dict = {
             "active_vehicle": spaces.Box(
                 low=-1.0, high=1.0,
@@ -119,7 +121,6 @@ class CustomEnv(gym.Env):
             )
         self.observation_space = spaces.Dict(obs_space_dict)
 
-        self.obs_features = frozenset(obs_features) if obs_features is not None else frozenset()
         self.episode_count = 0
         self.congestion_threshold_m = (congestion_kwargs or {}).get('congestion_threshold_m')
 
