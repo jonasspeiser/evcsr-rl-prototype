@@ -134,7 +134,8 @@ class Simulation():
         except:
             pass
         traci.start(sumoCmd)
-        traci.simulation.saveState("initial_state") # needed for reset
+        self._state_file = f"initial_state_{os.getpid()}"
+        traci.simulation.saveState(self._state_file) # needed for reset
         self.scenario_generator = construct_scenario_generator(scenario_generator, random_seed)
         self.charging_stations = self._fetch_charging_stations()
         self.reset()
@@ -149,7 +150,7 @@ class Simulation():
         self.soc_history: dict[str, list[float]] = {}  # SOC (Wh) per vehicle per simulation step
         self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
         self.driving_segment_baseline: dict[str, tuple[float, float]] = {}  # (soc_Wh, distance_m) at start of current driving segment; reset after charging stops
-        traci.simulation.loadState("initial_state")
+        traci.simulation.loadState(self._state_file)
         self._subscribe_to_simulation()
         self.simulation_data = traci.simulation.getSubscriptionResults()
         self.vehicle_data = None
