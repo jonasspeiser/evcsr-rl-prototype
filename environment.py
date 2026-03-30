@@ -18,8 +18,10 @@ OBSERVATION_SPACE_SIZE = 5000 # Legacy constant — no longer used for observati
 class CustomEnv(gym.Env):
     metadata = {'render_modes': ['human']}
 
+    OPTIONAL_OBS_FEATURES = frozenset({"simulation_time", "station_assignment_counts"})
+
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_strategy_kwargs=None, start_soc_bounds=None):
+                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_strategy_kwargs=None, start_soc_bounds=None, obs_features=None):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -32,6 +34,8 @@ class CustomEnv(gym.Env):
             longest_route_duration (int, optional): The maximum duration of a route in seconds. Used for some reward strategies and episode truncation in scenarios with random data generation. If an episode in a random data scenario exceeds this duration, the episode is truncated.
             non_observable_vehicles (int, optional): The number of non-observable vehicles (i.e. not observable by the agent) to spawn in the simulation.
             random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
+            obs_features (set, optional): Set of optional observation keys to include. Supported values:
+                "simulation_time", "station_assignment_counts". Defaults to None (no optional features included).
         """
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -79,7 +83,7 @@ class CustomEnv(gym.Env):
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
 
-        self.observation_space = spaces.Dict({
+        obs_space_dict = {
             "active_vehicle": spaces.Box(
                 low=-1.0, high=1.0,
                 shape=(12,), dtype=np.float32
@@ -92,16 +96,20 @@ class CustomEnv(gym.Env):
                 low=0.0, high=1.0,
                 shape=(self.max_vehicles,), dtype=np.float32
             ),
-            "simulation_time": spaces.Box(
+        }
+        if "simulation_time" in self.obs_features:
+            obs_space_dict["simulation_time"] = spaces.Box(
                 low=0.0, high=1.0,
                 shape=(1,), dtype=np.float32
-            ),
-            "station_assignment_counts": spaces.Box(
+            )
+        if "station_assignment_counts" in self.obs_features:
+            obs_space_dict["station_assignment_counts"] = spaces.Box(
                 low=0.0, high=1.0,
                 shape=(4,), dtype=np.float32
-            ),
-        })
+            )
+        self.observation_space = spaces.Dict(obs_space_dict)
 
+        self.obs_features = frozenset(obs_features) if obs_features is not None else frozenset()
         self.episode_count = 0
         self.congestion_threshold_m = (reward_strategy_kwargs or {}).get('congestion_threshold_m')
 
@@ -359,13 +367,16 @@ class CustomEnv(gym.Env):
             dict: observation dictionary
         """
         active_vehicle_obs, other_vehicles_obs, vehicle_mask = self._build_vehicle_observations()
-        return {
+        obs = {
             "active_vehicle": active_vehicle_obs,
             "other_vehicles": other_vehicles_obs,
             "vehicle_mask": vehicle_mask,
-            "simulation_time": self._get_normalized_simulation_time(),
-            "station_assignment_counts": self._get_normalized_station_assignment_counts(),
         }
+        if "simulation_time" in self.obs_features:
+            obs["simulation_time"] = self._get_normalized_simulation_time()
+        if "station_assignment_counts" in self.obs_features:
+            obs["station_assignment_counts"] = self._get_normalized_station_assignment_counts()
+        return obs
     
     def _get_info(self):
         """
