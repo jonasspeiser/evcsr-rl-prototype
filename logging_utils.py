@@ -303,7 +303,8 @@ def _configure_logging(log_file_path, console_log_level=logging.INFO, ring_capac
 
 def _setup_logging(algorithm, version_tag, reward_strategy, scenario, street_network, n_vehicles, n_noevs, training_or_evaluation, model_load_path=None, execution_context="local"):
     # Create a unique identifier for this training run
-    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # PID suffix prevents directory collisions when multiple runs start within the same second
+    current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_pid{os.getpid()}"
     log_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm, f"{n_vehicles}OEV", f"{n_noevs}NOEV", training_or_evaluation])
     new_model_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm])
     # if a model path is given, i.e. an existing model is evaluated or trained further
