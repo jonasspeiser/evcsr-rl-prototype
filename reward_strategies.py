@@ -139,7 +139,7 @@ class BasicRewardStrategy(RewardStrategy):
         return 0
 
     def calculate_final_reward(self, ttt_per_ev_mean):
-        return -ttt_per_ev_mean
+        return -(ttt_per_ev_mean / 1000)  # scaling reward down makes it easier for the agent to learn
     
     def calculate_action_penalty(self, vehicle, context):
         return 0
