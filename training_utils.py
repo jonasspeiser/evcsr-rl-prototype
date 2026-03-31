@@ -101,20 +101,32 @@ def training_units_to_steps(n_training_units, n_oevs):
 
 def get_latest_model(runs_dir="runs"):
     """Return the path to the most recently trained model .zip file."""
+    results = get_latest_n_models(1, runs_dir=runs_dir)
+    return results[0]
+
+def get_latest_n_models(n: int, runs_dir="runs") -> list[str]:
+    """Return paths to the .zip files from the n most recently created run directories.
+
+    Directories are sorted alphabetically (timestamp prefix ensures chronological order).
+    Raises FileNotFoundError if fewer than n models are found.
+    """
     run_dirs = sorted(
         e for e in (os.path.join(runs_dir, d) for d in os.listdir(runs_dir))
         if os.path.isdir(e)
     )
     if not run_dirs:
         raise FileNotFoundError(f"No runs found in {runs_dir!r}")
+    results = []
     for run_dir in reversed(run_dirs):
         models = sorted(
             e for e in (os.path.join(run_dir, f) for f in os.listdir(run_dir))
             if e.endswith(".zip")
         )
         if models:
-            return models[-1]
-    raise FileNotFoundError(f"No model .zip found in any run directory under {runs_dir!r}")
+            results.append(models[-1])
+        if len(results) == n:
+            return results
+    raise FileNotFoundError(f"Only {len(results)} model(s) found in {runs_dir!r}, requested {n}")
 
 def get_git_version():
     try:
