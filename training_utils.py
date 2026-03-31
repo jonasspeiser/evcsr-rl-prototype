@@ -2,7 +2,7 @@
 
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
-from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm
+from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -21,6 +21,7 @@ SB3_ALGOS = {
 EVAL_ALGOS = {
     "RANDOM": RandomAlgorithm,
     "GREEDY": GreedyAlgorithm,
+    "PERFECT": Perfect5VehAlgorithm,
 }
 
 
@@ -136,6 +137,8 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
         # if you instead want to use the same seed for all episodes, uncomment the following line and comment out the one above:
         # seed = random_seed
         observation, info = env.reset(seed=seed)
+        if hasattr(model, 'reset'): # guard for stable-baselines3 models which don't have a reset method
+            model.reset()
         episode_reward = 0.0
         episode_length = 0
         terminated = truncated = False
