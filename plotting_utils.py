@@ -1,3 +1,4 @@
+import re
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -141,14 +142,66 @@ def plot_termination_status(df, save_path=None):
         fig.savefig(save_path)
 
 
+def _build_display_label(row) -> str:
+    """Derive a human-readable plot label from a metrics row.
+
+    For baseline algorithms (GREEDY, RANDOM, etc.) the algorithm name alone is
+    sufficient. For trained models (PPO/A2C/DQN) the reward strategy, obs features,
+    and PID (extracted from the run directory name) are appended so parallel runs
+    with identical configs are distinguishable.
+    """
+    algo = row.get("algorithm", "?")
+    trained_algos = {"PPO", "A2C", "DQN"}
+    if algo not in trained_algos:
+        return algo
+    reward = row.get("reward_strategy", "")
+    obs = row.get("obs_features")
+    obs_tag = "-" + "-".join(sorted(obs)) if obs else ""
+    # Extract pid from run directory name (e.g. "2026-03-31_16-13-08_pid927830_...")
+    run_dir = row.get("_run_dir", "")
+    pid_match = re.search(r"pid(\d+)", run_dir)
+    pid_tag = f"_pid{pid_match.group(1)}" if pid_match else ""
+    return f"{algo}_{reward}{obs_tag}{pid_tag}"
+
+
 def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
+    """
+    Plot metrics from evaluation runs.
+    
+    Args:
+        filepath_list (list): list of paths to metrics JSON files from evaluation runs 
+            (e.g.["runs/2026-03-05_22-28-05_v0.9.5_basic_same_route_straight100km_PPO/evaluation/metrics2026-03-06_12-18-04.json", ...] )
+        metrics_to_plot (list or "all"): list of metric names to plot (or "all" for all available metrics). Available metrics:
+            [
+                "action_distribution",
+                "termination_status",
+                "reward",
+                "env/charging_stops_per_episode_mean",
+                "env/global_ttt",
+                "env/global_ttt_only_terminated",
+                "env/ttt_per_ev_mean",
+                "env/ttt_per_ev_mean_only_terminated",
+                "env/cumulated_waiting_time",
+                "env/cumulated_waiting_time_only_terminated",
+                "env/empty_vehicles_per_episode",
+                "env/final_simulation_time",
+                "arrival_stats",
+                "charging_start_stats",
+            ]
+
+        save_figure (bool): whether to save the generated figures (in ./visuals with timestamp). Defaults to False.
+    """
     data_list = []
     for filepath in filepath_list:
         with open(filepath) as file:
-            data_list.extend(json.load(file))
+            rows = json.load(file)
+        run_dir = Path(filepath).parent.parent.name  # e.g. "2026-03-31_16-13-08_pid927830_..._PPO"
+        for row in rows:
+            row["_run_dir"] = run_dir
+        data_list.extend(rows)
 
-    data = data_list
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data_list)
+    df["algorithm"] = df.apply(_build_display_label, axis=1)
 
     # Select relevant numerical metrics for plotting. If "all" was specified instead of a list, overwrite it with all available metrics.
     if metrics_to_plot == "all":

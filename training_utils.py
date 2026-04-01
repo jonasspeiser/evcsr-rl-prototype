@@ -383,6 +383,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "algorithm": algorithm,
         "version_tag": version_tag,
         "reward_strategy": reward_strategy,
+        "obs_features": sorted(obs_features) if obs_features else [],
         "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_episodes": n_episodes,
