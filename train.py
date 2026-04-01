@@ -12,7 +12,7 @@ Each process gets its own PID -> own SUMO instance -> own state file. No port ma
 from functools import partial
 from multiprocessing import Process
 
-from training_utils import get_git_version, train_model, evaluate_model, further_train_model, get_latest_n_models
+from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models
 
 BASE_TRAINING = partial(train_model,
     algorithm="PPO",
@@ -72,7 +72,7 @@ TRAININGS = [
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
 FURTHER_TRAININGS = [
-    partial(further_train_model, model_load_path=path, n_training_units=5_000)
+    partial(further_train_model, model_load_path=path, n_training_units=10_000)
     for path in get_latest_n_models(4)
 ]
 
@@ -85,7 +85,10 @@ EVALS = [
     ),
     partial(BASE_EVAL,
             algorithm="PERFECT",
-    )
+    ),
+    partial(BASE_EVAL,
+            algorithm="RANDOM",
+    ),
 ]
 
 
@@ -98,6 +101,20 @@ if __name__ == "__main__":
         for p in processes:
             p.join()
 
-    run_parallel(TRAININGS)
+    # run_parallel(TRAININGS)
+    run_parallel(FURTHER_TRAININGS)
+
+    # Build model evals lazily after further training completes (paths now exist)
+    MODEL_EVALS = [
+        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, random_seed=54321)
+        for path in get_latest_n_models(4)
+    ]
+    run_parallel(MODEL_EVALS)
+    
     # run_parallel(EVALS)
+
     print("All runs done")
+
+    # Suspend the system after all runs are done (optional, Fedora only)
+    import subprocess
+    subprocess.run(["systemctl", "suspend"])
