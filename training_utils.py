@@ -378,17 +378,6 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         The file path of the evaluation metrics file (str).
     """
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    metadata = {
-        "timestamp": current_time,
-        "algorithm": algorithm,
-        "version_tag": version_tag,
-        "reward_strategy": reward_strategy,
-        "obs_features": sorted(obs_features) if obs_features else [],
-        "street_network": street_network,
-        "n_vehicles": n_vehicles,
-        "n_episodes": n_episodes,
-        "random_seed": random_seed
-    }
 
     # setup logging
     log = setup_run_logging(
@@ -414,6 +403,17 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     congestion_kwargs = training_config.get("congestion_kwargs")
     start_soc_bounds = start_soc_bounds or training_config.get("start_soc_bounds")
     obs_features = training_config.get("obs_features")
+    metadata = {
+        "timestamp": current_time,
+        "algorithm": algorithm,
+        "version_tag": version_tag,
+        "reward_strategy": reward_strategy,
+        "obs_features": sorted(obs_features) if obs_features else [],
+        "street_network": street_network,
+        "n_vehicles": n_vehicles,
+        "n_episodes": n_episodes,
+        "random_seed": random_seed
+    }
 
     # Use the same timestamp as the metrics file so configs and metrics are paired by name
     _dump_to_file({
