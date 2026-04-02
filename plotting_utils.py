@@ -2,6 +2,7 @@ import re
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import json
 from datetime import datetime
 import os
@@ -34,25 +35,33 @@ def get_last_x_metrics_files(n_files,runs_dir="runs"):
 
 def make_violinplot(data_df, metric_name, save_path=None):
     sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(10, 6))    # Create plots
+    fig, ax = plt.subplots(figsize=(10, 6))
     sns.set_theme(style="whitegrid")
 
-    plot = sns.violinplot(x="algorithm", y="Value", data=data_df, palette="muted", cut = 0)
-    # add in for smaller datasets:
-    # sns.stripplot(df_filtered, x="algorithm", y="Value", color=".3")
+    algorithms = data_df["algorithm"].unique()
+    palette = sns.color_palette("muted", n_colors=len(algorithms))
 
-    plt.title(f"Comparison of {metric_name}", fontsize=14)
-    plt.xlabel("Algorithm")
-    plt.ylabel("Value")
-    plt.grid(axis="y", linestyle="-", alpha=0.7) 
+    plot = sns.violinplot(x="algorithm", y="Value", data=data_df, palette="muted", cut=0, ax=ax)
+    # add in for smaller datasets:
+    # sns.stripplot(df_filtered, x="algorithm", y="Value", color=".3", ax=ax)
+
+    # Replace long x-tick labels with numbers; put full names in legend
+    ax.set_xticklabels(range(1, len(algorithms) + 1))
+    legend_patches = [mpatches.Patch(color=palette[i], label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
+    ax.legend(handles=legend_patches)
+
+    ax.set_title(f"Comparison of {metric_name}", fontsize=14)
+    ax.set_xlabel("Algorithm")
+    ax.set_ylabel("Value")
+    ax.grid(axis="y", linestyle="-", alpha=0.7)
+    plt.tight_layout()
 
     sns.despine(left=True, bottom=True)
     plt.show()
 
     if save_path:
-        fig = plot.get_figure()
         fig.savefig(save_path)
-        
+
 
 def plot_action_distribution(df, save_path=None):
     """Plot the mean action distribution per algorithm as a grouped bar chart.
