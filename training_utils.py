@@ -2,7 +2,7 @@
 
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
-from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm
+from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -21,7 +21,8 @@ SB3_ALGOS = {
 EVAL_ALGOS = {
     "RANDOM": RandomAlgorithm,
     "GREEDY": GreedyAlgorithm,
-    "PERFECT": Perfect5VehAlgorithm,
+    "PERFECT5": Perfect5VehAlgorithm,
+    "PERFECT20": Perfect20VehAlgorithm,
 }
 
 

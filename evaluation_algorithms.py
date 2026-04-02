@@ -69,6 +69,45 @@ class GreedyAlgorithm(EvaluationAlgorithm):
         logger.info(f"greedy → cs_{closest_station} (normalized soc={normalized_battery_soc:.3f})")
         return action, placeholder
     
+class Perfect20VehAlgorithm(EvaluationAlgorithm):
+    """
+    Manually crafted heuristic for the 20-vehicle same_route scenario.
+    Distributes vehicles evenly across 4 stations (5 per station) using observation-based
+    request classification:
+      - Spawn request (last_action == 0): assign next station from round-robin sequence
+      - Low battery request (last_action > 0, soc <= 0.2): re-recommend the same station
+      - Post-charge request (last_action > 0, soc > 0.2): do nothing (action 0)
+    Only for evaluation, not a realistic baseline.
+    """
+    LOW_BATTERY_THRESHOLD = 0.2
+
+    def __init__(self, environment):
+        super().__init__(environment)
+        self._sequence = [1, 2, 3, 4] * 5  # 20 spawn assignments, 5 per station
+        self.it = iter(self._sequence)
+
+    def reset(self):
+        self.it = iter(self._sequence)
+
+    def predict(self, observation, deterministic):
+        placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
+        active = observation["active_vehicle"]
+        soc = active[0]
+        last_action = int(np.argmax(active[6:11]))
+
+        if last_action == 0:
+            action = next(self.it)
+            logger.info(f"perfect20 → spawn → cs_{action}")
+        elif soc <= self.LOW_BATTERY_THRESHOLD:
+            action = last_action
+            logger.info(f"perfect20 → low battery → re-recommend cs_{action}")
+        else:
+            action = 0
+            logger.info("perfect20 → post-charge → do nothing")
+
+        return action, placeholder
+
+
 class Perfect5VehAlgorithm(EvaluationAlgorithm):
     """
     Manually crafted heuristic that achieves perfect performance in the 5-vehicle same_route scenario.
