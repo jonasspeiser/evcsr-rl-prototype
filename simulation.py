@@ -528,6 +528,10 @@ class Simulation():
 
     def close(self):
         traci.close()
+        try:
+            os.remove(self._state_file)
+        except FileNotFoundError:
+            pass
 
     def get_all_charging_station_ids(self):
         return list(self.charging_stations.keys())
