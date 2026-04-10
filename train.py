@@ -94,6 +94,9 @@ EVALS = [
 
 
 if __name__ == "__main__":
+    import time
+    start_time = time.perf_counter()
+
     def run_parallel(run_list):
         processes = [Process(target=run) for run in run_list]
         for p in processes:
@@ -120,5 +123,8 @@ if __name__ == "__main__":
     # run_parallel(EVALS)
 
     print("All runs done")
+
+    elapsed_time = time.perf_counter() - start_time
+    print(f"Execution took {elapsed_time / 60:.2f} minutes")
 
     # suspend_system()
