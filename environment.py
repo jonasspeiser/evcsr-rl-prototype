@@ -41,8 +41,10 @@ class CustomEnv(gym.Env):
                       heading to the same station are considered to arrive concurrently. Used by
                       BasicWithCongestionPenaltyStrategy and station_assignment_counts. Default: 33600 m
                       (≈ 100 km/h × 20 min charging stop).
-                    - "congestion_penalty" (float): Penalty per conflicting vehicle applied by
-                      BasicWithCongestionPenaltyStrategy. Default: 1.0.
+                    - "congestion_penalty" (float): Penalty budget per routing decision applied by
+                      BasicWithCongestionPenaltyStrategy. Automatically divided by vehicles_to_spawn
+                      so the per-conflict penalty scales down with fleet size, keeping the
+                      penalty-to-episode-reward ratio consistent across different vehicle counts. Default: 1.0.
                 Defaults to None (strategy and observation use their own defaults).
             obs_features (set, optional): Set of optional observation keys to include. Supported values:
                 "simulation_time", "station_assignment_counts". Defaults to None (no optional features included).
@@ -129,7 +131,10 @@ class CustomEnv(gym.Env):
         if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
         elif reward_strategy == "basicCongestion":
-            self.reward_strategy = BasicWithCongestionPenaltyStrategy(**kwargs)
+            # Normalize congestion_penalty by fleet size
+            raw_penalty = kwargs.get("congestion_penalty", 1.0)
+            normalized_kwargs = {**kwargs, "congestion_penalty": raw_penalty / self.vehicles_to_spawn}
+            self.reward_strategy = BasicWithCongestionPenaltyStrategy(**normalized_kwargs)
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif reward_strategy == "shaping":
