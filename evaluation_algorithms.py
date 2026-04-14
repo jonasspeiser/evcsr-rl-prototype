@@ -69,6 +69,25 @@ class GreedyAlgorithm(EvaluationAlgorithm):
         logger.info(f"greedy → cs_{closest_station} (normalized soc={normalized_battery_soc:.3f})")
         return action, placeholder
     
+class Perfect5VehAlgorithm(EvaluationAlgorithm):
+    """
+    Manually crafted heuristic that achieves perfect performance in the 5-vehicle same_route scenario.
+    Only for evaluation, not a realistic baseline.
+    """
+    def __init__(self, environment):
+        super().__init__(environment)
+        self._sequence = [1, 2, 3, 4, 4, 0, 0, 4, 4]
+        self.it = iter(self._sequence)
+
+    def reset(self):
+        self.it = iter(self._sequence)
+
+    def predict(self, observation, deterministic):
+        placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
+        optimal_action = next(self.it, 0)  # default to do nothing after the sequence is exhausted
+        logger.info(f"perfect → cs_{optimal_action}" if optimal_action > 0 else "perfect → do nothing")
+        return optimal_action, placeholder
+    
 class Perfect20VehAlgorithm(EvaluationAlgorithm):
     """
     Manually crafted heuristic for the 20-vehicle same_route scenario.
@@ -107,22 +126,15 @@ class Perfect20VehAlgorithm(EvaluationAlgorithm):
 
         return action, placeholder
 
-
-class Perfect5VehAlgorithm(EvaluationAlgorithm):
+class PerfectXVehAlgorithm(Perfect20VehAlgorithm):
     """
-    Manually crafted heuristic that achieves perfect performance in the 5-vehicle same_route scenario.
+    Extension of Perfect20VehAlgorithm to support arbitrary vehicle counts in same_route scenario.
+    Distributes vehicles evenly across 4 stations using the same observation-based request classification as Perfect20VehAlgorithm.
     Only for evaluation, not a realistic baseline.
     """
-    def __init__(self, environment):
+    def __init__(self, environment, n_vehicles):
         super().__init__(environment)
-        self._sequence = [1, 2, 3, 4, 4, 0, 0, 4, 4]
+        assignments_per_station = (n_vehicles + 3) // 4  # round up to ensure enough assignments
+        self._sequence = [1, 2, 3, 4] * assignments_per_station
         self.it = iter(self._sequence)
 
-    def reset(self):
-        self.it = iter(self._sequence)
-
-    def predict(self, observation, deterministic):
-        placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
-        optimal_action = next(self.it, 0)  # default to do nothing after the sequence is exhausted
-        logger.info(f"perfect → cs_{optimal_action}" if optimal_action > 0 else "perfect → do nothing")
-        return optimal_action, placeholder
