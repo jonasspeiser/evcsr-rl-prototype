@@ -2,7 +2,7 @@
 
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
-from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm
+from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm, PerfectXVehAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -29,8 +29,6 @@ SB3_ALGOS = {
 EVAL_ALGOS = {
     "RANDOM": RandomAlgorithm,
     "GREEDY": GreedyAlgorithm,
-    "PERFECT5": Perfect5VehAlgorithm,
-    "PERFECT20": Perfect20VehAlgorithm,
 }
 
 
@@ -49,6 +47,14 @@ def _load_model(model_path, algorithm, env):
         return EVAL_ALGOS[algorithm](environment=env)
     if algorithm.startswith("ACTION") and algorithm[6:].isdigit():
         return FixedActionAlgorithm(environment=env, action=int(algorithm[6:]))
+    if algorithm.startswith("PERFECT") and algorithm[7:].isdigit():
+        n = int(algorithm[7:])
+        if n == 5:
+            return Perfect5VehAlgorithm(environment=env)
+        elif n == 20:
+            return Perfect20VehAlgorithm(environment=env)
+        else:
+            return PerfectXVehAlgorithm(environment=env, n_vehicles=n)
     raise ValueError(f"Invalid model type: {algorithm}")
 
 
