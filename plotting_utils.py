@@ -231,9 +231,23 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             "charging_start_stats",
         ]
 
-    # Melt the DataFrame to long format — special-case metrics are not plain columns, filter them out
-    SPECIAL_METRICS = {"action_distribution", "termination_status", "arrival_stats", "charging_start_stats"}
-    meltable_metrics = [m for m in metrics_to_plot if m not in SPECIAL_METRICS]
+    # Melt the DataFrame to long format.
+    # Special-case metrics are not plain scalar columns; map them to their backing columns so
+    # they still end up in data_melted.csv and can be reproduced without re-running evaluation.
+    # action_distribution uses nested dicts (action_counts) — not meltable, stays in data_raw.csv only.
+    SPECIAL_METRIC_COLUMNS = {
+        "termination_status": ["was_truncated"],
+        "arrival_stats": ["env/arrival_soc_wh_mean", "env/arrival_range_m_mean"],
+        "charging_start_stats": ["env/charging_start_soc_wh_mean", "env/charging_start_range_m_mean"],
+    }
+    meltable_metrics = []
+    for m in metrics_to_plot:
+        if m in SPECIAL_METRIC_COLUMNS:
+            meltable_metrics.extend(SPECIAL_METRIC_COLUMNS[m])
+        elif m != "action_distribution":
+            meltable_metrics.append(m)
+    # Only melt columns that are actually present in this dataset
+    meltable_metrics = [m for m in meltable_metrics if m in df.columns]
     df_melted = df.melt(id_vars=["algorithm"],
                         value_vars=meltable_metrics,
                         var_name="Metric",
