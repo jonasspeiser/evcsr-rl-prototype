@@ -11,7 +11,6 @@ import os
 import time
 from logging_utils import RunLogging, setup_run_logging
 import subprocess
-import math
 
 _STATION_CAPACITY = 2
 """Number of vehicles that can charge simultaneously at one station.
@@ -152,8 +151,7 @@ def get_episode_truncation_limit(street_network: str, n_vehicles: int, n_station
     Computes the episode truncation limit in simulation seconds.
 
     Accounts for both driving time and worst-case queuing time at charging stations.
-    Worst case: all vehicles queue at a single station → ceil(n_vehicles / _STATION_CAPACITY)
-    sequential charging slots.
+    Worst case: all vehicles queue at a single station -> (n_vehicles / STATION_CAPACITY) * CHARGING_DURATION.
 
     Args:
         street_network (str): Street network directory name, e.g. "straight_120km".
@@ -163,7 +161,7 @@ def get_episode_truncation_limit(street_network: str, n_vehicles: int, n_station
             Must match CHARGING_DURATION in simulation.py. Defaults to _CHARGING_DURATION.
     """
     longest_route = get_longest_route_duration(street_network)
-    worst_case_charging = math.ceil(n_vehicles / _STATION_CAPACITY) * charging_duration
+    worst_case_charging = (n_vehicles / _STATION_CAPACITY) * charging_duration
     return longest_route + worst_case_charging
 
 

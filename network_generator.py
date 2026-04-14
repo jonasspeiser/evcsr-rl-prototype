@@ -157,7 +157,7 @@ def get_max_possible_distance(SUMO_CONFIG_STUB) -> float:
     return config["max_possible_distance"]
 
 
-def get_longest_route_duration(street_network: str, avg_speed_kmh: float = 30, safety_factor: float = 1.2) -> int:
+def get_longest_route_duration(street_network: str, avg_speed_kmh: float = 70, safety_factor: float = 1.2) -> int:
     """
     Computes the duration (in simulation seconds) it takes to travel the network's maximum possible
     distance.
