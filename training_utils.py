@@ -1,7 +1,7 @@
 """Script containing utility functions for training and evaluating RL models."""
 
 from environment import CustomEnv
-from network_generator import get_episode_truncation_limit
+from network_generator import get_longest_route_duration
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
@@ -11,6 +11,15 @@ import os
 import time
 from logging_utils import RunLogging, setup_run_logging
 import subprocess
+import math
+
+_STATION_CAPACITY = 2
+"""Number of vehicles that can charge simultaneously at one station.
+Derived from the station lane length (10 m) and the default SUMO vehicle length (~5 m)."""
+
+_CHARGING_DURATION = 1000
+"""Charging duration per vehicle in seconds. Must match CHARGING_DURATION in simulation.py."""
+
 
 SB3_ALGOS = {
     "PPO": PPO,
@@ -137,6 +146,26 @@ def get_git_version():
         ).decode().strip()
     except Exception:
         return "unknown"
+    
+def get_episode_truncation_limit(street_network: str, n_vehicles: int, n_stations: int = 4, charging_duration: int = _CHARGING_DURATION) -> int:
+    """
+    Computes the episode truncation limit in simulation seconds.
+
+    Accounts for both driving time and worst-case queuing time at charging stations.
+    Worst case: all vehicles queue at a single station → ceil(n_vehicles / _STATION_CAPACITY)
+    sequential charging slots.
+
+    Args:
+        street_network (str): Street network directory name, e.g. "straight_120km".
+        n_vehicles (int): Number of vehicles in the episode.
+        n_stations (int): Number of charging stations. Defaults to 4.
+        charging_duration (int): Charging duration per vehicle in seconds.
+            Must match CHARGING_DURATION in simulation.py. Defaults to _CHARGING_DURATION.
+    """
+    longest_route = get_longest_route_duration(street_network)
+    worst_case_charging = math.ceil(n_vehicles / _STATION_CAPACITY) * charging_duration
+    return longest_route + worst_case_charging
+
 
 def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed, deterministic=True):
     metrics_list = []
