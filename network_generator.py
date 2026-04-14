@@ -36,6 +36,12 @@ charging_params = {
     "efficiency": 0.95
 }
 
+
+STATION_CAPACITY = 2
+"""Number of vehicles that can charge simultaneously at one station.
+Derived from the station lane length (10 m) and the default SUMO vehicle length (~5 m)."""
+
+
 def write_all_routes_json(net_file_path: str, output_path: str):
     """
     Writes all possible edge-to-edge routes in the network to a JSON file.
@@ -170,6 +176,29 @@ def get_longest_route_duration(street_network: str, avg_speed_kmh: float = 30, s
     max_dist = get_max_possible_distance(sumo_config_stub)
     avg_speed_ms = avg_speed_kmh / 3.6
     return int(max_dist / avg_speed_ms * safety_factor)
+
+
+def get_episode_truncation_limit(street_network: str, n_vehicles: int, n_stations: int = 4, charging_duration: int = None) -> int:
+    """
+    Computes the episode truncation limit in simulation seconds.
+
+    Accounts for both driving time and worst-case queuing time at charging stations.
+    Worst case: all vehicles queue at a single station -> round(n_vehicles / STATION_CAPACITY) * charging_duration.
+
+    Args:
+        street_network (str): Street network directory name, e.g. "straight_120km".
+        n_vehicles (int): Number of vehicles in the episode.
+        n_stations (int): Number of charging stations. Defaults to 4.
+        charging_duration (int, optional): Charging duration per vehicle in seconds.
+            Defaults to CHARGING_DURATION from simulation.py.
+    """
+    from simulation import CHARGING_DURATION as _CHARGING_DURATION
+    if charging_duration is None:
+        charging_duration = _CHARGING_DURATION
+    import math
+    longest_route = get_longest_route_duration(street_network)
+    worst_case_charging = math.ceil(n_vehicles / STATION_CAPACITY) * charging_duration
+    return longest_route + worst_case_charging
 
 
 def get_start_soc_bounds(sumo_config_path_stub: str) -> tuple:

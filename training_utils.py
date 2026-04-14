@@ -1,7 +1,7 @@
 """Script containing utility functions for training and evaluating RL models."""
 
 from environment import CustomEnv
-from network_generator import get_longest_route_duration
+from network_generator import get_episode_truncation_limit
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
@@ -216,7 +216,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         The file path of the saved model (.zip).
     """
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
-    longest_route_duration = longest_route_duration or get_longest_route_duration(street_network)
+    longest_route_duration = longest_route_duration or get_episode_truncation_limit(street_network, n_vehicles)
 
     # setup logging
     log = setup_run_logging(
@@ -292,7 +292,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     n_noevs = config.get("n_noevs")
     ent_coef = config.get("ent_coef", 0.0)
     max_vehicles = config.get("max_vehicles")
-    longest_route_duration = config.get("longest_route_duration") or get_longest_route_duration(street_network)
+    longest_route_duration = config.get("longest_route_duration") or get_episode_truncation_limit(street_network, n_vehicles)
     congestion_kwargs = config.get("congestion_kwargs")
     start_soc_bounds = config.get("start_soc_bounds")
     obs_features = config.get("obs_features")
@@ -400,7 +400,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     # Load training hyperparameters from the model's run config for traceability in the evaluation config.
     training_config = _load_run_config(model_load_path) if model_load_path else {}
     max_vehicles = training_config.get("max_vehicles")
-    longest_route_duration = longest_route_duration or training_config.get("longest_route_duration") or get_longest_route_duration(street_network)
+    longest_route_duration = longest_route_duration or training_config.get("longest_route_duration") or get_episode_truncation_limit(street_network, n_vehicles)
     congestion_kwargs = training_config.get("congestion_kwargs")
     start_soc_bounds = start_soc_bounds or training_config.get("start_soc_bounds")
     obs_features = training_config.get("obs_features")
@@ -535,25 +535,25 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
 
 if __name__ == "__main__":
     
-    train_and_evaluate(
-        scenario="same_route",
-        start_soc_bounds=(22_000, 22_000),
-        algorithm="PPO",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        obs_features={"simulation_time", "station_assignment_counts"}, 
-        congestion_kwargs={"congestion_threshold_m": 33600, "congestion_penalty": 500.0},
-        street_network="straight_120km",
-        n_vehicles=5,
-        n_noevs=0,
-        n_training_units=1_200,
-        # longest_route_duration=7_200,
-        ent_coef=0.0,
-        eval_episodes=10,
-        random_seed_eval=54321,
-        execution_context="local",
-    )
+    # train_and_evaluate(
+    #     scenario="same_route",
+    #     start_soc_bounds=(22_000, 22_000),
+    #     algorithm="PPO",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     obs_features={"simulation_time", "station_assignment_counts"}, 
+    #     congestion_kwargs={"congestion_threshold_m": 33600, "congestion_penalty": 500.0},
+    #     street_network="straight_120km",
+    #     n_vehicles=5,
+    #     n_noevs=0,
+    #     n_training_units=1_200,
+    #     # longest_route_duration=7_200,
+    #     ent_coef=0.0,
+    #     eval_episodes=10,
+    #     random_seed_eval=54321,
+    #     execution_context="local",
+    # )
 
     # train_model(
     #     scenario="same_route",
@@ -586,19 +586,19 @@ if __name__ == "__main__":
     #     deterministic=False
     # )
 
-    # evaluate_model(
-    #     scenario="same_route",
-    #     start_soc_bounds=(22_000, 22_000),
-    #     algorithm="ACTION0",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basicCongestion",
-    #     street_network="straight_120km",
-    #     n_vehicles=5,
-    #     n_noevs=0,
-    #     n_episodes=1,
-    #     # longest_route_duration=6_000,
-    #     model_load_path=None,
-    #     execution_context="local",
-    #     # render_mode="human",
-    #     random_seed=54321,
-    # )
+    evaluate_model(
+        scenario="same_route",
+        start_soc_bounds=(22_000, 22_000),
+        algorithm="GREEDY",
+        version_tag=get_git_version(),
+        reward_strategy="basicCongestion",
+        street_network="straight_120km",
+        n_vehicles=50,
+        n_noevs=0,
+        n_episodes=1,
+        longest_route_duration=30_000,
+        model_load_path=None,
+        execution_context="local",
+        # render_mode="human",
+        random_seed=54321,
+    )
