@@ -1,3 +1,4 @@
+import ast
 import re
 import seaborn as sns
 import pandas as pd
@@ -94,13 +95,14 @@ def plot_action_distribution(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = df_agg["algorithm"].unique()
+    algorithms = df["algorithm"].unique()
 
     # Map algorithm names to numbers so the x-axis stays readable
     algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
     df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
 
-    sns.barplot(data=df_agg, x="algorithm_num", y="fraction", hue="action", palette="Set2", ax=ax)
+    order = [str(i + 1) for i in range(len(algorithms))]
+    sns.barplot(data=df_agg, x="algorithm_num", y="fraction", hue="action", palette="Set2", order=order, ax=ax)
 
     # Seaborn auto-creates a legend for hue="action"; keep it, place it upper right
     action_legend = ax.get_legend()
@@ -150,12 +152,13 @@ def plot_action_counts_absolute(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = df_agg["algorithm"].unique()
+    algorithms = df["algorithm"].unique()
 
     algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
     df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
 
-    sns.barplot(data=df_agg, x="algorithm_num", y="count", hue="action", palette="Set2", ax=ax)
+    order = [str(i + 1) for i in range(len(algorithms))]
+    sns.barplot(data=df_agg, x="algorithm_num", y="count", hue="action", palette="Set2", order=order, ax=ax)
 
     action_legend = ax.get_legend()
     action_legend.set_title("Action")
@@ -204,7 +207,7 @@ def plot_termination_status(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = agg["algorithm"].unique()
+    algorithms = df_valid["algorithm"].unique()
     x = range(len(algorithms))
     truncated_fracs = [
         agg.loc[(agg["algorithm"] == alg) & (agg["status"] == "truncated"), "fraction"].sum()
@@ -257,7 +260,29 @@ def _build_display_label(row) -> str:
     return f"{algo}_{reward}{obs_tag}{pid_tag}"
 
 
-def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
+def get_algorithm_labels(filepath_list):
+    """Return the display labels that plot_results would assign to each run.
+
+    Call this first to find the exact label strings to pass to algorithms_to_include.
+
+    Example output:
+        ['GREEDY', 'PERFECT', 'PPO_shaping-soc_pid927830', 'PPO_shaping-soc_pid931042']
+    """
+    data_list = []
+    for filepath in filepath_list:
+        with open(filepath) as file:
+            rows = json.load(file)
+        run_dir = Path(filepath).parent.parent.name
+        for row in rows:
+            row["_run_dir"] = run_dir
+        data_list.extend(rows)
+
+    df = pd.DataFrame(data_list)
+    df["algorithm"] = df.apply(_build_display_label, axis=1)
+    return sorted(df["algorithm"].unique().tolist())
+
+
+def plot_results(filepath_list, metrics_to_plot="all", save_figure=False, algorithms_to_include=None):
     """
     Plot metrics from evaluation runs.
     
@@ -298,6 +323,9 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     df = pd.DataFrame(data_list)
     df["algorithm"] = df.apply(_build_display_label, axis=1)
 
+    if algorithms_to_include is not None:
+        df = df[df["algorithm"].isin(algorithms_to_include)]
+
     # Select relevant numerical metrics for plotting. If "all" was specified instead of a list, overwrite it with all available metrics.
     if metrics_to_plot == "all":
         metrics_to_plot = [
@@ -319,6 +347,88 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
             "charging_start_stats",
         ]
 
+    if save_figure:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_directory = f"./visuals/{timestamp}"
+        os.makedirs(save_directory, exist_ok=True)
+
+        # Save the list of source files for reproducibility
+        with open(f"{save_directory}/source_files.json", "w") as f:
+            json.dump({"source_files": [str(fp) for fp in filepath_list]}, f, indent=2)
+
+        # Copy run configs from each evaluation folder for reproducibility
+        run_configs = []
+        for fp in filepath_list:
+            config_path = Path(fp).parent / Path(fp).name.replace("metrics", "run_config_")
+            if config_path.exists():
+                with open(config_path) as f:
+                    run_configs.append(json.load(f))
+        if run_configs:
+            with open(f"{save_directory}/run_configs.json", "w") as f:
+                json.dump(run_configs, f, indent=2)
+    else:
+        save_directory = None
+        run_configs = []
+
+    _run_plots(df, metrics_to_plot, save_directory)
+
+    if run_configs:
+        print("\nRun configurations for plotted evaluations:")
+        pprint(run_configs)
+
+
+def plot_results_from_csv(csv_path, metrics_to_plot="all", save_figure=False, algorithms_to_include=None):
+    """Re-generate plots from a previously saved data_raw.csv without re-running evaluation.
+
+    Args:
+        csv_path (str): Path to a data_raw.csv saved by plot_results.
+        metrics_to_plot (list or "all"): same as plot_results.
+        save_figure (bool): whether to save figures alongside the source CSV.
+        algorithms_to_include (list or None): if given, only plot these algorithm display labels.
+            Call get_algorithm_labels() first to see what's available.
+    """
+    df = pd.read_csv(csv_path)
+
+    # action_counts is stored as a string in CSV — parse it back to a dict
+    if "action_counts" in df.columns:
+        df["action_counts"] = df["action_counts"].apply(
+            lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+        )
+
+    if algorithms_to_include is not None:
+        df = df[df["algorithm"].isin(algorithms_to_include)]
+
+    if metrics_to_plot == "all":
+        metrics_to_plot = [
+            "action_distribution",
+            "action_counts_absolute",
+            "termination_status",
+            "reward",
+            "episode_length",
+            "env/charging_stops_per_episode_mean",
+            "env/global_ttt",
+            "env/global_ttt_only_terminated",
+            "env/ttt_per_ev_mean",
+            "env/ttt_per_ev_mean_only_terminated",
+            "env/cumulated_waiting_time",
+            "env/cumulated_waiting_time_only_terminated",
+            "env/empty_vehicles_per_episode",
+            "env/final_simulation_time",
+            "arrival_stats",
+            "charging_start_stats",
+        ]
+
+    save_directory = None
+    if save_figure:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        save_directory = str(Path(csv_path).parent / timestamp)
+        os.makedirs(save_directory, exist_ok=True)
+
+    _run_plots(df, metrics_to_plot, save_directory)
+
+
+def _run_plots(df, metrics_to_plot, save_directory):
+    """Build df_melted and render all requested plots. Used by both plot_results and plot_results_from_csv."""
     # Melt the DataFrame to long format.
     # Special-case metrics are not plain scalar columns; map them to their backing columns so
     # they still end up in data_melted.csv and can be reproduced without re-running evaluation.
@@ -332,69 +442,39 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     for m in metrics_to_plot:
         if m in SPECIAL_METRIC_COLUMNS:
             meltable_metrics.extend(SPECIAL_METRIC_COLUMNS[m])
-        elif m != "action_distribution":
+        elif m not in ("action_distribution", "action_counts_absolute"):
             meltable_metrics.append(m)
-    # Only melt columns that are actually present in this dataset
     meltable_metrics = [m for m in meltable_metrics if m in df.columns]
     df_melted = df.melt(id_vars=["algorithm"],
                         value_vars=meltable_metrics,
                         var_name="Metric",
                         value_name="Value")
 
-    if save_figure:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        save_directory = f"./visuals/{timestamp}"
-        os.makedirs(save_directory, exist_ok=True)
-        
-        # Save the list of source files for reproducibility
-        with open(f"{save_directory}/source_files.json", "w") as f:
-            # Convert Path objects to strings for JSON serialization
-            json.dump({"source_files": [str(fp) for fp in filepath_list]}, f, indent=2)
-
-        # Copy run configs from each evaluation folder for reproducibility
-        run_configs = []
-        for fp in filepath_list:
-            # Config filename mirrors the metrics 
-            config_path = Path(fp).parent / Path(fp).name.replace("metrics", "run_config_")
-            if config_path.exists():
-                with open(config_path) as f:
-                    run_configs.append(json.load(f))
-        if run_configs:
-            with open(f"{save_directory}/run_configs.json", "w") as f:
-                json.dump(run_configs, f, indent=2)
-
-        # Save dataframe for easier later modifications of visuals
+    if save_directory:
         df.to_csv(f"{save_directory}/data_raw.csv", index=False)
         df_melted.to_csv(f"{save_directory}/data_melted.csv", index=False)
 
-
-    # Create plots
     for metric in metrics_to_plot:
         if metric == "action_distribution":
-            save_path = f"{save_directory}/action_distribution.png" if save_figure else None
+            save_path = f"{save_directory}/action_distribution.png" if save_directory else None
             plot_action_distribution(df, save_path=save_path)
         elif metric == "action_counts_absolute":
-            save_path = f"{save_directory}/action_counts_absolute.png" if save_figure else None
+            save_path = f"{save_directory}/action_counts_absolute.png" if save_directory else None
             plot_action_counts_absolute(df, save_path=save_path)
         elif metric == "termination_status":
-            save_path = f"{save_directory}/termination_status.png" if save_figure else None
+            save_path = f"{save_directory}/termination_status.png" if save_directory else None
             plot_termination_status(df, save_path=save_path)
         elif metric == "arrival_stats":
-            save_path = f"{save_directory}/arrival_stats.png" if save_figure else None
+            save_path = f"{save_directory}/arrival_stats.png" if save_directory else None
             plot_soc_at_arrival(df, save_path=save_path)
         elif metric == "charging_start_stats":
-            save_path = f"{save_directory}/charging_start_stats.png" if save_figure else None
+            save_path = f"{save_directory}/charging_start_stats.png" if save_directory else None
             plot_soc_at_charging_start(df, save_path=save_path)
         else:
-            # Filter data for the current metric
             df_filtered = df_melted[df_melted["Metric"] == metric]
             metric_display_name = metric[4:] if metric.startswith("env/") else metric
-            figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_figure else None
+            figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_directory else None
             make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
-    
-    if run_configs:
-        print("\nRun configurations for plotted evaluations:")
-        pprint(run_configs)
 
 
 def plot_soc_at_arrival(df, save_path=None):
