@@ -92,17 +92,95 @@ def plot_action_distribution(df, save_path=None):
     df_agg = df_actions.groupby(["algorithm", "action"])["fraction"].mean().reset_index()
 
     sns.set_theme(style="whitegrid")
-    plt.figure(figsize=(10, 6))
-    plot = sns.barplot(data=df_agg, x="action", y="fraction", hue="algorithm", palette="muted")
-    plt.title("Action Distribution per Algorithm", fontsize=14)
-    plt.xlabel("Action")
-    plt.ylabel("Mean fraction of steps")
-    plt.ylim(0, 1)
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    algorithms = df_agg["algorithm"].unique()
+
+    # Map algorithm names to numbers so the x-axis stays readable
+    algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
+    df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
+
+    sns.barplot(data=df_agg, x="algorithm_num", y="fraction", hue="action", palette="Set2", ax=ax)
+
+    # Seaborn auto-creates a legend for hue="action"; keep it, place it upper right
+    action_legend = ax.get_legend()
+    action_legend.set_title("Action")
+    action_legend.set_bbox_to_anchor((1.0, 1.0))
+
+    # Add a second legend mapping numbers to full algorithm names
+    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
+    algo_legend = ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
+    ax.add_artist(action_legend)  # restore action legend after it was replaced
+
+    ax.set_title("Action Distribution per Algorithm", fontsize=14)
+    ax.set_xlabel("Algorithm")
+    ax.set_ylabel("Mean fraction of steps")
+    ax.set_ylim(0, 1)
+    plt.tight_layout()
     sns.despine(left=True, bottom=True)
     plt.show()
 
     if save_path:
-        fig = plot.get_figure()
+        fig.savefig(save_path)
+
+
+def plot_action_counts_absolute(df, save_path=None):
+    """Plot the total absolute action counts per algorithm as a grouped bar chart."""
+    if "action_counts" not in df.columns:
+        return
+
+    rows = []
+    for _, row in df.iterrows():
+        counts = row.get("action_counts")
+        if not isinstance(counts, dict) or not counts:
+            continue
+        for action, count in counts.items():
+            rows.append({
+                "algorithm": row["algorithm"],
+                "action": int(action),
+                "count": count,
+            })
+
+    if not rows:
+        return
+
+    df_actions = pd.DataFrame(rows)
+    df_agg = df_actions.groupby(["algorithm", "action"])["count"].mean().reset_index()
+
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    algorithms = df_agg["algorithm"].unique()
+
+    algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
+    df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
+
+    sns.barplot(data=df_agg, x="algorithm_num", y="count", hue="action", palette="Set2", ax=ax)
+
+    action_legend = ax.get_legend()
+    action_legend.set_title("Action")
+    action_legend.set_bbox_to_anchor((1.0, 1.0))
+
+    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
+    ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
+    ax.add_artist(action_legend)
+
+    # Cap y-axis to suppress extreme outliers; mark clipped bars with ▲
+    y_max = df_agg["count"].quantile(0.95) * 1.1
+    ax.set_ylim(0, y_max)
+    for patch in ax.patches:
+        if patch.get_height() > y_max:
+            ax.annotate("▲", xy=(patch.get_x() + patch.get_width() / 2, y_max),
+                        ha="center", va="bottom", fontsize=9, color="black", clip_on=False)
+
+    ax.set_title("Mean Action Counts per Episode per Algorithm", fontsize=14)
+    ax.set_xlabel("Algorithm")
+    ax.set_ylabel("Mean action count per episode")
+    plt.tight_layout()
+    sns.despine(left=True, bottom=True)
+    plt.show()
+
+    if save_path:
         fig.savefig(save_path)
 
 
@@ -138,12 +216,18 @@ def plot_termination_status(df, save_path=None):
     ax.bar(x, truncated_fracs, bottom=terminated_fracs, label="truncated", color=sns.color_palette("muted")[1])
 
     ax.set_xticks(list(x))
-    ax.set_xticklabels(algorithms)
+    ax.set_xticklabels(range(1, len(algorithms) + 1))
     ax.set_ylim(0, 1)
     ax.set_title("Episode Termination Status per Algorithm", fontsize=14)
     ax.set_xlabel("Algorithm")
     ax.set_ylabel("Fraction of episodes")
-    ax.legend()
+
+    # Status legend (terminated/truncated) + algorithm number mapping
+    status_legend = ax.legend(loc="upper right")
+    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
+    ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
+    ax.add_artist(status_legend)
+
     sns.despine(left=True, bottom=True)
     plt.show()
 
@@ -183,6 +267,7 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         metrics_to_plot (list or "all"): list of metric names to plot (or "all" for all available metrics). Available metrics:
             [
                 "action_distribution",
+                "action_counts_absolute",
                 "termination_status",
                 "reward",
                 "episode_length",
@@ -217,6 +302,7 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
     if metrics_to_plot == "all":
         metrics_to_plot = [
             "action_distribution",
+            "action_counts_absolute",
             "termination_status",
             "reward",
             "episode_length",
@@ -287,6 +373,9 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False):
         if metric == "action_distribution":
             save_path = f"{save_directory}/action_distribution.png" if save_figure else None
             plot_action_distribution(df, save_path=save_path)
+        elif metric == "action_counts_absolute":
+            save_path = f"{save_directory}/action_counts_absolute.png" if save_figure else None
+            plot_action_counts_absolute(df, save_path=save_path)
         elif metric == "termination_status":
             save_path = f"{save_directory}/termination_status.png" if save_figure else None
             plot_termination_status(df, save_path=save_path)
