@@ -315,7 +315,7 @@ class CustomEnv(gym.Env):
         vehicle_mask = np.zeros(self.max_vehicles, dtype=np.float32)
         other_idx = 0
         for vehicle_id, vehicle in self.vehicles.items():
-            if not vehicle.arrived and not vehicle.empty:
+            if vehicle.is_active:
                 vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
                 vehicle.update_from_state(vehicle_state)
             obs = vehicle.get_observation()
@@ -323,7 +323,7 @@ class CustomEnv(gym.Env):
                 active_vehicle_obs = obs
             else:
                 other_vehicles_obs[other_idx] = obs
-                vehicle_mask[other_idx] = 1.0
+                vehicle_mask[other_idx] = 1.0 if vehicle.is_active else 0.0
                 other_idx += 1
         return active_vehicle_obs, other_vehicles_obs, vehicle_mask
 
@@ -359,7 +359,7 @@ class CustomEnv(gym.Env):
             for vehicle in self.vehicles.values():
                 if vehicle.vehicle_id == self.active_charging_request_vehicle_id:
                     continue
-                if vehicle.arrived or vehicle.empty or not vehicle.spawned:
+                if not vehicle.is_active:
                     continue
                 if vehicle.target_cs_id != cs_id:
                     continue
@@ -512,7 +512,7 @@ class CustomEnv(gym.Env):
         new_low_battery_ids = set()
         for vehicle_id, vehicle in self.vehicles.items():
             # Ignore if the vehicle did not spawn in the simulation yet or despawned already
-            if not vehicle.spawned or vehicle.arrived or vehicle.empty:
+            if not vehicle.is_active:
                 continue
             if vehicle_id in self.low_battery_ids and vehicle_id in just_charged_ids:
                 self.low_battery_ids.remove(vehicle_id)
@@ -544,7 +544,7 @@ class CustomEnv(gym.Env):
 
         # Update vehicles' battery soc and cache remaining range
         for vid, vehicle in self.vehicles.items():
-            if not vehicle.arrived and not vehicle.empty:
+            if vehicle.is_active:
                 vehicle.fetch_and_update_battery_values()
                 self.vehicle_range_cache[vid] = self.simulation.get_remaining_range(vid)
 

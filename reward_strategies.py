@@ -182,7 +182,7 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
         for other in all_vehicles.values():
             if other.vehicle_id == vehicle.vehicle_id:
                 continue
-            if other.arrived or other.empty or not other.spawned:
+            if not other.is_active:
                 continue
             if other.target_cs_id != target_cs:
                 continue

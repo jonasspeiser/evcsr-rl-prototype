@@ -33,9 +33,14 @@ class Vehicle:
         self.distance_to_destination = None
         self.had_bad_timing_error = False
 
+    @property
+    def is_active(self):
+        """True if the vehicle is currently present and relevant in the simulation."""
+        return self.spawned and not self.arrived and not self.empty
+
     def fetch_and_update_battery_values(self):
         # Ignore if the vehicle did not spawn in the simulation yet or despawned already
-        if not self.spawned or self.arrived or self.empty:
+        if not self.is_active:
             self.battery_soc = None
             return
         self.battery_soc = self.simulation.update_vehicle_soc(self.vehicle_id)
