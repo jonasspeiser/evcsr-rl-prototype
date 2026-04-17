@@ -174,6 +174,8 @@ class CustomEnv(gym.Env):
         Used for tensorboard logging.
         """
         self.cumulated_waiting_time = sum(v.waiting_time for v in self.vehicles.values())
+        n = len(self.vehicle_ids)
+        self.cwt_per_ev_mean = self.cumulated_waiting_time / n if n > 0 else 0
     
     def _set_cumulated_waiting_time_per_episode_terminated(self):
         """

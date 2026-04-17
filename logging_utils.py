@@ -84,6 +84,7 @@ class CustomTensorboardCallback(BaseCallback):
         "ttt_per_ev_mean",
         "ttt_per_ev_mean_only_terminated",
         "cumulated_waiting_time",
+        "cwt_per_ev_mean",
         "cumulated_waiting_time_only_terminated",
         "empty_vehicles_per_episode",
         "final_simulation_time",
