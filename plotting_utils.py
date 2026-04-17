@@ -479,6 +479,75 @@ def _run_plots(df, metrics_to_plot, save_directory):
             make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
 
 
+def generate_latex_tables(csv_path, metrics=None, algorithms_to_include=None, save_path=None):
+    """Generate LaTeX summary tables (mean ± std per algorithm) from a saved data_raw.csv.
+
+    Args:
+        csv_path (str): Path to a data_raw.csv saved by plot_results.
+        metrics (list or None): scalar metric column names to include. Defaults to all numeric
+            columns except internal ones. Example: ["reward", "env/global_ttt", "env/ttt_per_ev_mean"]
+        algorithms_to_include (list or None): filter to these display labels (same as plot_results).
+        save_path (str or None): if given, write the .tex file here; otherwise print to stdout.
+
+    Returns:
+        str: the LaTeX table source.
+    """
+    df = pd.read_csv(csv_path)
+
+    if algorithms_to_include is not None:
+        df = df[df["algorithm"].isin(algorithms_to_include)]
+
+    # Default: all numeric columns that are actual metrics
+    exclude = {"_run_dir", "was_truncated"}
+    if metrics is None:
+        metrics = [c for c in df.columns if c not in exclude and pd.api.types.is_numeric_dtype(df[c])]
+    else:
+        missing = [m for m in metrics if m not in df.columns]
+        if missing:
+            print(f"Note: skipping metrics not found as columns in CSV: {missing}")
+        metrics = [m for m in metrics if m in df.columns]
+
+    # Compute mean and std per algorithm for each metric
+    agg = df.groupby("algorithm")[metrics].agg(["mean", "std"])
+
+    # Flatten multi-level columns and format as "mean ± std"
+    rows = {}
+    for metric in metrics:
+        col_mean = agg[(metric, "mean")]
+        col_std = agg[(metric, "std")]
+        rows[metric] = col_mean.map("{:.2f}".format) + " $\\pm$ " + col_std.map("{:.2f}".format)
+
+    result_df = pd.DataFrame(rows)
+    result_df.index.name = "Algorithm"
+
+    # Shorten metric names for column headers (strip "env/" prefix)
+    result_df.columns = [c[4:] if c.startswith("env/") else c for c in result_df.columns]
+
+    result_df = result_df.T  # metrics as rows, algorithms as columns
+    result_df.index.name = "Metric"
+
+    # Escape underscores in index and column names so LaTeX doesn't treat them as subscripts
+    result_df.index = result_df.index.str.replace("_", r"\_", regex=False)
+    result_df.columns = result_df.columns.str.replace("_", r"\_", regex=False)
+
+    n_algorithms = len(result_df.columns)
+    latex = result_df.to_latex(
+        caption="Evaluation results (mean $\\pm$ std across episodes).",
+        label="tab:eval_results",
+        escape=False,
+        column_format="l" + "r" * n_algorithms,
+    )
+
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, "w") as f:
+            f.write(latex)
+    else:
+        print(latex)
+
+    return latex
+
+
 def plot_soc_at_arrival(df, save_path=None):
     """Violin plots of mean SOC (Wh) and remaining range (km) at vehicle arrival."""
     base = Path(save_path) if save_path else None
