@@ -32,7 +32,7 @@ charging_params = {
     "endPos": 510.0,
     "chargeDelay": 2,
     "chargeInTransit": 0,
-    "power": 200_000,        # Watts
+    "power": 150_000,        # Watts
     "efficiency": 0.95
 }
 

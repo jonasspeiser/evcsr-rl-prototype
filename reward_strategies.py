@@ -159,14 +159,14 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
 
     Action penalties:
     - congestion_penalty per conflicting vehicle whose distance to the target CS differs by less
-      than congestion_threshold_m (default 33600 m ≈ 100 km/h × 20 min charging stop).
+      than congestion_threshold_m (default 36000 m ≈ 100 km/h × 22 min charging stop (150 kW / 0.95 efficiency)).
 
     Args:
             congestion_threshold_m: Distance window (meters) within which two vehicles heading to the
-                same CS are considered to conflict. Default 33600 m ≈ 100 km/h × 20 min charging stop.
+                same CS are considered to conflict. Default 36000 m ≈ 100 km/h × 22 min charging stop (150 kW / 0.95 efficiency).
             congestion_penalty: Penalty applied per conflicting vehicle.
     """
-    def __init__(self, congestion_threshold_m=33600, congestion_penalty=1.0):
+    def __init__(self, congestion_threshold_m=36000, congestion_penalty=1.0):
         self.congestion_threshold_m = congestion_threshold_m
         self.congestion_penalty = congestion_penalty
 
@@ -227,5 +227,5 @@ class RewardShapingStrategy(RewardStrategy):
 
     def calculate_action_penalty(self, vehicle, context):
         penalty = NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)
-        penalty += BasicWithCongestionPenaltyStrategy(congestion_threshold_m=33600, congestion_penalty=500).calculate_action_penalty(vehicle, context)
+        penalty += BasicWithCongestionPenaltyStrategy(congestion_threshold_m=36000, congestion_penalty=500).calculate_action_penalty(vehicle, context)
         return penalty

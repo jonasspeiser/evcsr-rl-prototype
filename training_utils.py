@@ -16,7 +16,7 @@ _STATION_CAPACITY = 2
 """Number of vehicles that can charge simultaneously at one station.
 Derived from the station lane length (10 m) and the default SUMO vehicle length (~5 m)."""
 
-_CHARGING_DURATION = 1000
+_CHARGING_DURATION = 1300
 """Charging duration per vehicle in seconds. Must match CHARGING_DURATION in simulation.py."""
 
 

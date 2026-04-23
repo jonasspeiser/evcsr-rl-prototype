@@ -22,8 +22,8 @@ YELLOW = [255, 255, 0]
 RED = [255, 0, 0]
 
 DEFAULT_STREET_NETWORK = "straight_100km"
-CHARGING_DURATION = 1000  
-"""charging duration in seconds — charges from near-empty to ~80% of 64 kWh (51,200 Wh) in ~969 s at 200 kW / 0.95 efficiency"""
+CHARGING_DURATION = 1300
+"""charging duration in seconds — charges from near-empty to ~80% of 64 kWh (51,200 Wh) in ~1293 s at 150 kW / 0.95 efficiency"""
 EMPTY_SOC = 30 
 """value under which the battery should be considered empty by the simulation. This is set lower than the value for the environment because the simulation brings the vehicle to a standstill under this value, meaning that it will recuperate some energy (20-30 Wh) in the process."""
 
