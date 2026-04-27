@@ -317,7 +317,7 @@ class CustomEnv(gym.Env):
         vehicle_mask = np.zeros(self.max_vehicles, dtype=np.float32)
         other_idx = 0
         for vehicle_id, vehicle in self.vehicles.items():
-            if vehicle.is_active:
+            if not vehicle.arrived and not vehicle.empty:
                 vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
                 vehicle.update_from_state(vehicle_state)
             obs = vehicle.get_observation()
@@ -539,16 +539,16 @@ class CustomEnv(gym.Env):
         if newly_despawned_ids:
             logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
 
-        # Update vehicles' arrival status
-        for vid in newly_arrived_ids:
-            if vid in self.vehicles:
-                self.vehicles[vid].arrived = True
-
         # Update vehicles' battery soc and cache remaining range
         for vid, vehicle in self.vehicles.items():
             if vehicle.is_active:
                 vehicle.fetch_and_update_battery_values()
                 self.vehicle_range_cache[vid] = self.simulation.get_remaining_range(vid)
+
+        # Update vehicles' arrival status
+        for vid in newly_arrived_ids:
+            if vid in self.vehicles:
+                self.vehicles[vid].arrived = True
 
         # Update vehicle times if needed
         if newly_spawned_ids or newly_arrived_ids:
