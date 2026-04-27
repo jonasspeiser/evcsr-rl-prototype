@@ -6,6 +6,10 @@ Edit the TRAININGS and EVALS lists below to configure which experiments to run.
 Run all experiments in parallel:
     python train.py
 
+Detached execution:
+    nohup python train.py > train_output.log 2>&1 & 
+    tail -f train_output.log
+
 Each process gets its own PID -> own SUMO instance -> own state file. No port management needed.
 """
 

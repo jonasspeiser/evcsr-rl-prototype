@@ -148,7 +148,8 @@ class Simulation():
         self.departure_counts = Counter()
         self.just_removed_vehicle_ids = set()
         self.soc_history: dict[str, list[float]] = {}  # SOC (Wh) per vehicle per simulation step
-        self.cumulative_waiting_times = {}  # step-by-step accumulation of VAR_WAITING_TIME per vehicle
+        self.cumulative_waiting_times = {}  # true total waiting time per vehicle (seconds)
+        self._prev_waiting_times = {}       # VAR_WAITING_TIME reading from the previous step
         self.driving_segment_baseline: dict[str, tuple[float, float]] = {}  # (soc_Wh, distance_m) at start of current driving segment; reset after charging stops
         traci.simulation.loadState(self._state_file)
         self._subscribe_to_simulation()
@@ -501,10 +502,14 @@ class Simulation():
         self.just_removed_vehicle_ids = set()
         self.vehicle_data = traci.vehicle.getAllSubscriptionResults()
         self.simulation_data = traci.simulation.getSubscriptionResults()
-        # VAR_WAITING_TIME resets to 0 when a vehicle resumes movement, so we accumulate it step-by-step to get the true total waiting time across the entire episode.
+        # VAR_WAITING_TIME is a running counter that SUMO resets to 0 when a vehicle moves.
+        # We track the delta each step to get the true total waiting time across the entire episode.
         for vid, data in self.vehicle_data.items():
             current_wt = data.get(tc.VAR_WAITING_TIME) or 0
-            self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + current_wt
+            prev_wt = self._prev_waiting_times.get(vid, 0)
+            delta = current_wt - prev_wt if current_wt >= prev_wt else current_wt
+            self.cumulative_waiting_times[vid] = self.cumulative_waiting_times.get(vid, 0) + delta
+            self._prev_waiting_times[vid] = current_wt
         # When an observable EV ends a charging stop its SOC has been replenished, so reset the
         # driving segment baseline so get_remaining_range() uses only post-charge SOC changes.
         for vid in self._filter_set_for_observable_evs(
