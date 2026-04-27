@@ -1,0 +1,70 @@
+"""
+Git bisect test: verifies that soc_history is populated after an episode.
+
+Usage:
+    git bisect start <bad-commit> <good-commit>
+    git bisect run .venv/bin/python /tmp/bisect_test_soc_history.py
+
+Exit codes:
+    0   good commit (soc_history is populated)
+    1   bad commit  (soc_history is empty)
+    125 skip        (commit can't be tested, e.g. import error or API mismatch)
+"""
+import sys
+import os
+
+# When run via `git bisect run`, cwd is the repo root but sys.path doesn't include it.
+sys.path.insert(0, os.getcwd())
+
+try:
+    from environment import CustomEnv
+    from evaluation_algorithms import GreedyAlgorithm
+except Exception as e:
+    print(f"SKIP: import failed: {e}")
+    sys.exit(125)
+
+N_VEHICLES = 5
+STREET_NETWORK = "straight_120km"
+
+try:
+    env = CustomEnv(
+        scenario_generator="same_route",
+        start_soc_bounds=(22_000, 22_000),
+        reward_strategy="basic",
+        vehicles_to_spawn=N_VEHICLES,
+        street_network=STREET_NETWORK,
+        longest_route_duration=20000,
+    )
+except Exception as e:
+    print(f"SKIP: env init failed: {e}")
+    sys.exit(125)
+
+try:
+    model = GreedyAlgorithm(environment=env)
+except Exception as e:
+    print(f"SKIP: model init failed: {e}")
+    env.close()
+    sys.exit(125)
+
+try:
+    obs, _ = env.reset()
+    terminated = truncated = False
+    while not (terminated or truncated):
+        action, _ = model.predict(obs, deterministic=True)
+        obs, _, terminated, truncated, _ = env.step(action)
+
+    soc_history = env.simulation.soc_history
+    if soc_history:
+        print(f"GOOD: soc_history has {sum(len(v) for v in soc_history.values())} entries across {len(soc_history)} vehicles")
+        sys.exit(0)
+    else:
+        print("BAD: soc_history is empty after a completed episode")
+        sys.exit(1)
+except Exception as e:
+    print(f"SKIP: episode failed: {e}")
+    sys.exit(125)
+finally:
+    try:
+        env.close()
+    except Exception:
+        pass

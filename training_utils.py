@@ -622,11 +622,11 @@ if __name__ == "__main__":
     evaluate_model(
         scenario="same_route",
         start_soc_bounds=(22_000, 22_000),
-        algorithm="PERFECT50",
+        algorithm="PERFECT5",
         version_tag=get_git_version(),
         reward_strategy="basic",
         street_network="straight_120km",
-        n_vehicles=50,
+        n_vehicles=5,
         n_noevs=0,
         n_episodes=10,
         # longest_route_duration=30_000,
