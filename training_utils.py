@@ -3,6 +3,7 @@
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm, PerfectXVehAlgorithm
+from feature_extractor import EVChargingFeatureExtractor
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -214,7 +215,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -244,6 +245,10 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
             "congestion_penalty" (penalty per conflicting vehicle, default 1.0). Defaults to None (built-in defaults apply).
         start_soc_bounds (tuple, optional): (min_soc_wh, max_soc_wh) override for vehicle starting SOC. Defaults to None (uses value from the street network config).
         obs_features (set, optional): Set of optional observation keys to include. Defaults to None (no optional features included).
+        use_custom_extractor (bool, optional): Whether to use the DeepSets-based EVChargingFeatureExtractor.
+            Provides permutation-invariant vehicle aggregation. Requires obs_features to be empty (None)
+            or the extractor will handle extra keys by concatenating them after the pooled embeddings.
+            Defaults to False (SB3 default MLP policy).
 
     Returns:
         The file path of the saved model (.zip).
@@ -274,7 +279,11 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     algorithm_class = SB3_ALGOS.get(algorithm)
     if algorithm_class is None:
         raise ValueError(f"Invalid model type for training: {algorithm}")
-    algo_kwargs = {"ent_coef": ent_coef} if algorithm in ("PPO", "A2C") else {}
+    algo_kwargs = {}
+    if algorithm in ("PPO", "A2C"):
+        algo_kwargs["ent_coef"] = ent_coef
+    if use_custom_extractor:
+        algo_kwargs["policy_kwargs"] = {"features_extractor_class": EVChargingFeatureExtractor}
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
     model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
@@ -298,6 +307,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "congestion_kwargs": congestion_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
+        "use_custom_extractor": use_custom_extractor,
         "training_duration_s": round(duration_s),
     })
 
@@ -329,6 +339,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     congestion_kwargs = config.get("congestion_kwargs")
     start_soc_bounds = config.get("start_soc_bounds")
     obs_features = config.get("obs_features")
+    use_custom_extractor = config.get("use_custom_extractor", False)
     version_tag = get_git_version()
     n_steps = training_units_to_steps(n_training_units, n_vehicles)
 
@@ -378,6 +389,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "congestion_kwargs": congestion_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
+        "use_custom_extractor": use_custom_extractor,
         "training_duration_s": round(duration_s),
         "continued_from": model_load_path,
         "base_config": config,
@@ -515,7 +527,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         deterministic=deterministic,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -549,6 +561,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
             "congestion_penalty" (penalty per conflicting vehicle, default 1.0). Defaults to None (built-in defaults apply).
         start_soc_bounds (tuple, optional): (min_soc_wh, max_soc_wh) override for vehicle starting SOC. Defaults to None (uses value from the street network config).
         obs_features (set, optional): Set of optional observation keys to include. Supports any combination of {"simulation_time", "station_assignment_counts"}. Defaults to None (no optional features included).
+        use_custom_extractor (bool, optional): Whether to use the DeepSets-based EVChargingFeatureExtractor. Defaults to False.
 
     Returns:
         tuple: A tuple containing:
@@ -557,7 +570,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features, use_custom_extractor=use_custom_extractor)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
     nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
