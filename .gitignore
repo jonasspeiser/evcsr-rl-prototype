@@ -19,6 +19,7 @@ events.out.tfevents.*
 metrics*.json
 # Visuals
 visuals
+thesis
 
 # datasets
 datasets/asfinag_data/*
