@@ -2,7 +2,7 @@
 
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
-from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm, PerfectXVehAlgorithm
+from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm, PerfectXVehAlgorithm, BestGuessAlgorithm
 from feature_extractor import EVChargingFeatureExtractor
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
@@ -30,6 +30,7 @@ SB3_ALGOS = {
 EVAL_ALGOS = {
     "RANDOM": RandomAlgorithm,
     "GREEDY": GreedyAlgorithm,
+    "BEST_GUESS": BestGuessAlgorithm,
 }
 
 
@@ -633,9 +634,9 @@ if __name__ == "__main__":
     # )
 
     evaluate_model(
-        scenario="same_route",
-        start_soc_bounds=(22_000, 22_000),
-        algorithm="PERFECT5",
+        scenario="all_random",
+        # start_soc_bounds=(22_000, 22_000),
+        algorithm="BEST_GUESS",
         version_tag=get_git_version(),
         reward_strategy="basic",
         street_network="straight_120km",
