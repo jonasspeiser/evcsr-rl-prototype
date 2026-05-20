@@ -216,7 +216,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -271,6 +271,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         execution_context=execution_context,
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
+        checkpoint_freq=checkpoint_freq,
     )
 
     # initiate environment
@@ -314,7 +315,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
 
     return model_path
 
-def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None):
+def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None, checkpoint_freq=None):
     """Continue training an existing model, loading scenario/algorithm/etc. from its run_config.json.
 
     Args:
@@ -359,6 +360,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         execution_context=execution_context,
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
+        checkpoint_freq=checkpoint_freq,
     )
 
     # initiate environment

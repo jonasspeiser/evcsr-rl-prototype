@@ -9,7 +9,7 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Deque, Dict, Optional, Literal
 from dataclasses import dataclass
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 
 
 class JsonlFileHandler(logging.Handler):
@@ -455,6 +455,7 @@ def setup_run_logging(
     n_steps: int | None = None,
     use_wandb: bool = False,
     wandb_entity: str | None = None,
+    checkpoint_freq: int | None = None,
 ):
     # path + python logging setup
     run_dir, model_save_path, py_log_path, ring = _setup_logging(
@@ -493,6 +494,17 @@ def setup_run_logging(
         # from stable_baselines3.common.callbacks import CallbackList
         # from wandb.integration.sb3 import WandbCallback
         # callback = CallbackList([callback, WandbCallback(model_save_path=f"{run_dir}/wandb_models", verbose=2)])
+
+    # checkpoint callback (optional, training only)
+    if checkpoint_freq is not None and mode == "training":
+        checkpoint_cb = CheckpointCallback(
+            save_freq=checkpoint_freq,
+            save_path=os.path.join(run_dir, "checkpoints"),
+            name_prefix="checkpoint",
+            save_replay_buffer=False,
+            save_vecnorm=False,
+        )
+        callback = CallbackList([callback, checkpoint_cb])
 
     return RunLogging(
         run_dir=run_dir,
