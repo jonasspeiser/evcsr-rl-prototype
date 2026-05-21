@@ -216,7 +216,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -272,6 +272,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
         checkpoint_freq=checkpoint_freq,
+        max_training_hours=max_training_hours,
     )
 
     # initiate environment
@@ -310,12 +311,13 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
+        "max_training_hours": max_training_hours,
         "training_duration_s": round(duration_s),
     })
 
     return model_path
 
-def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None, checkpoint_freq=None):
+def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None, checkpoint_freq=None, max_training_hours=None):
     """Continue training an existing model, loading scenario/algorithm/etc. from its run_config.json.
 
     Args:
@@ -361,6 +363,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         use_wandb=use_wandb,
         wandb_entity=wandb_entity,
         checkpoint_freq=checkpoint_freq,
+        max_training_hours=max_training_hours,
     )
 
     # initiate environment
@@ -393,6 +396,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
+        "max_training_hours": max_training_hours,
         "training_duration_s": round(duration_s),
         "continued_from": model_load_path,
         "base_config": config,
@@ -618,11 +622,13 @@ if __name__ == "__main__":
     #     wandb_entity="evcs-rl"
     # )
 
-    # further_train_model(
-    #     model_load_path=get_latest_model(),
-    #     n_training_units=1_200,
-    #     execution_context="local"
-    # )
+    further_train_model(
+        model_load_path=get_latest_model(),
+        max_training_hours=1.5,
+        n_training_units=10_000_000,  # effectively unlimited further training, the run will be stopped by max_training_hours or manual interruption
+        checkpoint_freq=15_000,
+        execution_context="local"
+    )
 
     # evaluate_model_with_config(
     #     # model_load_path=get_latest_model(),
@@ -635,19 +641,19 @@ if __name__ == "__main__":
     #     deterministic=False
     # )
 
-    evaluate_model(
-        scenario="all_random",
-        # start_soc_bounds=(22_000, 22_000),
-        algorithm="BEST_GUESS",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight_120km",
-        n_vehicles=5,
-        n_noevs=0,
-        n_episodes=10,
-        # longest_route_duration=30_000,
-        model_load_path=None,
-        execution_context="local",
-        # render_mode="human",
-        random_seed=54321,
-    )
+    # evaluate_model(
+    #     scenario="all_random",
+    #     # start_soc_bounds=(22_000, 22_000),
+    #     algorithm="BEST_GUESS",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight_120km",
+    #     n_vehicles=5,
+    #     n_noevs=0,
+    #     n_episodes=10,
+    #     # longest_route_duration=30_000,
+    #     model_load_path=None,
+    #     execution_context="local",
+    #     # render_mode="human",
+    #     random_seed=54321,
+    # )

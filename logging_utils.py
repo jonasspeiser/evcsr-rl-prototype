@@ -1,6 +1,7 @@
 """Script containing logging utilities."""
 
 import os
+import time
 import logging
 import json
 import gzip
@@ -178,6 +179,21 @@ class CustomTensorboardCallback(BaseCallback):
         self.logger_rl.debug(f"Logged evaluation metrics at step {step}")
         # For further use of logged values
         return metrics
+
+class TimeLimitCallback(BaseCallback):
+    """Stop training after a fixed wall-clock duration."""
+
+    def __init__(self, max_seconds: float):
+        super().__init__()
+        self.max_seconds = max_seconds
+        self._start: float | None = None
+
+    def _on_training_start(self) -> None:
+        self._start = time.perf_counter()
+
+    def _on_step(self) -> bool:
+        return time.perf_counter() - self._start < self.max_seconds
+
 
 @dataclass
 class RunLogging:
@@ -456,6 +472,7 @@ def setup_run_logging(
     use_wandb: bool = False,
     wandb_entity: str | None = None,
     checkpoint_freq: int | None = None,
+    max_training_hours: float | None = None,
 ):
     # path + python logging setup
     run_dir, model_save_path, py_log_path, ring = _setup_logging(
@@ -502,9 +519,12 @@ def setup_run_logging(
             save_path=os.path.join(run_dir, "checkpoints"),
             name_prefix="checkpoint",
             save_replay_buffer=False,
-            save_vecnorm=False,
         )
         callback = CallbackList([callback, checkpoint_cb])
+
+    # time limit callback (optional, training only)
+    if max_training_hours is not None and mode == "training":
+        callback = CallbackList([callback, TimeLimitCallback(max_seconds=max_training_hours * 3600)])
 
     return RunLogging(
         run_dir=run_dir,

@@ -18,9 +18,11 @@ from multiprocessing import Process
 
 from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, training_units_to_steps
 
-_N_VEHICLES = 5
-_N_TRAINING_UNITS = 1_000
-_N_CHECKPOINTS = 10
+_N_VEHICLES = 20
+_MAX_TRAINING_HOURS = 2.5 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_CHECKPOINT_FREQ = 15_000 # how often the model should be saved during training (in training steps)
+_N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
+_N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
 
 BASE_TRAINING = partial(train_model,
     algorithm="PPO",
@@ -36,10 +38,12 @@ BASE_TRAINING = partial(train_model,
     # longest_route_duration=28_000,
     n_vehicles=_N_VEHICLES,
     n_noevs=0,
+    max_training_hours=_MAX_TRAINING_HOURS,
     n_training_units=_N_TRAINING_UNITS,
-    ent_coef=0.0,
+    ent_coef=0.1,
     use_wandb=False,
-    checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES),
+    # checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES),
+    checkpoint_freq=_CHECKPOINT_FREQ,
 )
 
 BASE_EVAL = partial(evaluate_model,
@@ -66,7 +70,6 @@ TRAININGS = [
     ),
     partial(BASE_TRAINING,
         reward_strategy="basic",
-        ent_coef=0.1,
     ),
     partial(BASE_TRAINING,
         reward_strategy="basicCongestion",
@@ -81,8 +84,12 @@ TRAININGS = [
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
 FURTHER_TRAININGS = [
-    partial(further_train_model, model_load_path=path, n_training_units=_N_TRAINING_UNITS,
-            checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES))
+    partial(further_train_model, model_load_path=path, 
+            max_training_hours=_MAX_TRAINING_HOURS,
+            n_training_units=_N_TRAINING_UNITS,
+            # checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES), 
+            checkpoint_freq=_CHECKPOINT_FREQ,
+            )
     for path in get_latest_n_models(4)
 ]
 
@@ -112,11 +119,11 @@ if __name__ == "__main__":
         import subprocess
         subprocess.run(["systemctl", "suspend"])
 
-    # run_parallel(TRAININGS)
+    run_parallel(TRAININGS)
     
-    # run_parallel(EVALS)
+    run_parallel(EVALS)
 
-    run_parallel(FURTHER_TRAININGS)
+    # run_parallel(FURTHER_TRAININGS)
 
     # Build model evals lazily after further training completes (new model paths now exist)
     MODEL_EVALS = [
