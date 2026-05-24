@@ -9,6 +9,35 @@ def arrive_concurrently(dist_a_m, dist_b_m, threshold_m):
     return abs(dist_a_m - dist_b_m) < threshold_m
 
 
+def calculate_congestion_penalty(vehicle, context, congestion_threshold_m, congestion_penalty):
+    """Return the total congestion penalty for routing a vehicle to a charging station.
+
+    Sums a penalty for each other live vehicle that is already heading to the same station and
+    will arrive within the same congestion window (approximated by distance threshold).
+
+    Returns 0 if rerouting was not successful or distance information is unavailable.
+    """
+    if not context.get('reroute_successful'):
+        return 0
+    target_cs = context.get('target_cs')
+    dist_self = vehicle.distance_to_cs_dict.get(target_cs) if vehicle.distance_to_cs_dict else None
+    if dist_self is None:
+        return 0
+    penalty = 0
+    for other in context['all_vehicles'].values():
+        if other.vehicle_id == vehicle.vehicle_id or not other.is_online:
+            continue
+        if other.target_cs_id != target_cs:
+            continue
+        dist_other = other.distance_to_cs_dict.get(target_cs) if other.distance_to_cs_dict else None
+        if dist_other is None:
+            continue
+        if arrive_concurrently(dist_self, dist_other, congestion_threshold_m):
+            logger.info(f"Vehicle {vehicle.vehicle_id}: congestion penalty for routing to {target_cs} (conflict with {other.vehicle_id})")
+            penalty -= congestion_penalty
+    return penalty
+
+
 class RewardStrategy:
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
         """
@@ -171,28 +200,7 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
         self.congestion_penalty = congestion_penalty
 
     def calculate_action_penalty(self, vehicle, context):
-        if not context.get('reroute_successful'):
-            return 0
-        target_cs = context.get('target_cs')
-        dist_self = vehicle.distance_to_cs_dict.get(target_cs) if vehicle.distance_to_cs_dict else None
-        if dist_self is None:
-            return 0
-        all_vehicles = context.get('all_vehicles', {})
-        penalty = 0
-        for other in all_vehicles.values():
-            if other.vehicle_id == vehicle.vehicle_id:
-                continue
-            if not other.is_online:
-                continue
-            if other.target_cs_id != target_cs:
-                continue
-            dist_other = other.distance_to_cs_dict.get(target_cs) if other.distance_to_cs_dict else None
-            if dist_other is None:
-                continue
-            if arrive_concurrently(dist_self, dist_other, self.congestion_threshold_m):
-                logger.info(f"Vehicle {vehicle.vehicle_id}: congestion penalty for routing to {target_cs} (conflict with {other.vehicle_id})")
-                penalty -= self.congestion_penalty
-        return penalty
+        return calculate_congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty)
 
 class RewardShapingStrategy(RewardStrategy):
     def __init__(self, max_allowed_ttt):
@@ -202,12 +210,11 @@ class RewardShapingStrategy(RewardStrategy):
         reward = 0
 
         for vehicle in vehicles.values():
-            vehicle_is_at_destination = vehicle.arrived
-            vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
-            
             # if vehicle.battery_just_died():
             #     logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
             #     reward += -100
+
+            vehicle_has_just_reached_destination = vehicle.arrived and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
             if vehicle_has_just_reached_destination:
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
                 reward += self.max_allowed_ttt - vehicle.get_total_travel_time()
@@ -227,5 +234,5 @@ class RewardShapingStrategy(RewardStrategy):
 
     def calculate_action_penalty(self, vehicle, context):
         penalty = NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)
-        penalty += BasicWithCongestionPenaltyStrategy(congestion_threshold_m=36000, congestion_penalty=500).calculate_action_penalty(vehicle, context)
+        penalty += calculate_congestion_penalty(vehicle, context, congestion_threshold_m=36000, congestion_penalty=500)
         return penalty
