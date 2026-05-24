@@ -19,8 +19,8 @@ from multiprocessing import Process
 from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, training_units_to_steps
 
 _N_VEHICLES = 20
-_MAX_TRAINING_HOURS = 2.5 # Training duration by wall clock time. Set to None to disable time-based stopping.
-_CHECKPOINT_FREQ = 15_000 # how often the model should be saved during training (in training steps)
+_MAX_TRAINING_HOURS = 8.5 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_CHECKPOINT_FREQ = 20_000 # how often the model should be saved during training (in training steps)
 _N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
 _N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
 
@@ -65,19 +65,10 @@ BASE_EVAL = partial(evaluate_model,
 # (given parameters override the ones in the base training configuration)
 
 TRAININGS = [
-    partial(BASE_TRAINING,
-        reward_strategy="basic",
-    ),
-    partial(BASE_TRAINING,
-        reward_strategy="basic",
-    ),
-    partial(BASE_TRAINING,
-        reward_strategy="basicCongestion",
-    ),
-    partial(BASE_TRAINING,
-        reward_strategy="basicCongestion",
-        obs_features={"simulation_time", "station_assignment_counts"}, 
-    ),
+    partial(BASE_TRAINING, reward_strategy="basic"),
+    partial(BASE_TRAINING, reward_strategy="basicDestination"),
+    partial(BASE_TRAINING, reward_strategy="basicCharging"),
+    partial(BASE_TRAINING, reward_strategy="basicShaping", obs_features={"simulation_time", "station_assignment_counts"}),
 ]
 
 # --- Define your FURTHER TRAINING RUNS here ---
@@ -98,7 +89,7 @@ FURTHER_TRAININGS = [
 
 EVALS = [
     partial(BASE_EVAL, algorithm="GREEDY"),
-    partial(BASE_EVAL, algorithm="PERFECT20"),
+    partial(BASE_EVAL, algorithm="BEST_GUESS"),
     partial(BASE_EVAL, algorithm="RANDOM"),
 ]
 

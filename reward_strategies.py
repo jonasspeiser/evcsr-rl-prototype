@@ -9,7 +9,7 @@ def arrive_concurrently(dist_a_m, dist_b_m, threshold_m):
     return abs(dist_a_m - dist_b_m) < threshold_m
 
 
-def calculate_congestion_penalty(vehicle, context, congestion_threshold_m, congestion_penalty):
+def congestion_penalty(vehicle, context, congestion_threshold_m, congestion_penalty):
     """Return the total congestion penalty for routing a vehicle to a charging station.
 
     Sums a penalty for each other live vehicle that is already heading to the same station and
@@ -37,6 +37,27 @@ def calculate_congestion_penalty(vehicle, context, congestion_threshold_m, conge
             penalty -= congestion_penalty
     return penalty
 
+def destination_reward(vehicle, newly_arrived_ids, max_allowed_ttt):
+    """Return the reward for a vehicle that just reached its destination, 0 otherwise."""
+    if not (vehicle.arrived and newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids):
+        return 0
+    reward = max_allowed_ttt - vehicle.get_total_travel_time()
+    logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
+    # Normalize with the same value as the end of episode reward to keep the same scale and make it easier for the agent to learn
+    reward /= 3000
+    # Make smaller than end of episode reward
+    reward /= 100
+    return reward
+
+
+def charging_reward(vehicle, charging_ids):
+    """Return the per-step reward for a vehicle that is charging with insufficient range, 0 otherwise."""
+    if vehicle.vehicle_id not in charging_ids:
+        return 0
+    if vehicle.is_remaining_range_sufficient(buffer=0):
+        return 0
+    logger.info(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+    return 0.01
 
 class RewardStrategy:
     def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
@@ -200,7 +221,73 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
         self.congestion_penalty = congestion_penalty
 
     def calculate_action_penalty(self, vehicle, context):
-        return calculate_congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty)
+        return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty)
+
+class BasicWithDestinationRewardStrategy(BasicRewardStrategy):
+    """
+    Extends BasicRewardStrategy with a per-arrival destination reward.
+
+    Step reward: destination_reward per vehicle that just arrived.
+    Final reward: negative mean travel time (inherited).
+    Action penalties: 0 (inherited).
+
+    Args:
+        max_allowed_ttt: Upper bound on travel time (seconds). A vehicle arriving in less time
+            yields a positive reward; one exceeding it yields a negative reward.
+    """
+    def __init__(self, max_allowed_ttt):
+        self.max_allowed_ttt = max_allowed_ttt
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+        for vehicle in vehicles.values():
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+        return reward
+
+
+class BasicWithChargingRewardStrategy(BasicRewardStrategy):
+    """
+    Extends BasicRewardStrategy with a per-step reward for necessary charging.
+
+    Step reward: charging_reward per vehicle that is charging with insufficient range.
+    Final reward: negative mean travel time (inherited).
+    Action penalties: 0 (inherited).
+    """
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+        for vehicle in vehicles.values():
+            reward += charging_reward(vehicle, charging_ids)
+        return reward
+
+
+class BasicWithShapingStrategy(BasicRewardStrategy):
+    """
+    Extends BasicRewardStrategy with destination reward, charging reward, and congestion penalty.
+
+    Step reward: destination_reward + charging_reward per vehicle.
+    Final reward: negative mean travel time (inherited).
+    Action penalties: congestion_penalty per conflicting vehicle heading to the same station.
+
+    Args:
+        max_allowed_ttt: Upper bound on travel time used by destination_reward.
+        congestion_threshold_m: Distance window within which two vehicles are considered to conflict.
+        congestion_penalty_value: Penalty applied per conflicting vehicle.
+    """
+    def __init__(self, max_allowed_ttt, congestion_threshold_m=36000, congestion_penalty_value=1.0):
+        self.max_allowed_ttt = max_allowed_ttt
+        self.congestion_threshold_m = congestion_threshold_m
+        self.congestion_penalty_value = congestion_penalty_value
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+        for vehicle in vehicles.values():
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+            reward += charging_reward(vehicle, charging_ids)
+        return reward
+
+    def calculate_action_penalty(self, vehicle, context):
+        return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty_value)
+
 
 class RewardShapingStrategy(RewardStrategy):
     def __init__(self, max_allowed_ttt):
@@ -210,22 +297,8 @@ class RewardShapingStrategy(RewardStrategy):
         reward = 0
 
         for vehicle in vehicles.values():
-            # if vehicle.battery_just_died():
-            #     logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
-            #     reward += -100
-
-            vehicle_has_just_reached_destination = vehicle.arrived and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
-            if vehicle_has_just_reached_destination:
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
-                reward += self.max_allowed_ttt - vehicle.get_total_travel_time()
-
-            if vehicle.vehicle_id in charging_ids:
-                # every sumo step (i.e. every second) a vehicle is charging and needs to do so to arrive at its destination, the agent gets +1 reward
-                # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
-                remaining_range_is_sufficient = vehicle.is_remaining_range_sufficient(buffer=0)
-                if not remaining_range_is_sufficient:
-                    logger.info(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+100 reward)")
-                    reward += 1
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+            reward += charging_reward(vehicle, charging_ids)
 
         return reward
 
@@ -234,5 +307,5 @@ class RewardShapingStrategy(RewardStrategy):
 
     def calculate_action_penalty(self, vehicle, context):
         penalty = NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)
-        penalty += calculate_congestion_penalty(vehicle, context, congestion_threshold_m=36000, congestion_penalty=500)
+        penalty += congestion_penalty(vehicle, context, congestion_threshold_m=36000, congestion_penalty=500)
         return penalty

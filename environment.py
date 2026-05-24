@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle
-from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, arrive_concurrently
+from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, BasicWithDestinationRewardStrategy, BasicWithChargingRewardStrategy, BasicWithShapingStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, arrive_concurrently
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -135,6 +135,17 @@ class CustomEnv(gym.Env):
             raw_penalty = kwargs.get("congestion_penalty", 1.0)
             normalized_kwargs = {**kwargs, "congestion_penalty": raw_penalty / self.vehicles_to_spawn}
             self.reward_strategy = BasicWithCongestionPenaltyStrategy(**normalized_kwargs)
+        elif reward_strategy == "basicDestination":
+            self.reward_strategy = BasicWithDestinationRewardStrategy(max_allowed_ttt=longest_route_duration)
+        elif reward_strategy == "basicCharging":
+            self.reward_strategy = BasicWithChargingRewardStrategy()
+        elif reward_strategy == "basicShaping":
+            raw_penalty = kwargs.get("congestion_penalty", 1.0)
+            self.reward_strategy = BasicWithShapingStrategy(
+                max_allowed_ttt=longest_route_duration,
+                congestion_threshold_m=kwargs.get("congestion_threshold_m", 36000),
+                congestion_penalty_value=raw_penalty / self.vehicles_to_spawn,
+            )
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
         elif reward_strategy == "shaping":
