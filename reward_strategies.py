@@ -46,7 +46,7 @@ def destination_reward(vehicle, newly_arrived_ids, max_allowed_ttt):
     # Normalize with the same value as the end of episode reward to keep the same scale and make it easier for the agent to learn
     reward /= 3000
     # Make smaller than end of episode reward
-    reward /= 100
+    reward /= 10
     return reward
 
 
@@ -306,3 +306,51 @@ class RewardShapingStrategy(RewardStrategy):
         penalty = NoTimeComponentRewardStrategy().calculate_action_penalty(vehicle, context)
         penalty += congestion_penalty(vehicle, context, congestion_threshold_m=36000, congestion_penalty=500)
         return penalty
+
+
+class RelativeDestinationStrategy(RewardStrategy):
+    """
+    Per-vehicle destination reward based on charging overhead relative to the ideal (no-stop)
+    travel time obtained from the routing API at spawn.
+
+    Reward per arriving vehicle = -(actual_ttt - ideal_ttt) / scale_s:
+      - Vehicle arrives with no charging detour: overhead ≈ 0, reward ≈ 0.
+      - Vehicle charged once (~1300 s stop + detour): reward ≈ -0.5 at default scale.
+      - Vehicle's battery went empty: no arrival, battery_penalty = -1.
+
+    The incentive ordering is correct: charging when needed (reward ≈ -0.5) is always preferred
+    over going empty (reward = -1), while unnecessary charging still incurs a cost.
+
+    The ideal_ttt comes from traci.simulation.findRoute at the moment of spawn, which uses actual
+    edge speeds and vehicle type — the same information a real routing API would return at trip
+    start. This is more robust than dividing by a hardcoded speed constant, and naturally adapts
+    to different networks, speed limits, and vehicle types.
+
+    Step reward: -(overhead / scale_s) per arrived vehicle; battery_penalty per dead vehicle.
+    Final reward: 0.
+    Action penalties: 0.
+
+    Args:
+        scale_s: Divisor in seconds to normalize the overhead. Default 3000 s (~50 min charging
+                 stop = reward -1, same scale as the battery penalty).
+    """
+    def __init__(self, scale_s=3000):
+        self.scale_s = scale_s
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, _charging_ids, newly_emptied_ids):
+        reward = 0
+        for vehicle in vehicles.values():
+            if newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids:
+                ideal = vehicle.get_ideal_travel_time()
+                if ideal is not None:
+                    overhead = vehicle.get_total_travel_time() - ideal
+                    reward += -overhead / self.scale_s
+                    logger.info(f"Vehicle {vehicle.vehicle_id} arrived: overhead={overhead:.0f}s, reward={-overhead/self.scale_s:.4f}")
+            reward += battery_penalty(vehicle, newly_emptied_ids)
+        return reward
+
+    def calculate_final_reward(self, _ttt_per_ev_mean):
+        return 0
+
+    def calculate_action_penalty(self, _vehicle, _context):
+        return 0

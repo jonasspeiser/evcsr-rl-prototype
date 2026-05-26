@@ -32,6 +32,10 @@ class Vehicle:
         self.distance_to_cs_dict = None  # Expected to be a dict {cs_id: distance}
         self.distance_to_destination = None
         self.had_bad_timing_error = False
+        self.ideal_travel_time = None
+        """Free-flow travel time in seconds from spawn position to destination, with no charging detour.
+        Set once on first spawn from the routing API estimate (traci.simulation.findRoute). Mirrors
+        what a real deployment would obtain from an external routing service at trip start."""
 
     @property
     def is_online(self):
@@ -65,7 +69,8 @@ class Vehicle:
             self.battery_soc = state.get("battery_soc")
             self.distance_to_cs_dict = state.get("distance_to_cs")
             self.distance_to_destination = state.get("distance_to_destination")
-            self.spawned = True
+            if self.ideal_travel_time is None:
+                self.ideal_travel_time = state.get("ideal_travel_time")
 
     def get_observation(self):
         """
@@ -213,5 +218,9 @@ class Vehicle:
     
     def get_total_travel_time(self):
         if not self.arrival_time:
-            raise AttributeError(f"Arrival time not yet set for vehicle{self.vehicle_id}.")  
+            raise AttributeError(f"Arrival time not yet set for vehicle{self.vehicle_id}.")
         return self.arrival_time - self.departure_time
+
+    def get_ideal_travel_time(self):
+        """Return the free-flow travel time estimate set at spawn, or None if not yet available."""
+        return self.ideal_travel_time

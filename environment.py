@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle
-from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, BasicWithDestinationRewardStrategy, BasicWithChargingRewardStrategy, BasicWithShapingStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, arrive_concurrently
+from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, BasicWithDestinationRewardStrategy, BasicWithChargingRewardStrategy, BasicWithShapingStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, RelativeDestinationStrategy, arrive_concurrently
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -148,6 +148,8 @@ class CustomEnv(gym.Env):
             )
         elif reward_strategy == "noTime":
             self.reward_strategy = NoTimeComponentRewardStrategy()
+        elif reward_strategy == "relativeDestination":
+            self.reward_strategy = RelativeDestinationStrategy()
         elif reward_strategy == "shaping":
             # longest_route_duration doubles as the reward upper bound: since episodes are truncated
             # at this limit, no vehicle can arrive with TTT > longest_route_duration, so the

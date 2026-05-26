@@ -497,6 +497,39 @@ class Simulation():
         distance = self._calculate_distance(vehicle_edge, destination)
         return distance
 
+    def get_ideal_travel_time(self, vehicle_id, vehicle_edge):
+        """
+        Return the estimated free-flow travel time from the vehicle's current position to its
+        destination, using traci.simulation.findRoute.
+
+        This mirrors what a real deployment would obtain from an external routing API at the
+        start of a trip: a time estimate based on current network conditions and speed limits,
+        with no charging detour. Because findRoute uses actual edge speeds rather than a hard-
+        coded constant, it stays correct if speed limits or vehicle types change.
+
+        Note: SUMO's findRoute reflects current traffic conditions on each edge. Calling it at
+        spawn (before congestion builds) gives a close approximation to free-flow travel time.
+        In production, the equivalent would be a routing API call made at trip start.
+
+        Args:
+            vehicle_id (str): The ID of the vehicle (used to determine vehicle type).
+            vehicle_edge (str): The current edge of the vehicle (route start).
+
+        Returns:
+            float or None: Estimated travel time in seconds, or None if no route found.
+        """
+        if vehicle_edge is None:
+            return None
+        destination = self.get_vehicle_destination(vehicle_id)
+        if destination is None:
+            return None
+        vtype = traci.vehicle.getTypeID(vehicle_id)
+        try:
+            stage = traci.simulation.findRoute(vehicle_edge, destination, vType=vtype)
+            return stage.travelTime if stage.edges else None
+        except traci.exceptions.TraCIException:
+            return None
+
     def step(self):
         traci.simulationStep()
         self.just_removed_vehicle_ids = set()
@@ -805,13 +838,14 @@ class Simulation():
         vehicle_edge = self._get_vehicle_edge(vehicle_id)
 
         vehicle_is_offline = vehicle_edge is None # if vehicle_edge is not returned by TraCI, signalling that the vehicle has not been spawned yet or has already been removed
-        if vehicle_is_offline: 
+        if vehicle_is_offline:
             battery_soc = None
             max_battery_capacity = None
             distance_to_cs = None
             vehicle_edge = None
             vehicle_destination = None
             distance_to_destination = None
+            ideal_travel_time = None
         else:
             battery_soc = self.get_battery_soc(vehicle_id)
             distance_to_cs = self._get_distances_to_all_cs(vehicle_edge)
@@ -829,8 +863,9 @@ class Simulation():
             #         logger.warning(f"Could not remove vehicle {vehicle_id} - it may have already been removed.")
             #     # Return None state to indicate this vehicle should be ignored
             #     return {"battery_soc": None, "max_battery_capacity": None, "distance_to_cs": None, "vehicle_position": None, "vehicle_destination": None, "distance_to_destination": None}
+            ideal_travel_time = self.get_ideal_travel_time(vehicle_id, vehicle_edge)
 
-        state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination, "distance_to_destination": distance_to_destination}
+        state = {"battery_soc": battery_soc, "max_battery_capacity": max_battery_capacity, "distance_to_cs": distance_to_cs, "vehicle_position": vehicle_edge, "vehicle_destination": vehicle_destination, "distance_to_destination": distance_to_destination, "ideal_travel_time": ideal_travel_time}
         return state
 
     def get_departure_time_for_vehicle(self, vehicle_id):
