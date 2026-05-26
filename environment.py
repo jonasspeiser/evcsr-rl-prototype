@@ -556,6 +556,14 @@ class CustomEnv(gym.Env):
                 vehicle.fetch_and_update_battery_values()
                 self.vehicle_range_cache[vid] = self.simulation.get_remaining_range(vid)
 
+        # Mark vehicles whose battery just died — must run after SOC update and before reward/termination checks.
+        # Centralised here so reward strategies don't need to call battery_just_died() for state management.
+        newly_emptied_ids = set()
+        for vid, vehicle in self.vehicles.items():
+            if vehicle.battery_just_died():
+                newly_emptied_ids.add(vid)
+                logger.info(f"{vid}: battery empty")
+
         # Update vehicles' arrival status
         for vid in newly_arrived_ids:
             if vid in self.vehicles:
@@ -572,7 +580,8 @@ class CustomEnv(gym.Env):
             'newly_arrived_ids': newly_arrived_ids,
             'newly_removed_ids': newly_removed_ids,
             'newly_despawned_ids': newly_despawned_ids,
-            'charging_ids': charging_ids
+            'charging_ids': charging_ids,
+            'newly_emptied_ids': newly_emptied_ids,
         }
 
     def _process_initial_action(self, action):
@@ -586,7 +595,7 @@ class CustomEnv(gym.Env):
     def _calculate_step_reward(self, vehicle_status):
         """Calculate reward for the current simulation step."""
         temp_reward = self.reward_strategy.calculate_step_reward(
-            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'])
+            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'], vehicle_status['newly_emptied_ids'])
         logger.debug(f"Step reward from simulation: {temp_reward}")
         return temp_reward
 

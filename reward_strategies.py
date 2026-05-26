@@ -60,15 +60,16 @@ def charging_reward(vehicle, charging_ids):
     return 0.01
 
 class RewardStrategy:
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
         """
         Calculate the step reward.
-        
+
         Parameters:
             vehicles: List of all vehicles.
             newly_arrived_ids: List of vehicle ids that just reached their destination.
             charging_ids: List of vehicle ids that are currently charging.
-        
+            newly_emptied_ids: Set of vehicle ids whose battery just ran empty this step.
+
         Returns:
             A step reward value.
         """
@@ -127,16 +128,16 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
     - Illegal charging actions (vehicle doesn't exist anymore or is past the charging station)
     - Unnecessary charging actions
     """
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
         reward = 0
 
         for vehicle in vehicles.values():
             vehicle_is_at_destination = vehicle.arrived
             vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
-            
-            if vehicle.battery_just_died():
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -100)")
-                reward += -100
+
+            if vehicle.vehicle_id in newly_emptied_ids:
+                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -1)")
+                reward += -1
             elif vehicle_has_just_reached_destination:
                 logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
                 reward += 10
@@ -162,12 +163,12 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             if context.get('charging_stop_already_planned', False):
                 return 0
             if context.get('sufficient_range', False):
-                logger.info(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -100)")
-                return -100
+                logger.info(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -0.01)")
+                return -0.01
             if context.get('rerouting_exception_occurred', False):
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -100)")
-                return -100
+                logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -0.01)")
+                return -0.01
         return 0 # if action is "do nothing"
 
 class BasicRewardStrategy(RewardStrategy):
@@ -181,11 +182,7 @@ class BasicRewardStrategy(RewardStrategy):
 
     Action penalties: 0
     """
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        # This is just here to trigger the vehicle.battery_just_died() function and therefore get the info if a vehicle died during the current step
-        for vehicle in vehicles.values():
-            if vehicle.battery_just_died():
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died")
+    def calculate_step_reward(self, _vehicles, _newly_arrived_ids, _charging_ids, __newly_emptied_ids):
         return 0
 
     def calculate_final_reward(self, ttt_per_ev_mean):
@@ -238,8 +235,8 @@ class BasicWithDestinationRewardStrategy(BasicRewardStrategy):
     def __init__(self, max_allowed_ttt):
         self.max_allowed_ttt = max_allowed_ttt
 
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids)
         for vehicle in vehicles.values():
             reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
         return reward
@@ -253,8 +250,8 @@ class BasicWithChargingRewardStrategy(BasicRewardStrategy):
     Final reward: negative mean travel time (inherited).
     Action penalties: 0 (inherited).
     """
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids)
         for vehicle in vehicles.values():
             reward += charging_reward(vehicle, charging_ids)
         return reward
@@ -278,8 +275,8 @@ class BasicWithShapingStrategy(BasicRewardStrategy):
         self.congestion_threshold_m = congestion_threshold_m
         self.congestion_penalty_value = congestion_penalty_value
 
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
-        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids)
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids)
         for vehicle in vehicles.values():
             reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
             reward += charging_reward(vehicle, charging_ids)
@@ -293,7 +290,7 @@ class RewardShapingStrategy(RewardStrategy):
     def __init__(self, max_allowed_ttt):
         self.max_allowed_ttt = max_allowed_ttt
 
-    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids):
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, _newly_emptied_ids):
         reward = 0
 
         for vehicle in vehicles.values():
