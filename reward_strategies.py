@@ -50,6 +50,50 @@ def destination_reward(vehicle, newly_arrived_ids, max_allowed_ttt):
     return reward
 
 
+def relative_destination_reward(vehicle, newly_arrived_ids, scale_s):
+    """Return the overhead penalty for a vehicle that just arrived, 0 otherwise.
+
+    Reward = -(actual_ttt - ideal_ttt) / scale_s, where ideal_ttt is the free-flow travel time
+    estimate obtained from the routing API at spawn. Returns 0 if the vehicle has not just arrived
+    or if ideal_ttt is unavailable.
+    """
+    if not (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids):
+        return 0
+    ideal = vehicle.get_ideal_travel_time()
+    if ideal is None:
+        return 0
+    overhead = vehicle.get_total_travel_time() - ideal
+    logger.info(f"Vehicle {vehicle.vehicle_id} arrived: overhead={overhead:.0f}s, reward={-overhead/scale_s:.4f}")
+    return -overhead / scale_s
+
+
+def battery_penalty(vehicle, newly_emptied_ids, penalty=1.0):
+    """Return a penalty if the vehicle's battery just died this step, 0 otherwise.
+
+    Args:
+        penalty: Magnitude of the penalty (returned as negative). Default 1.0.
+                 Increase relative to the expected charging overhead to widen the
+                 incentive gap; a 5-7× ratio over typical overhead is a good starting point.
+    """
+    if vehicle.vehicle_id not in newly_emptied_ids:
+        return 0
+    logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (penalty -{penalty})")
+    return -penalty
+
+
+def illegal_action_penalty(vehicle, context):
+    """Return a penalty if the agent recommended an unreachable charging station, 0 otherwise."""
+    action = context.get('action')
+    if action not in (1, 2, 3, 4):
+        return 0
+    if context.get('charging_stop_already_planned', False):
+        return 0
+    if context.get('rerouting_exception_occurred', False):
+        logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -0.01)")
+        return -0.01
+    return 0
+
+
 def charging_reward(vehicle, charging_ids):
     """Return the per-step reward for a vehicle that is charging with insufficient range, 0 otherwise."""
     if vehicle.vehicle_id not in charging_ids:
@@ -332,21 +376,21 @@ class RelativeDestinationStrategy(RewardStrategy):
 
     Args:
         scale_s: Divisor in seconds to normalize the overhead. Default 3000 s (~50 min charging
-                 stop = reward -1, same scale as the battery penalty).
+                 stop = reward -1 at default battery_penalty_value).
+        battery_penalty_value: Magnitude of the penalty when a vehicle's battery runs empty.
+                               Should be significantly larger than the typical charging overhead
+                               reward to give a clear incentive. Default 3.0 (~7× a typical
+                               1300 s charging stop overhead at scale_s=3000).
     """
-    def __init__(self, scale_s=3000):
+    def __init__(self, scale_s=3000, battery_penalty_value=3.0):
         self.scale_s = scale_s
+        self.battery_penalty_value = battery_penalty_value
 
     def calculate_step_reward(self, vehicles, newly_arrived_ids, _charging_ids, newly_emptied_ids):
         reward = 0
         for vehicle in vehicles.values():
-            if newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids:
-                ideal = vehicle.get_ideal_travel_time()
-                if ideal is not None:
-                    overhead = vehicle.get_total_travel_time() - ideal
-                    reward += -overhead / self.scale_s
-                    logger.info(f"Vehicle {vehicle.vehicle_id} arrived: overhead={overhead:.0f}s, reward={-overhead/self.scale_s:.4f}")
-            reward += battery_penalty(vehicle, newly_emptied_ids)
+            reward += relative_destination_reward(vehicle, newly_arrived_ids, self.scale_s)
+            reward += battery_penalty(vehicle, newly_emptied_ids, self.battery_penalty_value)
         return reward
 
     def calculate_final_reward(self, _ttt_per_ev_mean):

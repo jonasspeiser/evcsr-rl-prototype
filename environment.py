@@ -21,7 +21,7 @@ class CustomEnv(gym.Env):
     OPTIONAL_OBS_FEATURES = frozenset({"simulation_time", "station_assignment_counts"})
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", congestion_kwargs=None, start_soc_bounds=None, obs_features=None):
+                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_kwargs=None, start_soc_bounds=None, obs_features=None):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -34,18 +34,17 @@ class CustomEnv(gym.Env):
             longest_route_duration (int, optional): The maximum duration of a route in seconds. Used for some reward strategies and episode truncation in scenarios with random data generation. If an episode in a random data scenario exceeds this duration, the episode is truncated.
             non_observable_vehicles (int, optional): The number of non-observable vehicles (i.e. not observable by the agent) to spawn in the simulation.
             random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
-            congestion_kwargs (dict, optional): Configuration for congestion-related logic. Affects both the
-                reward strategy (penalty magnitude) and the observation (station_assignment_counts window).
-                Supported keys:
+            reward_kwargs (dict, optional): Scalar parameters forwarded to the reward strategy and
+                observation logic. Supported keys:
                     - "congestion_threshold_m" (int): Distance window in meters within which two vehicles
                       heading to the same station are considered to arrive concurrently. Used by
-                      BasicWithCongestionPenaltyStrategy and station_assignment_counts. Default: 33600 m
-                      (≈ 100 km/h × 20 min charging stop).
-                    - "congestion_penalty" (float): Penalty budget per routing decision applied by
-                      BasicWithCongestionPenaltyStrategy. Automatically divided by vehicles_to_spawn
-                      so the per-conflict penalty scales down with fleet size, keeping the
-                      penalty-to-episode-reward ratio consistent across different vehicle counts. Default: 1.0.
-                Defaults to None (strategy and observation use their own defaults).
+                      congestion-penalty strategies and station_assignment_counts. Default: 36000 m.
+                    - "congestion_penalty" (float): Penalty budget per routing decision for congestion-
+                      penalty strategies. Automatically divided by vehicles_to_spawn so the per-conflict
+                      penalty scales down with fleet size. Default: 1.0.
+                    - "battery_penalty_value" (float): Magnitude of the penalty when a vehicle's battery
+                      runs empty. Used by RelativeDestination strategies. Default: 3.0.
+                Defaults to None (all strategy parameters use their own defaults).
             obs_features (set, optional): Set of optional observation keys to include. Supported values:
                 "simulation_time", "station_assignment_counts". Defaults to None (no optional features included).
         """
@@ -124,10 +123,10 @@ class CustomEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         self.episode_count = 0
-        self.congestion_threshold_m = (congestion_kwargs or {}).get('congestion_threshold_m')
+        self.congestion_threshold_m = (reward_kwargs or {}).get('congestion_threshold_m')
 
         # Instantiate the reward strategy based on reward_strategy.
-        kwargs = congestion_kwargs or {}
+        kwargs = reward_kwargs or {}
         if reward_strategy == "basic":
             self.reward_strategy = BasicRewardStrategy()
         elif reward_strategy == "basicCongestion":

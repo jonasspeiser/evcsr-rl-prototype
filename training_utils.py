@@ -216,7 +216,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -241,9 +241,9 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         longest_route_duration (int, optional): The maximum route duration in seconds for the given street network. Used for episode truncation and as the upper bound in the shaping reward. Defaults to the value returned by get_longest_route_duration(street_network).
         use_wandb (bool, optional): Whether to log training with Weights & Biases. Defaults to False.
         wandb_entity (str, optional): The Weights & Biases entity (project/team) to log under, if use_wandb is True. Defaults to None.
-        congestion_kwargs (dict, optional): Configuration for congestion-related logic, affecting both the reward strategy
-            and the observation. Supported keys: "congestion_threshold_m" (distance window in meters, default 33600),
-            "congestion_penalty" (penalty per conflicting vehicle, default 1.0). Defaults to None (built-in defaults apply).
+        reward_kwargs (dict, optional): Scalar parameters forwarded to the reward strategy and observation
+            logic. Supported keys: "congestion_threshold_m", "congestion_penalty", "battery_penalty_value".
+            Defaults to None (all strategy parameters use their own defaults).
         start_soc_bounds (tuple, optional): (min_soc_wh, max_soc_wh) override for vehicle starting SOC. Defaults to None (uses value from the street network config).
         obs_features (set, optional): Set of optional observation keys to include. Defaults to None (no optional features included).
         use_custom_extractor (bool, optional): Whether to use the DeepSets-based EVChargingFeatureExtractor.
@@ -276,7 +276,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -307,7 +307,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "max_vehicles": max_vehicles,
         "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
-        "congestion_kwargs": congestion_kwargs,
+        "reward_kwargs": reward_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
@@ -340,7 +340,9 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     ent_coef = config.get("ent_coef", 0.0)
     max_vehicles = config.get("max_vehicles")
     longest_route_duration = config.get("longest_route_duration") or get_episode_truncation_limit(street_network, n_vehicles)
-    congestion_kwargs = config.get("congestion_kwargs")
+    reward_kwargs = config.get("reward_kwargs")
+    if reward_kwargs is None and config.get("congestion_kwargs") is not None:
+        raise KeyError("run_config.json uses the old key 'congestion_kwargs' — rename it to 'reward_kwargs'.")
     start_soc_bounds = config.get("start_soc_bounds")
     obs_features = config.get("obs_features")
     use_custom_extractor = config.get("use_custom_extractor", False)
@@ -367,7 +369,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -392,7 +394,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "max_vehicles": max_vehicles,
         "longest_route_duration": longest_route_duration,
         "execution_context": execution_context,
-        "congestion_kwargs": congestion_kwargs,
+        "reward_kwargs": reward_kwargs,
         "start_soc_bounds": start_soc_bounds,
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
@@ -453,7 +455,9 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     training_config = _load_run_config(model_load_path) if model_load_path else {}
     max_vehicles = training_config.get("max_vehicles")
     longest_route_duration = longest_route_duration or training_config.get("longest_route_duration") or get_episode_truncation_limit(street_network, n_vehicles)
-    congestion_kwargs = training_config.get("congestion_kwargs")
+    reward_kwargs = training_config.get("reward_kwargs")
+    if reward_kwargs is None and training_config.get("congestion_kwargs") is not None:
+        raise KeyError("run_config.json uses the old key 'congestion_kwargs' — rename it to 'reward_kwargs'.")
     start_soc_bounds = start_soc_bounds or training_config.get("start_soc_bounds")
     obs_features = training_config.get("obs_features")
     metadata = {
@@ -488,7 +492,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
@@ -534,7 +538,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         deterministic=deterministic,
     )
 
-def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, congestion_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
+def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
     This function trains a new model using the specified algorithm and policy,
@@ -563,9 +567,9 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
             Defaults to 50.
         ent_coef (float, optional): Entropy regularization coefficient for PPO/A2C. Defaults to 0.0.
         longest_route_duration (int, optional): The maximum route duration in seconds for the given street network. Passed to both train_model and evaluate_model. Used for episode truncation and as the upper bound in the shaping reward. Defaults to get_longest_route_duration(street_network).
-        congestion_kwargs (dict, optional): Configuration for congestion-related logic, affecting both the reward strategy
-            and the observation. Supported keys: "congestion_threshold_m" (distance window in meters, default 33600),
-            "congestion_penalty" (penalty per conflicting vehicle, default 1.0). Defaults to None (built-in defaults apply).
+        reward_kwargs (dict, optional): Scalar parameters forwarded to the reward strategy and observation
+            logic. Supported keys: "congestion_threshold_m", "congestion_penalty", "battery_penalty_value".
+            Defaults to None (all strategy parameters use their own defaults).
         start_soc_bounds (tuple, optional): (min_soc_wh, max_soc_wh) override for vehicle starting SOC. Defaults to None (uses value from the street network config).
         obs_features (set, optional): Set of optional observation keys to include. Supports any combination of {"simulation_time", "station_assignment_counts"}. Defaults to None (no optional features included).
         use_custom_extractor (bool, optional): Whether to use the DeepSets-based EVChargingFeatureExtractor. Defaults to False.
@@ -577,7 +581,7 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     """
 
     # train new model
-    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, longest_route_duration=longest_route_duration, congestion_kwargs=congestion_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features, use_custom_extractor=use_custom_extractor)
+    model_path = train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles=n_vehicles, n_training_units=n_training_units, n_noevs=n_noevs, max_vehicles=max_vehicles, execution_context=execution_context, random_seed=random_seed_training, ent_coef=ent_coef, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features, use_custom_extractor=use_custom_extractor)
     # evaluate with random and greedy
     model_evaluation_path = evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=model_path, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
     nocharge_evaluation_path = evaluate_model(scenario, "ACTION0", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
@@ -596,7 +600,7 @@ if __name__ == "__main__":
     #     version_tag=get_git_version(),
     #     reward_strategy="basic",
     #     obs_features={"simulation_time", "station_assignment_counts"}, 
-    #     congestion_kwargs={"congestion_threshold_m": 33600, "congestion_penalty": 500.0},
+    #     reward_kwargs={"congestion_threshold_m": 33600, "congestion_penalty": 500.0},
     #     street_network="straight_120km",
     #     n_vehicles=5,
     #     n_noevs=0,
@@ -608,37 +612,43 @@ if __name__ == "__main__":
     #     execution_context="local",
     # )
 
-    # train_model(
-    #     scenario="same_route",
-    #     algorithm="PPO",
-    #     policy="MultiInputPolicy",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight_100km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_training_units=100,
-    #     use_wandb=False,
-    #     wandb_entity="evcs-rl"
-    # )
-
-    further_train_model(
-        model_load_path=get_latest_model(),
-        max_training_hours=1.5,
-        n_training_units=10_000_000,  # effectively unlimited further training, the run will be stopped by max_training_hours or manual interruption
-        checkpoint_freq=15_000,
-        execution_context="local"
+    train_model(
+        algorithm="PPO",
+        reward_strategy="relativeDestination",
+        policy="MultiInputPolicy",
+        version_tag=get_git_version(),
+        scenario="all_random",
+        street_network="straight_120km",
+        obs_features={"simulation_time"},
+        reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1},
+        use_custom_extractor=False,
+        n_vehicles=20,
+        n_noevs=0,
+        max_training_hours=0.4,
+        n_training_units=10_000_000,
+        ent_coef=0.01,
+        use_wandb=False,
+        wandb_entity="evcs-rl"
     )
 
+    # further_train_model(
+    #     model_load_path=get_latest_model(),
+    #     # model_load_path="runs/2026-05-19_14-32-08_pid1183697_v1.3.2-1-gdfd46de_basic_all_random_straight_120km_PPO/2026-05-21_12-34-34_pid2005555_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO.zip",
+    #     max_training_hours=0.5,
+    #     n_training_units=10_000_000,  # effectively unlimited further training, the run will be stopped by max_training_hours or manual interruption
+    #     # checkpoint_freq=15_000,
+    #     execution_context="local"
+    # )
+
     # evaluate_model_with_config(
-    #     # model_load_path=get_latest_model(),
-    #     model_load_path="runs/2026-03-27_17-08-17_v1.1.0-1-g4b25372_basicCongestion_same_route_straight_120km_PPO/2026-03-28_09-52-03_v1.1.0-1-g4b25372_basicCongestion_same_route_straight_120km_PPO.zip",
+    #     model_load_path=get_latest_model(),
+    #     # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
     #     n_episodes=10,
     #     # longest_route_duration=6_000,
     #     execution_context="local",
     #     # render_mode="human",
     #     random_seed=54321,
-    #     deterministic=False
+    #     deterministic=True,
     # )
 
     # evaluate_model(
@@ -648,7 +658,7 @@ if __name__ == "__main__":
     #     version_tag=get_git_version(),
     #     reward_strategy="basic",
     #     street_network="straight_120km",
-    #     n_vehicles=5,
+    #     n_vehicles=20,
     #     n_noevs=0,
     #     n_episodes=10,
     #     # longest_route_duration=30_000,
