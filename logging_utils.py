@@ -130,12 +130,11 @@ class CustomTensorboardCallback(BaseCallback):
         """Called at every step during training to update Tensorboard metrics."""
         self.logger_rl.debug("Agent Step {}".format(self.num_timesteps))
 
-        # Retrieve the first environment (suitable for vectorized envs)
-        env = self.training_env.envs[0]
-
         if self.locals['dones'][0]:  # If an episode ended ("done")
-            # Gather metrics from the environment
-            metrics = self.get_metrics(env)
+            # Read episode metrics from infos[0] (injected by CustomEnv.step() before
+            # returning, so they survive the VecEnv auto-reset that fires before this callback).
+            ep_metrics = self.locals.get('infos', [{}])[0].get('_episode_metrics', {})
+            metrics = {f"env/{name}": ep_metrics[name] for name in self.METRIC_NAMES if name in ep_metrics}
             wandb_payload = {}
 
             # Update each metric's buffer, calculate and record each metric's mean over a rolling time window (rtw) 

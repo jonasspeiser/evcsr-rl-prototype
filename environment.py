@@ -307,6 +307,24 @@ class CustomEnv(gym.Env):
             self.charging_start_range_m_mean = None
 
 
+    def _get_episode_metrics(self):
+        """Bundle per-episode summary stats into a plain dict for external consumers.
+
+        Called once at episode end and stored in the step() info dict so that
+        the SB3 training callback can read the values from infos[0] before the
+        VecEnv auto-reset discards the episode state.
+        """
+        names = [
+            "charging_stops_per_episode_mean",
+            "global_ttt", "global_ttt_only_terminated",
+            "ttt_per_ev_mean", "ttt_per_ev_mean_only_terminated",
+            "cumulated_waiting_time", "cwt_per_ev_mean", "cumulated_waiting_time_only_terminated",
+            "empty_vehicles_per_episode", "final_simulation_time",
+            "arrival_soc_wh_mean", "arrival_range_m_mean",
+            "charging_start_soc_wh_mean", "charging_start_range_m_mean",
+        ]
+        return {n: getattr(self, n) for n in names if getattr(self, n, None) is not None}
+
     def _add_non_observable_vehicles(self):
         """
         Adds non-observable vehicles to the simulation using the data provider.
@@ -816,6 +834,9 @@ class CustomEnv(gym.Env):
             # Handle episode termination
             if termination_status['terminated'] or termination_status['truncated']:
                 accumulated_reward += self._handle_episode_termination(termination_status)
+                if info is None:
+                    info = self._get_info()
+                info["_episode_metrics"] = self._get_episode_metrics()
                 break
             
             # Advance simulation and handle despawned active vehicles
