@@ -614,7 +614,7 @@ if __name__ == "__main__":
 
     train_model(
         algorithm="PPO",
-        reward_strategy="relativeDestination",
+        reward_strategy="basicRelativeDestination",
         policy="MultiInputPolicy",
         version_tag=get_git_version(),
         scenario="all_random",
@@ -624,7 +624,7 @@ if __name__ == "__main__":
         use_custom_extractor=False,
         n_vehicles=20,
         n_noevs=0,
-        max_training_hours=0.4,
+        max_training_hours=0.1,
         n_training_units=10_000_000,
         ent_coef=0.01,
         use_wandb=False,

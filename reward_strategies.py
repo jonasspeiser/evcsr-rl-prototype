@@ -264,6 +264,94 @@ class BasicWithCongestionPenaltyStrategy(BasicRewardStrategy):
     def calculate_action_penalty(self, vehicle, context):
         return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty)
 
+class DestinationRewardStrategy(RewardStrategy):
+    """
+    Reward strategy based solely on per-arrival destination reward; no final TTT reward.
+
+    Step reward: destination_reward per vehicle that just arrived.
+    Final reward: 0.
+    Action penalties: 0.
+
+    Args:
+        max_allowed_ttt: Upper bound on travel time (seconds). A vehicle arriving in less time
+            yields a positive reward; one exceeding it yields a negative reward.
+    """
+    def __init__(self, max_allowed_ttt):
+        self.max_allowed_ttt = max_allowed_ttt
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, _charging_ids, _newly_emptied_ids):
+        reward = 0
+        for vehicle in vehicles.values():
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+        return reward
+
+    def calculate_final_reward(self, _ttt_per_ev_mean):
+        return 0
+
+    def calculate_action_penalty(self, _vehicle, _context):
+        return 0
+
+
+class DestinationWithBatteryPenaltyStrategy(RewardStrategy):
+    """
+    Destination reward combined with a penalty for empty batteries; no final TTT reward.
+
+    Step reward: destination_reward per arrived vehicle, battery_penalty per vehicle whose battery died.
+    Final reward: 0.
+    Action penalties: 0.
+
+    Args:
+        max_allowed_ttt: Upper bound on travel time (seconds).
+    """
+    def __init__(self, max_allowed_ttt):
+        self.max_allowed_ttt = max_allowed_ttt
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, _charging_ids, newly_emptied_ids):
+        reward = 0
+        for vehicle in vehicles.values():
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+            reward += battery_penalty(vehicle, newly_emptied_ids)
+        return reward
+
+    def calculate_final_reward(self, _ttt_per_ev_mean):
+        return 0
+
+    def calculate_action_penalty(self, _vehicle, _context):
+        return 0
+
+
+class DestinationWithBatteryCongestionStrategy(RewardStrategy):
+    """
+    Destination reward, battery penalty, and congestion penalty; no final TTT reward.
+
+    Step reward: destination_reward per arrived vehicle, battery_penalty per vehicle whose battery died.
+    Final reward: 0.
+    Action penalties: congestion_penalty per conflicting vehicle heading to the same station.
+
+    Args:
+        max_allowed_ttt: Upper bound on travel time (seconds).
+        congestion_threshold_m: Distance window within which two vehicles are considered to conflict.
+        congestion_penalty_value: Penalty applied per conflicting vehicle.
+    """
+    def __init__(self, max_allowed_ttt, congestion_threshold_m=36000, congestion_penalty_value=1.0):
+        self.max_allowed_ttt = max_allowed_ttt
+        self.congestion_threshold_m = congestion_threshold_m
+        self.congestion_penalty_value = congestion_penalty_value
+
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, _charging_ids, newly_emptied_ids):
+        reward = 0
+        for vehicle in vehicles.values():
+            reward += destination_reward(vehicle, newly_arrived_ids, self.max_allowed_ttt)
+            reward += battery_penalty(vehicle, newly_emptied_ids)
+        return reward
+
+    def calculate_final_reward(self, _ttt_per_ev_mean):
+        return 0
+
+    def calculate_action_penalty(self, vehicle, context):
+        return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty_value)
+
+
 class BasicWithDestinationRewardStrategy(BasicRewardStrategy):
     """
     Extends BasicRewardStrategy with a per-arrival destination reward.
@@ -328,6 +416,18 @@ class BasicWithShapingStrategy(BasicRewardStrategy):
 
     def calculate_action_penalty(self, vehicle, context):
         return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty_value)
+
+
+class BasicWithShapingAndIllegalPenaltyStrategy(BasicWithShapingStrategy):
+    """
+    Extends BasicWithShapingStrategy with a penalty for recommending unreachable charging stations.
+
+    Step reward: destination_reward + charging_reward per vehicle (inherited).
+    Final reward: negative mean travel time (inherited).
+    Action penalties: congestion_penalty (inherited) + illegal_action_penalty.
+    """
+    def calculate_action_penalty(self, vehicle, context):
+        return super().calculate_action_penalty(vehicle, context) + illegal_action_penalty(vehicle, context)
 
 
 class RewardShapingStrategy(RewardStrategy):
@@ -398,3 +498,70 @@ class RelativeDestinationStrategy(RewardStrategy):
 
     def calculate_action_penalty(self, _vehicle, _context):
         return 0
+
+
+class BasicRelativeDestinationStrategy(RelativeDestinationStrategy):
+    """
+    Extends RelativeDestinationStrategy with a final negative mean travel time reward.
+
+    Step reward: -(overhead / scale_s) per arrived vehicle; battery_penalty per dead vehicle (inherited).
+    Final reward: negative mean travel time per vehicle, normalized by 3000 s (same as BasicRewardStrategy).
+    Action penalties: 0 (inherited).
+    """
+    def calculate_final_reward(self, ttt_per_ev_mean):
+        return -(ttt_per_ev_mean / 3000)
+
+
+class RelativeDestinationWithChargingStrategy(RelativeDestinationStrategy):
+    """
+    Extends RelativeDestinationStrategy with a per-step reward while charging with insufficient range.
+
+    The charging reward provides dense feedback during the stop itself, helping credit assignment:
+    the agent gets a positive signal at each step it is actively charging a vehicle that needs it,
+    rather than only learning from the overhead penalty at the distant arrival event.
+
+    At scale_s=3000 and CHARGING_DURATION=1300s, the total accumulated charging reward (~+0.43)
+    roughly cancels the overhead penalty (~-0.43), making necessary charging approximately neutral
+    overall. Unnecessary charging still incurs the full overhead penalty with no charging reward.
+
+    Step reward: relative_destination_reward + charging_reward + battery_penalty (all inherited logic).
+    Final reward: 0 (inherited).
+    Action penalties: 0 (inherited).
+    """
+    def calculate_step_reward(self, vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids):
+        reward = super().calculate_step_reward(vehicles, newly_arrived_ids, charging_ids, newly_emptied_ids)
+        for vehicle in vehicles.values():
+            reward += charging_reward(vehicle, charging_ids)
+        return reward
+
+
+class RelativeDestinationWithIllegalPenaltyStrategy(RelativeDestinationStrategy):
+    """
+    Extends RelativeDestinationStrategy with a penalty for recommending unreachable charging stations.
+
+    Action penalties: illegal_action_penalty (inherited logic from illegal_action_penalty()).
+    """
+    def calculate_action_penalty(self, vehicle, context):
+        return illegal_action_penalty(vehicle, context)
+
+
+class RelativeDestinationWithCongestionStrategy(RelativeDestinationStrategy):
+    """
+    Extends RelativeDestinationStrategy with an action-time congestion penalty.
+
+    Action penalties: congestion_penalty per conflicting vehicle heading to the same station
+                      within congestion_threshold_m metres (inherited logic from congestion_penalty()).
+
+    Args:
+        scale_s: Overhead normalization divisor (inherited, default 3000 s).
+        congestion_threshold_m: Distance window in metres within which two vehicles are considered
+                                to arrive concurrently. Default 36000 m.
+        congestion_penalty_value: Penalty per conflicting vehicle. Default 1.0.
+    """
+    def __init__(self, scale_s=3000, battery_penalty_value=3.0, congestion_threshold_m=36000, congestion_penalty_value=1.0):
+        super().__init__(scale_s=scale_s, battery_penalty_value=battery_penalty_value)
+        self.congestion_threshold_m = congestion_threshold_m
+        self.congestion_penalty_value = congestion_penalty_value
+
+    def calculate_action_penalty(self, vehicle, context):
+        return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty_value)
