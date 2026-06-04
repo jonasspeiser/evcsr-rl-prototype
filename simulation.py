@@ -795,7 +795,7 @@ class Simulation():
         """
         data = self.vehicle_data.get(vehicle_id)
         if data is None:
-            logger.error(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+            logger.debug(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
             return None
         parameter_data = data.get(tc.VAR_PARAMETER_WITH_KEY, {})
         return float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None

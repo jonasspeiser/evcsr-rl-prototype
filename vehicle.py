@@ -49,7 +49,7 @@ class Vehicle:
             return
         self.battery_soc = self.simulation.update_vehicle_soc(self.vehicle_id)
         if self.battery_soc is None:
-            logger.warning(f"{self.vehicle_id}: Unwanted behaviour: Simulation responded with battery_soc=None although python flags are spawned=True, empty=False, arrived=False.")
+            logger.debug(f"{self.vehicle_id}: battery_soc=None while is_online=True — vehicle likely arrived this step before arrived flag was set.")
             return
         self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)
         self.relative_battery_soc = self.battery_soc / self.max_battery_capacity
