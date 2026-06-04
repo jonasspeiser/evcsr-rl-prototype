@@ -612,24 +612,24 @@ if __name__ == "__main__":
     #     execution_context="local",
     # )
 
-    train_model(
-        algorithm="PPO",
-        reward_strategy="basicRelativeDestination",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        scenario="all_random",
-        street_network="straight_120km",
-        obs_features={"simulation_time"},
-        reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1},
-        use_custom_extractor=False,
-        n_vehicles=20,
-        n_noevs=0,
-        max_training_hours=0.1,
-        n_training_units=10_000_000,
-        ent_coef=0.01,
-        use_wandb=False,
-        wandb_entity="evcs-rl"
-    )
+    # train_model(
+    #     algorithm="PPO",
+    #     reward_strategy="basicRelativeDestination",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     scenario="all_random",
+    #     street_network="straight_120km",
+    #     obs_features={"simulation_time"},
+    #     reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1},
+    #     use_custom_extractor=False,
+    #     n_vehicles=20,
+    #     n_noevs=0,
+    #     max_training_hours=0.1,
+    #     n_training_units=10_000_000,
+    #     ent_coef=0.01,
+    #     use_wandb=False,
+    #     wandb_entity="evcs-rl"
+    # )
 
     # further_train_model(
     #     model_load_path=get_latest_model(),
@@ -651,19 +651,19 @@ if __name__ == "__main__":
     #     deterministic=True,
     # )
 
-    # evaluate_model(
-    #     scenario="all_random",
-    #     # start_soc_bounds=(22_000, 22_000),
-    #     algorithm="BEST_GUESS",
-    #     version_tag=get_git_version(),
-    #     reward_strategy="basic",
-    #     street_network="straight_120km",
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     n_episodes=10,
-    #     # longest_route_duration=30_000,
-    #     model_load_path=None,
-    #     execution_context="local",
-    #     # render_mode="human",
-    #     random_seed=54321,
-    # )
+    evaluate_model(
+        scenario="bast",
+        # start_soc_bounds=(22_000, 22_000),
+        algorithm="GREEDY",
+        version_tag=get_git_version(),
+        reward_strategy="basic",
+        street_network="straight_120km",
+        n_vehicles=200,
+        n_noevs=0,
+        n_episodes=1,
+        # longest_route_duration=30_000,
+        model_load_path=None,
+        execution_context="local",
+        render_mode="human",
+        random_seed=54321,
+    )

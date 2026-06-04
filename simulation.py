@@ -217,7 +217,7 @@ class Simulation():
             traci.route.add(route_id, route)
 
         for vehicle_id, vehicle in vehicles_dict.items():
-            traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"])
+            traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"], depart=vehicle["depart_time"])
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
             logger.debug(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")

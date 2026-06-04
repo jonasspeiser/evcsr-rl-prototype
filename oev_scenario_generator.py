@@ -183,6 +183,13 @@ class CustomDistributionScenario(ScenarioGenerator):
                 minutes_in_seconds = self.rng.randint(0, 59) * 60
                 depart_time_list.append(hour_in_seconds + minutes_in_seconds)
         return depart_time_list
+    
+    def _select_depart_time(self, depart_time_iter):
+        """ Selects the next departure time from the given iterator. If the iterator is exhausted, it returns None."""
+        try:
+            return next(depart_time_iter)
+        except StopIteration:
+            return None
 
 class BAStDistributionScenario(CustomDistributionScenario):
     """
