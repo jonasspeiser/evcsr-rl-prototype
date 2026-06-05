@@ -60,6 +60,8 @@ class CustomEnv(gym.Env):
         self.simulation = Simulation(scenario_generator=scenario_generator, gui=gui, random_seed=random_seed, sumo_log_path=sumo_log_path, street_network=street_network, start_soc_bounds=start_soc_bounds)
         self.vehicles_to_spawn = vehicles_to_spawn
         self.max_vehicles = max_vehicles if max_vehicles is not None else vehicles_to_spawn
+        if self.vehicles_to_spawn > self.max_vehicles:
+            raise ValueError(f"vehicles_to_spawn ({vehicles_to_spawn}) must not exceed max_vehicles ({self.max_vehicles})")
 
         self.non_observable_vehicles = non_observable_vehicles
         if non_observable_vehicles:
