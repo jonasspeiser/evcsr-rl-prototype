@@ -20,7 +20,7 @@ from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 FEATURES_PER_VEHICLE = 12
 
 
-class EVChargingFeatureExtractor(BaseFeaturesExtractor):
+class VehicleSetExtractor(BaseFeaturesExtractor):
     """DeepSets-inspired feature extractor for the EV charging recommendation environment.
 
     The environment exposes a gymnasium Dict observation with three required keys and two
@@ -85,9 +85,9 @@ class EVChargingFeatureExtractor(BaseFeaturesExtractor):
         # which is what makes the representation permutation-invariant.
         self.encoder = nn.Sequential(
             nn.Linear(FEATURES_PER_VEHICLE, encoder_hidden_dim),
-            nn.ReLU(),
+            nn.Tanh(), # Chose Tanh over ReLU because the input contains -1 for unspawned vehicles/unreachable stations. ReLU would map these to zero, collapsing the distinction between "unavailable" and "zero" after the first layer.
             nn.Linear(encoder_hidden_dim, vehicle_embed_dim),
-            nn.ReLU(),
+            nn.Tanh(),
         )
 
     def forward(self, observations: dict) -> torch.Tensor:

@@ -3,7 +3,7 @@
 from environment import CustomEnv
 from network_generator import get_longest_route_duration
 from evaluation_algorithms import RandomAlgorithm, GreedyAlgorithm, FixedActionAlgorithm, Perfect5VehAlgorithm, Perfect20VehAlgorithm, PerfectXVehAlgorithm, BestGuessAlgorithm
-from feature_extractor import EVChargingFeatureExtractor
+from feature_extractor import VehicleSetExtractor
 from collections import Counter
 from stable_baselines3 import PPO, A2C, DQN
 from datetime import datetime, timezone
@@ -286,7 +286,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     if algorithm in ("PPO", "A2C"):
         algo_kwargs["ent_coef"] = ent_coef
     if use_custom_extractor:
-        algo_kwargs["policy_kwargs"] = {"features_extractor_class": EVChargingFeatureExtractor}
+        algo_kwargs["policy_kwargs"] = {"features_extractor_class": VehicleSetExtractor}
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
     model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
