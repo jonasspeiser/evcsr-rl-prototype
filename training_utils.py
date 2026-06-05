@@ -513,7 +513,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         env.close()
         log.close()
 
-def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None, deterministic=True):
+def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None, deterministic=True):
     """Evaluate a trained model, loading scenario/algorithm/etc. from its run_config.json.
 
     Returns:
@@ -526,7 +526,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, random_seed=None, re
         version_tag=get_git_version(),
         reward_strategy=config["reward_strategy"],
         street_network=config["street_network"],
-        n_vehicles=config["n_vehicles"],
+        n_vehicles=n_vehicles if n_vehicles is not None else config["n_vehicles"],
         n_noevs=config.get("n_noevs"),
         n_episodes=n_episodes,
         model_load_path=model_load_path,
@@ -640,30 +640,30 @@ if __name__ == "__main__":
     #     execution_context="local"
     # )
 
-    # evaluate_model_with_config(
-    #     model_load_path=get_latest_model(),
-    #     # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
-    #     n_episodes=10,
-    #     # longest_route_duration=6_000,
-    #     execution_context="local",
-    #     # render_mode="human",
-    #     random_seed=54321,
-    #     deterministic=True,
-    # )
-
-    evaluate_model(
-        scenario="bast",
-        # start_soc_bounds=(22_000, 22_000),
-        algorithm="GREEDY",
-        version_tag=get_git_version(),
-        reward_strategy="basic",
-        street_network="straight_120km",
-        n_vehicles=200,
-        n_noevs=0,
-        n_episodes=1,
-        # longest_route_duration=30_000,
-        model_load_path=None,
+    evaluate_model_with_config(
+        model_load_path=get_latest_model(),
+        # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
+        n_episodes=10,
+        # longest_route_duration=6_000,
         execution_context="local",
-        render_mode="human",
+        # render_mode="human",
         random_seed=54321,
+        deterministic=True,
     )
+
+    # evaluate_model(
+    #     scenario="bast",
+    #     # start_soc_bounds=(22_000, 22_000),
+    #     algorithm="GREEDY",
+    #     version_tag=get_git_version(),
+    #     reward_strategy="basic",
+    #     street_network="straight_120km",
+    #     n_vehicles=200,
+    #     n_noevs=0,
+    #     n_episodes=1,
+    #     # longest_route_duration=30_000,
+    #     model_load_path=None,
+    #     execution_context="local",
+    #     render_mode="human",
+    #     random_seed=54321,
+    # )
