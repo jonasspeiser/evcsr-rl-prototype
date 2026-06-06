@@ -25,6 +25,9 @@ source .env
 ssh-keygen -t ed25519 -f ~/.ssh/storagebox -N ""
 ssh-copy-id -s -i ~/.ssh/storagebox.pub -p 23 ${STORAGE_USER}@${STORAGE_HOST}
 
+echo "=== Installing tmux ==="
+sudo dnf install -y tmux
+
 echo "=== Setup complete! Next steps: ==="
 echo "1. tmux new -s training"
-echo "2. bash run_and_save.sh"
+echo "2. bash run_on_hetzner.sh"

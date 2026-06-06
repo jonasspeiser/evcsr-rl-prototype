@@ -77,15 +77,15 @@ TRAININGS = [
 # --- Define your FURTHER TRAINING RUNS here ---
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
-FURTHER_TRAININGS = [
-    partial(further_train_model, model_load_path=path, 
-            max_training_hours=_MAX_TRAINING_HOURS,
-            n_training_units=_N_TRAINING_UNITS,
-            # checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES), 
-            checkpoint_freq=_CHECKPOINT_FREQ,
-            )
-    for path in get_latest_n_models(4)
-]
+# FURTHER_TRAININGS = [
+#     partial(further_train_model, model_load_path=path, 
+#             max_training_hours=_MAX_TRAINING_HOURS,
+#             n_training_units=_N_TRAINING_UNITS,
+#             # checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES), 
+#             checkpoint_freq=_CHECKPOINT_FREQ,
+#             )
+#     for path in get_latest_n_models(4)
+# ]
 
 # --- Define your EVALUATION RUNS here ---
 # (given parameters override the ones in the base evaluation configuration)
