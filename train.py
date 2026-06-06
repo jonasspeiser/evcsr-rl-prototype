@@ -18,25 +18,26 @@ from multiprocessing import Process
 
 from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, training_units_to_steps
 
-_N_VEHICLES = 20
-_MAX_TRAINING_HOURS = 1.5 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_N_VEHICLES = 5
+_MAX_TRAINING_HOURS = 0.3 # Training duration by wall clock time. Set to None to disable time-based stopping.
 _CHECKPOINT_FREQ = 20_000 # how often the model should be saved during training (in training steps)
 _N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
 _N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
 
 BASE_TRAINING = partial(train_model,
     algorithm="PPO",
-    reward_strategy="basic",
+    reward_strategy="relativeDestination",
     policy="MultiInputPolicy",
     version_tag=get_git_version(),
     scenario="all_random",
     # start_soc_bounds=(22_000, 22_000),
     street_network="straight_120km",
     obs_features={"simulation_time"},
-    reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1},
-    use_custom_extractor=False,
+    reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
+    use_custom_extractor=True,
     # longest_route_duration=28_000,
     n_vehicles=_N_VEHICLES,
+    # max_vehicles=15,
     n_noevs=0,
     max_training_hours=_MAX_TRAINING_HOURS,
     n_training_units=_N_TRAINING_UNITS,
@@ -50,7 +51,7 @@ BASE_EVAL = partial(evaluate_model,
         scenario="all_random",
         # start_soc_bounds=(22_000, 22_000),
         version_tag=get_git_version(),
-        reward_strategy="basic",
+        reward_strategy="relativeDestination",
         street_network="straight_120km",
         n_vehicles=_N_VEHICLES,
         n_noevs=0,
@@ -65,9 +66,11 @@ BASE_EVAL = partial(evaluate_model,
 # (given parameters override the ones in the base training configuration)
 
 TRAININGS = [
+    # partial(BASE_TRAINING, use_custom_extractor=False),
+    # partial(BASE_TRAINING, use_custom_extractor=True),
     partial(BASE_TRAINING, reward_strategy="relativeDestination"),
-    partial(BASE_TRAINING, reward_strategy="basicRelativeDestination"),
-    partial(BASE_TRAINING, reward_strategy="relativeDestinationIllegal"),
+    partial(BASE_TRAINING, reward_strategy="basic"),
+    # partial(BASE_TRAINING, reward_strategy="relativeDestinationIllegal"),
     partial(BASE_TRAINING, reward_strategy="relativeDestinationCharging"),
 ]
 
@@ -110,16 +113,16 @@ if __name__ == "__main__":
         import subprocess
         subprocess.run(["systemctl", "suspend"])
 
-    # run_parallel(TRAININGS)
+    run_parallel(TRAININGS)
     
-    # run_parallel(EVALS)
+    run_parallel(EVALS)
 
-    run_parallel(FURTHER_TRAININGS)
+    # run_parallel(FURTHER_TRAININGS)
 
     # Build model evals lazily after further training completes (new model paths now exist)
     MODEL_EVALS = [
-        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, random_seed=54321)
-        for path in get_latest_n_models(4)
+        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=15, random_seed=54321)
+        for path in get_latest_n_models(3)
     ]
 
     run_parallel(MODEL_EVALS)
@@ -129,4 +132,4 @@ if __name__ == "__main__":
     elapsed_time = time.perf_counter() - start_time
     print(f"Execution took {elapsed_time / 60:.2f} minutes")
 
-    suspend_system()
+    # suspend_system()
