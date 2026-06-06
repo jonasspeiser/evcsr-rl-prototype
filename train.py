@@ -18,8 +18,8 @@ from multiprocessing import Process
 
 from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, training_units_to_steps
 
-_N_VEHICLES = 5
-_MAX_TRAINING_HOURS = 0.3 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_N_VEHICLES = 20
+_MAX_TRAINING_HOURS = 9 # Training duration by wall clock time. Set to None to disable time-based stopping.
 _CHECKPOINT_FREQ = 20_000 # how often the model should be saved during training (in training steps)
 _N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
 _N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
@@ -68,9 +68,9 @@ BASE_EVAL = partial(evaluate_model,
 TRAININGS = [
     # partial(BASE_TRAINING, use_custom_extractor=False),
     # partial(BASE_TRAINING, use_custom_extractor=True),
-    partial(BASE_TRAINING, reward_strategy="relativeDestination"),
     partial(BASE_TRAINING, reward_strategy="basic"),
-    # partial(BASE_TRAINING, reward_strategy="relativeDestinationIllegal"),
+    partial(BASE_TRAINING, reward_strategy="relativeDestination"),
+    partial(BASE_TRAINING, reward_strategy="basicRelativeDestination"),
     partial(BASE_TRAINING, reward_strategy="relativeDestinationCharging"),
 ]
 
@@ -121,8 +121,8 @@ if __name__ == "__main__":
 
     # Build model evals lazily after further training completes (new model paths now exist)
     MODEL_EVALS = [
-        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=15, random_seed=54321)
-        for path in get_latest_n_models(3)
+        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=_N_VEHICLES, random_seed=54321)
+        for path in get_latest_n_models(4)
     ]
 
     run_parallel(MODEL_EVALS)
