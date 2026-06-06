@@ -9,7 +9,7 @@ sudo dnf install -y sumo
 
 echo "=== Installing uv ==="
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env  # Make uv available in current shell
+export PATH="$HOME/.local/bin:$PATH"  # Make uv available in current shell
 
 echo "=== Installing dependencies ==="
 uv sync
