@@ -9,15 +9,13 @@ if [ ! -f .env ]; then
 fi
 source .env
 
-REMOTE_DIR="sumo_results/runs_$(date +%Y%m%d_%H%M)"
-
 echo "=== Starte Training ==="
 source .venv/bin/activate
 python train.py
 
 echo "=== Training abgeschlossen – lade ./runs hoch ==="
 rsync -avz -e "ssh -i ~/.ssh/storagebox -p 23" \
-  ./runs/ ${STORAGE_USER}@${STORAGE_HOST}:/${REMOTE_DIR}/
+  ./runs/ ${STORAGE_USER}@${STORAGE_HOST}:sumo_results/runs_$(date +%Y%m%d_%H%M)/
 
 echo "=== Upload abgeschlossen – lösche Server ==="
 SERVER_ID=$(curl -s http://169.254.169.254/hetzner/v1/metadata/instance-id)
