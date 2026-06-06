@@ -23,7 +23,7 @@ fi
 source .env
 
 ssh-keygen -t ed25519 -f ~/.ssh/storagebox -N ""
-ssh-copy-id -s -p 23 ${STORAGE_USER}@${STORAGE_HOST}
+ssh-copy-id -s -i ~/.ssh/storagebox.pub -p 23 ${STORAGE_USER}@${STORAGE_HOST}
 
 echo "=== Setup complete! Next steps: ==="
 echo "1. tmux new -s training"
