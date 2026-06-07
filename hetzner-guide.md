@@ -8,10 +8,10 @@ git clone https://<token>@github.com/user/repo.git && cd repo
 cp .env.example .env && nano .env
 bash setup.sh        # enters storage box password once
 tmux new -s training
-bash run_and_save.sh # Ctrl+B, D to detach
+bash run_on_hetzner.sh # Ctrl+B, D to detach
 ```
 
-After training completes, `run_and_save.sh` uploads `./runs` to the storage box and deletes the server automatically.
+After training completes, `run_on_hetzner.sh` uploads `./runs` to the storage box and deletes the server automatically.
 
 ---
 
