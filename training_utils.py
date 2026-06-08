@@ -131,8 +131,6 @@ def get_latest_n_models(n: int, runs_dir="runs") -> list[str]:
         e for e in (os.path.join(runs_dir, d) for d in os.listdir(runs_dir))
         if os.path.isdir(e)
     )
-    if not run_dirs:
-        raise FileNotFoundError(f"No runs found in {runs_dir!r}")
     results = []
     for run_dir in reversed(run_dirs):
         models = sorted(
@@ -143,7 +141,11 @@ def get_latest_n_models(n: int, runs_dir="runs") -> list[str]:
             results.append(models[-1])
         if len(results) == n:
             return results
-    raise FileNotFoundError(f"Only {len(results)} model(s) found in {runs_dir!r}, requested {n}")
+    if not results:
+        print(f"Warning: no models found in {runs_dir!r}")
+    elif len(results) < n:
+        print(f"Warning: requested {n} models but only {len(results)} found in {runs_dir!r}")
+    return results
 
 def get_git_version():
     try:
