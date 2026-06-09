@@ -134,8 +134,11 @@ class CustomEnv(gym.Env):
         elif reward_strategy == "basicCongestion":
             # Normalize congestion_penalty by fleet size
             raw_penalty = kwargs.get("congestion_penalty", 1.0)
-            normalized_kwargs = {**kwargs, "congestion_penalty": raw_penalty / self.vehicles_to_spawn}
-            self.reward_strategy = BasicWithCongestionPenaltyStrategy(**normalized_kwargs)
+            normalized_penalty = raw_penalty / self.vehicles_to_spawn
+            self.reward_strategy = BasicWithCongestionPenaltyStrategy(
+                congestion_threshold_m=kwargs.get("congestion_threshold_m", 36000),
+                congestion_penalty=normalized_penalty,
+            )
         elif reward_strategy == "destination":
             self.reward_strategy = DestinationRewardStrategy(max_allowed_ttt=longest_route_duration)
         elif reward_strategy == "destinationBattery":
