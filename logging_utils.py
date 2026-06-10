@@ -323,12 +323,6 @@ def _setup_logging(algorithm, version_tag, reward_strategy, scenario, street_net
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + f"_pid{os.getpid()}"
     log_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm, f"{n_vehicles}OEV", f"{n_noevs}NOEV", training_or_evaluation])
     new_model_id = "_".join([current_time, version_tag, reward_strategy, scenario, street_network, algorithm])
-    # if a model path is given, i.e. an existing model is evaluated or trained further
-    if model_load_path is not None:
-        current_run_dir = model_load_path.split("/")[-2] #.rsplit(".", 1)[0] # Extract directory from model_load_path
-    else:
-        current_run_dir = new_model_id
-    
     # Set up non existing directories
     match execution_context:
         case "local":
@@ -338,7 +332,13 @@ def _setup_logging(algorithm, version_tag, reward_strategy, scenario, street_net
         case _:
             raise ValueError(f"Invalid execution context {execution_context}. Must be 'local' or 'colab'.")
 
-    run_dir = f"{root}/runs/{current_run_dir}"
+    # if a model path is given, i.e. an existing model is evaluated or trained further
+    if model_load_path is not None:
+        # Preserve the original folder structure so further-trained models and evaluations
+        # are stored alongside the model they originated from.
+        run_dir = os.path.dirname(os.path.abspath(model_load_path))
+    else:
+        run_dir = f"{root}/runs/{new_model_id}"
     log_dir = f"{run_dir}/{training_or_evaluation}"
     os.makedirs(run_dir, exist_ok=True)
     os.makedirs(log_dir, exist_ok=True)
