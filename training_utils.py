@@ -542,6 +542,27 @@ def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, ran
         deterministic=deterministic,
     )
 
+def get_models_from_folder(folder_path) -> list[str]:
+    """Return paths to the .zip model files from every run directory inside folder_path.
+
+    Args:
+        folder_path (str): Path to a folder containing run directories (e.g. "runs/_runs_20260610_1759").
+
+    Returns:
+        List of .zip model paths, sorted alphabetically by run directory name.
+    """
+    folder = os.path.abspath(folder_path)
+    results = []
+    for run_dir in sorted(os.listdir(folder)):
+        run_path = os.path.join(folder, run_dir)
+        if not os.path.isdir(run_path):
+            continue
+        zips = sorted(f for f in os.listdir(run_path) if f.endswith(".zip"))
+        if zips:
+            results.append(os.path.join(run_path, zips[-1]))
+    return results
+
+
 def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed_training=None, random_seed_eval=123, eval_episodes=50, ent_coef=0.0, longest_route_duration=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False):
     """Trains a reinforcement learning model and evaluates it against baseline algorithms.
 
@@ -616,24 +637,24 @@ if __name__ == "__main__":
     #     execution_context="local",
     # )
 
-    train_model(
-        algorithm="PPO",
-        reward_strategy="basicCongestion",
-        policy="MultiInputPolicy",
-        version_tag=get_git_version(),
-        scenario="all_random",
-        street_network="straight_120km",
-        obs_features={"simulation_time", "station_assignment_counts"},
-        reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
-        use_custom_extractor=True,
-        n_vehicles=50,
-        n_noevs=0,
-        max_training_hours=0.1,
-        n_training_units=10_000_000,
-        ent_coef=0.1,
-        use_wandb=False,
-        wandb_entity="evcs-rl"
-    )
+    # train_model(
+    #     algorithm="PPO",
+    #     reward_strategy="basicCongestion",
+    #     policy="MultiInputPolicy",
+    #     version_tag=get_git_version(),
+    #     scenario="all_random",
+    #     street_network="straight_120km",
+    #     obs_features={"simulation_time", "station_assignment_counts"},
+    #     reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
+    #     use_custom_extractor=True,
+    #     n_vehicles=50,
+    #     n_noevs=0,
+    #     max_training_hours=0.1,
+    #     n_training_units=10_000_000,
+    #     ent_coef=0.1,
+    #     use_wandb=False,
+    #     wandb_entity="evcs-rl"
+    # )
 
     # further_train_model(
     #     model_load_path=get_latest_model(),
@@ -654,7 +675,7 @@ if __name__ == "__main__":
     #     random_seed=54321,
     #     deterministic=True,
     # )
-
+    
     # evaluate_model(
     #     scenario="bast",
     #     # start_soc_bounds=(22_000, 22_000),
@@ -671,3 +692,6 @@ if __name__ == "__main__":
     #     render_mode="human",
     #     random_seed=54321,
     # )
+
+    for path in get_models_from_folder("runs/_runs_20260610_1759"):
+        evaluate_model_with_config(model_load_path=path, n_episodes=10, random_seed=54321)

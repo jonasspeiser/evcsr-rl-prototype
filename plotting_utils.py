@@ -34,6 +34,28 @@ def get_last_x_metrics_files(n_files,runs_dir="runs"):
 
     return metrics_files
 
+def get_metrics_files_from_folder(folder_path):
+    """Return all metrics files from every run directory inside folder_path.
+
+    Args:
+        folder_path (str or Path): Path to a folder containing run directories
+            (e.g. "runs/_runs_20260610_1759").
+
+    Returns:
+        List of Path objects, one per run that has an evaluation/metrics*.json file.
+    """
+    folder = Path(folder_path)
+    metrics_files = []
+    for run_dir in sorted(folder.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        eval_dir = run_dir / "evaluation"
+        metrics = list(eval_dir.glob("metrics*.json")) if eval_dir.exists() else []
+        if metrics:
+            metrics_files.append(sorted(metrics)[-1])
+    return metrics_files
+
+
 def make_violinplot(data_df, metric_name, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
