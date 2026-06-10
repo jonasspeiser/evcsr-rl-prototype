@@ -462,12 +462,14 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         raise KeyError("run_config.json uses the old key 'congestion_kwargs' — rename it to 'reward_kwargs'.")
     start_soc_bounds = start_soc_bounds or training_config.get("start_soc_bounds")
     obs_features = training_config.get("obs_features")
+    use_custom_extractor = training_config.get("use_custom_extractor", False)
     metadata = {
         "timestamp": current_time,
         "algorithm": algorithm,
         "version_tag": version_tag,
         "reward_strategy": reward_strategy,
         "obs_features": sorted(obs_features) if obs_features else [],
+        "use_custom_extractor": use_custom_extractor,
         "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_episodes": n_episodes,
@@ -614,24 +616,24 @@ if __name__ == "__main__":
     #     execution_context="local",
     # )
 
-    # train_model(
-    #     algorithm="PPO",
-    #     reward_strategy="basicRelativeDestination",
-    #     policy="MultiInputPolicy",
-    #     version_tag=get_git_version(),
-    #     scenario="all_random",
-    #     street_network="straight_120km",
-    #     obs_features={"simulation_time"},
-    #     reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1},
-    #     use_custom_extractor=False,
-    #     n_vehicles=20,
-    #     n_noevs=0,
-    #     max_training_hours=0.1,
-    #     n_training_units=10_000_000,
-    #     ent_coef=0.01,
-    #     use_wandb=False,
-    #     wandb_entity="evcs-rl"
-    # )
+    train_model(
+        algorithm="PPO",
+        reward_strategy="basicCongestion",
+        policy="MultiInputPolicy",
+        version_tag=get_git_version(),
+        scenario="all_random",
+        street_network="straight_120km",
+        obs_features={"simulation_time", "station_assignment_counts"},
+        reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
+        use_custom_extractor=True,
+        n_vehicles=50,
+        n_noevs=0,
+        max_training_hours=0.1,
+        n_training_units=10_000_000,
+        ent_coef=0.1,
+        use_wandb=False,
+        wandb_entity="evcs-rl"
+    )
 
     # further_train_model(
     #     model_load_path=get_latest_model(),
@@ -642,16 +644,16 @@ if __name__ == "__main__":
     #     execution_context="local"
     # )
 
-    evaluate_model_with_config(
-        model_load_path=get_latest_model(),
-        # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
-        n_episodes=10,
-        # longest_route_duration=6_000,
-        execution_context="local",
-        # render_mode="human",
-        random_seed=54321,
-        deterministic=True,
-    )
+    # evaluate_model_with_config(
+    #     model_load_path=get_latest_model(),
+    #     # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
+    #     n_episodes=10,
+    #     # longest_route_duration=6_000,
+    #     execution_context="local",
+    #     # render_mode="human",
+    #     random_seed=54321,
+    #     deterministic=True,
+    # )
 
     # evaluate_model(
     #     scenario="bast",

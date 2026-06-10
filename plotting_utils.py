@@ -253,11 +253,12 @@ def _build_display_label(row) -> str:
     reward = row.get("reward_strategy", "")
     obs = row.get("obs_features")
     obs_tag = "-" + "-".join(sorted(obs)) if obs else ""
+    extractor_tag = "_cext" if row.get("use_custom_extractor") else ""
     # Extract pid from run directory name (e.g. "2026-03-31_16-13-08_pid927830_...")
     run_dir = row.get("_run_dir", "")
     pid_match = re.search(r"pid(\d+)", run_dir)
     pid_tag = f"_pid{pid_match.group(1)}" if pid_match else ""
-    return f"{algo}_{reward}{obs_tag}{pid_tag}"
+    return f"{algo}_{reward}{obs_tag}{extractor_tag}{pid_tag}"
 
 
 def get_algorithm_labels(filepath_list):
