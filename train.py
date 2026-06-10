@@ -18,8 +18,8 @@ from multiprocessing import Process
 
 from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, training_units_to_steps
 
-_N_VEHICLES = 50
-_MAX_TRAINING_HOURS = 8 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_N_VEHICLES = 5
+_MAX_TRAINING_HOURS = 3 # Training duration by wall clock time. Set to None to disable time-based stopping.
 _CHECKPOINT_FREQ = 20_000 # how often the model should be saved during training (in training steps)
 _N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
 _N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
@@ -29,12 +29,12 @@ BASE_TRAINING = partial(train_model,
     reward_strategy="relativeDestination",
     policy="MultiInputPolicy",
     version_tag=get_git_version(),
-    scenario="same_route",
-    start_soc_bounds=(22_000, 22_000),
+    scenario="all_random",
+    # start_soc_bounds=(22_000, 22_000),
     street_network="straight_120km",
     obs_features={"simulation_time"},
     reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
-    use_custom_extractor=True,
+    use_custom_extractor=False,
     # longest_route_duration=28_000,
     n_vehicles=_N_VEHICLES,
     # max_vehicles=15,
@@ -48,8 +48,8 @@ BASE_TRAINING = partial(train_model,
 )
 
 BASE_EVAL = partial(evaluate_model,
-        scenario="same_route",
-        start_soc_bounds=(22_000, 22_000),
+        scenario="all_random",
+        # start_soc_bounds=(22_000, 22_000),
         version_tag=get_git_version(),
         reward_strategy="relativeDestination",
         street_network="straight_120km",
@@ -68,10 +68,10 @@ BASE_EVAL = partial(evaluate_model,
 TRAININGS = [
     # partial(BASE_TRAINING, use_custom_extractor=False),
     # partial(BASE_TRAINING, use_custom_extractor=True),
-    partial(BASE_TRAINING, reward_strategy="basicCongestion", use_custom_extractor=False),
-    partial(BASE_TRAINING, reward_strategy="basicCongestion", use_custom_extractor=True),
-    partial(BASE_TRAINING, reward_strategy="relativeDestination", use_custom_extractor=False),
-    partial(BASE_TRAINING, reward_strategy="relativeDestination", use_custom_extractor=True),
+    partial(BASE_TRAINING, reward_strategy="basic"),
+    # partial(BASE_TRAINING, reward_strategy="basicCongestion"),
+    partial(BASE_TRAINING, reward_strategy="relativeDestination"),
+    # partial(BASE_TRAINING, reward_strategy="relativeDestination"),
 ]
 
 # --- Define your FURTHER TRAINING RUNS here ---

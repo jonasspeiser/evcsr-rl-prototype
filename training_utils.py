@@ -125,7 +125,7 @@ def get_latest_n_models(n: int, runs_dir="runs") -> list[str]:
     """Return paths to the .zip files from the n most recently created run directories.
 
     Directories are sorted alphabetically (timestamp prefix ensures chronological order).
-    Raises FileNotFoundError if fewer than n models are found.
+    Prints a warning and returns a shorter list if fewer than n models are found.
     """
     run_dirs = sorted(
         e for e in (os.path.join(runs_dir, d) for d in os.listdir(runs_dir))
