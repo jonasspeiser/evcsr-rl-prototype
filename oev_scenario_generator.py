@@ -169,19 +169,30 @@ class CustomDistributionScenario(ScenarioGenerator):
 
         depart_time_list = []
         # Add vehicles to the departure time list based on the relative distribution
+        hours = list(daily_rel_depart_time_distribution_dict.keys())
+        weights = list(daily_rel_depart_time_distribution_dict.values())
         for hour, rel_amount in daily_rel_depart_time_distribution_dict.items():
 
             if rel_amount > 1 or rel_amount < 0:
                 raise ValueError(f"Relative amount of vehicles for hour {hour} must be in the range [0, 1]. Found: {rel_amount}")
 
-            amount = round(rel_amount * n_vehicles)
-            print(f"Hour {hour}: {amount} vehicles (relative amount: {rel_amount})")
-
-            # Set a departure time for each vehicle in this hour
-            for _ in range(int(amount)):
-                hour_in_seconds = (hour - 1) * 3600
-                minutes_in_seconds = self.rng.randint(0, 59) * 60
-                depart_time_list.append(hour_in_seconds + minutes_in_seconds)
+        # Total vehicles for this day: n_vehicles is the daily maximum, scaled by the day's
+        # total relative traffic volume. Rounding once on the total (instead of once per hour)
+        # avoids the systematic distortion of 24 independent roundings — which previously
+        # produced 0 vehicles for every hour whenever rel_amount * n_vehicles < 0.5.
+        n_day = round(sum(weights) * n_vehicles)
+        if n_day == 0 and sum(weights) > 0:
+            logger.warning(
+                f"BASt distribution yields 0 vehicles for n_vehicles={n_vehicles} "
+                f"(total relative volume={sum(weights):.3f}). Increase n_vehicles."
+            )
+        # Assign each vehicle a departure hour, sampled proportionally to the hourly distribution.
+        sampled_hours = self.rng.choices(hours, weights=weights, k=n_day) if n_day > 0 else []
+        for hour in sampled_hours:
+            hour_in_seconds = (hour - 1) * 3600
+            minutes_in_seconds = self.rng.randint(0, 59) * 60
+            depart_time_list.append(hour_in_seconds + minutes_in_seconds)
+        depart_time_list.sort()
         return depart_time_list
     
     def _select_depart_time(self, depart_time_iter):
