@@ -796,6 +796,12 @@ class CustomEnv(gym.Env):
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
+        if len(self.vehicle_ids) > self.max_vehicles:
+            raise ValueError(
+                "Episode generated %d vehicles but max_vehicles=%d; the observation space "
+                "cannot hold this many vehicles. Increase max_vehicles in your training config."
+                % (len(self.vehicle_ids), self.max_vehicles)
+            )
         self.episode_count += 1
         logger.info("--- Episode %s started (%s vehicles) ---", self.episode_count, len(self.vehicle_ids))
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).

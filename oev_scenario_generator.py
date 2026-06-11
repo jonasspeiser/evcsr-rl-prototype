@@ -10,6 +10,7 @@ logger = logging.getLogger("rl.environment.scenario_generator")
 DEFAULT_BATTERY_MIN = 200
 DEFAULT_BATTERY_MAX = 500
 
+MIN_VEHICLES_PER_DAY = 3  # floor so low-volume days never produce degenerate episodes
 
 BAST_DISTRIBUTION_PATH = "datasets/bast_data/relatives_verkehrsaufkommen_2022.json"
 
@@ -96,29 +97,35 @@ class ScenarioGenerator():
         Returns:
             vehicles_dict (dict): A dictionary with all generated vehicles and their attributes.
         """
-        depart_time_iter = iter(self._get_depart_time_list(n_vehicles, scenario_id)) # initialize an iterator for depart times
-
+        depart_times = self._get_depart_time_list(n_vehicles, scenario_id)
         vehicles_dict = {}
 
-        for i in range(n_vehicles):
-            depart_time = self._select_depart_time( depart_time_iter) # TODO: Is depart_time already implemented in simulation? i.e. is the value we are passing here used?
-            
-            if depart_time is None:
-                print(f"Warning: No departure time available for vehicle {i}. Stopping vehicle generation.")
-                break
-            vehicle_id = f"observable_ev_{i}"
-            vehicle_type = "soulEV65"
-            route_id = self.rng.choice(routes_list)
-            battery_capacity = start_soc_bounds[1]
-            start_soc = self._select_soc(start_soc_bounds)
-            
-            vehicles_dict[vehicle_id] = {
-                "type": vehicle_type,
-                "route": route_id,
-                "capacity": battery_capacity,
-                "soc": start_soc,
-                "depart_time": depart_time
-            }
+        if depart_times:
+            # CustomDistribution/BASt path: the departure list is the single source of truth.
+            # Number of vehicles equals len(depart_times), which may differ from n_vehicles.
+            for i, depart_time in enumerate(depart_times):
+                vehicle_id = f"observable_ev_{i}"
+                vehicles_dict[vehicle_id] = {
+                    "type": "soulEV65",
+                    "route": self.rng.choice(routes_list),
+                    "capacity": start_soc_bounds[1],
+                    "soc": self._select_soc(start_soc_bounds),
+                    "depart_time": depart_time,
+                }
+        else:
+            # Base path (all_random, SameRoute): generate exactly n_vehicles.
+            # _select_depart_time on the base class always returns 0 regardless of the iterator.
+            depart_time_iter = iter(depart_times)
+            for i in range(n_vehicles):
+                depart_time = self._select_depart_time(depart_time_iter)
+                vehicle_id = f"observable_ev_{i}"
+                vehicles_dict[vehicle_id] = {
+                    "type": "soulEV65",
+                    "route": self.rng.choice(routes_list),
+                    "capacity": start_soc_bounds[1],
+                    "soc": self._select_soc(start_soc_bounds),
+                    "depart_time": depart_time,
+                }
 
         return vehicles_dict
      
@@ -180,14 +187,14 @@ class CustomDistributionScenario(ScenarioGenerator):
         # total relative traffic volume. Rounding once on the total (instead of once per hour)
         # avoids the systematic distortion of 24 independent roundings — which previously
         # produced 0 vehicles for every hour whenever rel_amount * n_vehicles < 0.5.
-        n_day = round(sum(weights) * n_vehicles)
-        if n_day == 0 and sum(weights) > 0:
-            logger.warning(
-                f"BASt distribution yields 0 vehicles for n_vehicles={n_vehicles} "
-                f"(total relative volume={sum(weights):.3f}). Increase n_vehicles."
+        total_weight = sum(weights)
+        if total_weight <= 0:
+            raise ValueError(
+                "Distribution has zero total weight for the selected day; cannot generate vehicles."
             )
+        n_day = max(MIN_VEHICLES_PER_DAY, round(total_weight * n_vehicles))
         # Assign each vehicle a departure hour, sampled proportionally to the hourly distribution.
-        sampled_hours = self.rng.choices(hours, weights=weights, k=n_day) if n_day > 0 else []
+        sampled_hours = self.rng.choices(hours, weights=weights, k=n_day)
         for hour in sampled_hours:
             hour_in_seconds = (hour - 1) * 3600
             minutes_in_seconds = self.rng.randint(0, 59) * 60
