@@ -410,9 +410,9 @@ class CustomEnv(gym.Env):
             np.ndarray: shape (1,)
         """
         return np.array(
-            [self.simulation.get_current_time_step() / self.truncate_after_n_simulation_steps],
+            [min(1.0, self.simulation.get_current_time_step() / self.truncate_after_n_simulation_steps)],
             dtype=np.float32
-        )
+        ) # Cap at 1.0 to avoid out-of-bounds values in case of simulation time exceeding truncation limit (e.g. due to observation_sampling_rate delaying episode termination).
 
     def _get_normalized_station_assignment_counts(self):
         """Return per-station count of vehicles that would arrive concurrently with the active vehicle.
