@@ -84,7 +84,7 @@ class Random_Data_Provider(Data_Provider):
     def get_non_observable_vehicle_data(self):
         vehicle_data = []
         for i in range(self.n_noevs):
-            cs_id = f"cs_{self.rng .randint(0, self.n_cs - 1)}"
+            cs_id = f"cs_{self.rng.randint(1, self.n_cs)}"  # station IDs are 1-based (cs_1..cs_n)
             begin = self.rng .randint(0, self.max_simulation_time)# spawn time in seconds after simulation start
             duration = self.rng .randint(10, 200) # charge duration in seconds
             entry_dict = {
