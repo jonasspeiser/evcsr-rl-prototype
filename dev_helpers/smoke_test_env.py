@@ -14,6 +14,7 @@ Run:  python smoke_test_env.py
 Requires SUMO (SUMO_HOME set or eclipse-sumo pip package), no torch needed.
 """
 import os, sys, traceback
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 
 PASS, FAIL = "  [PASS]", "  [FAIL]"
