@@ -349,6 +349,7 @@ version = "0.7.10"
 source = { virtual = "." }
 dependencies = [
     { name = "gymnasium" },
+    { name = "libsumo" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
@@ -364,6 +365,7 @@ dependencies = [
 dev = [
     { name = "jupyter" },
     { name = "seaborn" },
+    { name = "snakeviz" },
     { name = "wandb" },
 ]
 
@@ -371,11 +373,13 @@ dev = [
 requires-dist = [
     { name = "gymnasium", specifier = ">=1,<2" },
     { name = "jupyter", marker = "extra == 'dev'" },
+    { name = "libsumo", specifier = "==1.26.*" },
     { name = "numpy", specifier = "<3" },
     { name = "pandas", specifier = "<4" },
     { name = "pyarrow", specifier = "<24" },
     { name = "seaborn", marker = "extra == 'dev'" },
     { name = "setuptools", specifier = "<82" },
+    { name = "snakeviz", marker = "extra == 'dev'" },
     { name = "stable-baselines3", specifier = ">=2,<3" },
     { name = "sumolib", specifier = "==1.26.*" },
     { name = "tensorboard", specifier = ">=2,<3" },
@@ -962,6 +966,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/da/34/28fff3ab31ccff1fd4f6c7c7b0ceb2b6968d8ea4950663eadcb5720591a0/lark-1.3.1.tar.gz", hash = "sha256:b426a7a6d6d53189d318f2b6236ab5d6429eaf09259f1ca33eb716eed10d2905", size = 382732, upload-time = "2025-10-27T18:25:56.653Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/82/3d/14ce75ef66813643812f3093ab17e46d3a206942ce7376d31ec2d36229e7/lark-1.3.1-py3-none-any.whl", hash = "sha256:c629b661023a014c37da873b4ff58a817398d12635d3bbb2c5a03be7fe5d1e12", size = 113151, upload-time = "2025-10-27T18:25:54.882Z" },
+]
+
+[[package]]
+name = "libsumo"
+version = "1.26.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sumo-data" },
+    { name = "traci" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/be/5236f91b91dae2704eeeafd6db2d0895afeb4717358129bf3d35112d6885/libsumo-1.26.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:8645d11fce0715446a34b622bb6ac2a8bddc5076cbc1481769d6685a0b33817b", size = 67630359, upload-time = "2026-01-29T14:47:37.851Z" },
+    { url = "https://files.pythonhosted.org/packages/70/62/f8e6c7c55f47db79017cf1a4ba1cd69a68227ef5044908c7ea7665f866f7/libsumo-1.26.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:e158f6bc2f28aa70c7e2a509b81818dc1b76eaf3d18f4fc4f7b6fae6aa570a8b", size = 84950496, upload-time = "2026-01-29T14:47:44.749Z" },
+    { url = "https://files.pythonhosted.org/packages/47/ce/5a0431b478a19e5b4632213a762ded397d46f381da48cddfec73e8654efe/libsumo-1.26.0-cp311-cp311-win_amd64.whl", hash = "sha256:3cae6d7698501d7489e9402fa72dc5d1951aacfff5060ee59e76bc2c37c727dc", size = 4679921, upload-time = "2026-01-29T14:50:05.952Z" },
 ]
 
 [[package]]
@@ -1825,6 +1843,18 @@ wheels = [
 ]
 
 [[package]]
+name = "snakeviz"
+version = "2.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "tornado" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/04/06/82f56563b16d33c2586ac2615a3034a83a4ff1969b84c8d79339e5d07d73/snakeviz-2.2.2.tar.gz", hash = "sha256:08028c6f8e34a032ff14757a38424770abb8662fb2818985aeea0d9bc13a7d83", size = 182039, upload-time = "2024-11-09T22:03:58.99Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/f7/83b00cdf4f114f10750a18b64c27dc34636d0ac990ccac98282f5c0fbb43/snakeviz-2.2.2-py3-none-any.whl", hash = "sha256:77e7b9c82f6152edc330040319b97612351cd9b48c706434c535c2df31d10ac5", size = 183477, upload-time = "2024-11-09T22:03:57.049Z" },
+]
+
+[[package]]
 name = "soupsieve"
 version = "2.8.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1862,6 +1892,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29519eb6884dd1415ecb53b0e934862d3559ddcb7e20b/stack_data-0.6.3.tar.gz", hash = "sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9", size = 44707, upload-time = "2023-09-30T13:58:05.479Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl", hash = "sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695", size = 24521, upload-time = "2023-09-30T13:58:03.53Z" },
+]
+
+[[package]]
+name = "sumo-data"
+version = "1.27.0"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/c1/35475032d610c3bd3ca963f54addaf94e8af95c42ee6477e184d7aab2c82/sumo_data-1.27.0-py3-none-any.whl", hash = "sha256:cecebb47e7fb13634b4d057073b91332aa200a14b52cf378caa46c97a6ff6acd", size = 16028995, upload-time = "2026-05-21T16:06:06.132Z" },
+    { url = "https://files.pythonhosted.org/packages/54/87/edeac05144f95443d1cc4e53a2156752a72a95ead86133e0a7ac17bb25f3/sumo_data-1.27.0-py3-none-macosx_14_0_arm64.whl", hash = "sha256:ba6d0b13a30d8a45e5b540f99bbe637bd7c71e3833f6a5195867ac495ab6a922", size = 115019527, upload-time = "2026-05-21T16:06:32.089Z" },
+    { url = "https://files.pythonhosted.org/packages/51/7b/0d6702c5d1d48d59ae120383410bd305c71732acf6770f1e255e05d84f1b/sumo_data-1.27.0-py3-none-win_amd64.whl", hash = "sha256:cd1960c553f2b042ac86878a842ff5251508b4656a8980525f0cd4401d9ba31f", size = 124759248, upload-time = "2026-05-21T16:07:01.077Z" },
 ]
 
 [[package]]
@@ -1972,6 +2012,7 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/8b/4b61d6e13f7108f36910df9ab4b58fd389cc2520d54d81b88660804aad99/torch-2.10.0-2-cp311-none-macosx_11_0_arm64.whl", hash = "sha256:418997cb02d0a0f1497cf6a09f63166f9f5df9f3e16c8a716ab76a72127c714f", size = 79423467, upload-time = "2026-02-10T21:44:48.711Z" },
+    { url = "https://files.pythonhosted.org/packages/36/ab/7b562f1808d3f65414cd80a4f7d4bb00979d9355616c034c171249e1a303/torch-2.10.0-3-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:ac5bdcbb074384c66fa160c15b1ead77839e3fe7ed117d667249afce0acabfac", size = 915518691, upload-time = "2026-03-11T14:15:43.147Z" },
     { url = "https://files.pythonhosted.org/packages/78/89/f5554b13ebd71e05c0b002f95148033e730d3f7067f67423026cc9c69410/torch-2.10.0-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:3282d9febd1e4e476630a099692b44fdc214ee9bf8ee5377732d9d9dfe5712e4", size = 145992610, upload-time = "2026-01-21T16:25:26.327Z" },
     { url = "https://files.pythonhosted.org/packages/ae/30/a3a2120621bf9c17779b169fc17e3dc29b230c29d0f8222f499f5e159aa8/torch-2.10.0-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:a2f9edd8dbc99f62bc4dfb78af7bf89499bca3d753423ac1b4e06592e467b763", size = 915607863, upload-time = "2026-01-21T16:25:06.696Z" },
     { url = "https://files.pythonhosted.org/packages/6f/3d/c87b33c5f260a2a8ad68da7147e105f05868c281c63d65ed85aa4da98c66/torch-2.10.0-cp311-cp311-win_amd64.whl", hash = "sha256:29b7009dba4b7a1c960260fc8ac85022c784250af43af9fb0ebafc9883782ebd", size = 113723116, upload-time = "2026-01-21T16:25:21.916Z" },
