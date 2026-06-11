@@ -41,17 +41,17 @@ class RandomAlgorithm(EvaluationAlgorithm):
     
 class GreedyAlgorithm(EvaluationAlgorithm):
     """
-    For the vehicle with an active charging request, if battery SOC is above 0.2, do nothing. Otherwise, send the vehicle to the nearest charging station.
+    For the vehicle with an active charging request, if battery SOC is above 15kWh, do nothing. Otherwise, send the vehicle to the nearest charging station.
     """
     def predict(self, observation, deterministic):
         placeholder = "This is a placeholder, just to have the same Return signature as stable baseline's model.predict()"
 
         active_vehicle = observation["active_vehicle"]   # shape (12,)
-        normalized_battery_soc = active_vehicle[0]
+        normalized_battery_soc = active_vehicle[0] # normalized by 100,000 to fit in [0, 1]
         distance_to_destination = active_vehicle[1]
         station_distances = active_vehicle[2:6]
 
-        if normalized_battery_soc > 0.15:  # 0.15 × 64 kWh = 9,600 Wh ≈ 40 km at 240 Wh/km
+        if normalized_battery_soc > 0.15:  # charges when remaining energy drops below 15,000 Wh (≈23% SoC with 64kWh battery, ≈62 km range at 240Wh/km)
             # — enough headroom to bridge any 25 km station gap on straight_120km
             logger.info(f"greedy → do nothing (normalized soc={normalized_battery_soc:.3f})")
             return 0, placeholder

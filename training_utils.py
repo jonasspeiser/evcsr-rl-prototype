@@ -278,7 +278,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
