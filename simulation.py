@@ -230,7 +230,7 @@ class Simulation():
         routes_dict = self.scenario_generator.generate_routes_from_routes_list(amount, all_routes)
         routes_id_list = list(routes_dict.keys())
         vehicles_dict = self.scenario_generator.generate_vehicles(amount, routes_id_list, start_soc_bounds, scenario_id)
-        logger.debug(f"adding vehicles: {vehicles_dict}")
+        logger.debug("adding vehicles: %s", vehicles_dict)
 
         for route_id, route in routes_dict.items():
             traci.route.add(route_id, route)
@@ -239,10 +239,10 @@ class Simulation():
             traci.vehicle.add(vehicle_id, vehicle["route"], typeID=vehicle["type"], depart=vehicle["depart_time"])
             traci.vehicle.setParameter(vehicle_id, "device.battery.maximumBatteryCapacity", str(vehicle["capacity"]))
             traci.vehicle.setParameter(vehicle_id, "device.battery.actualBatteryCapacity", str(vehicle["soc"]))
-            logger.debug(f"Vehicle {vehicle_id} added with initial route: {vehicle['route']}")
+            logger.debug("Vehicle %s added with initial route: %s", vehicle_id, vehicle['route'])
             self.added_vehicles.add(vehicle_id)
             self._subscribe_to_vehicle(vehicle_id)
-        logger.debug(f"Added {len(vehicles_dict)} vehicles: {list(vehicles_dict.keys())}")
+        logger.debug("Added %s vehicles: %s", len(vehicles_dict), list(vehicles_dict.keys()))
 
     def _subscribe_to_vehicle(self, vehicle_id):
         """Helper function defining vehicle subscription to TraCI variables."""
@@ -280,11 +280,11 @@ class Simulation():
         """
         data = self.vehicle_data.get(vehicle_id)
         if data is None:
-            logger.error(f"get_vehicle_edge: {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+            logger.error("get_vehicle_edge: %s not found in simulation. It probably reached its destination already (or was removed).", vehicle_id)
             return None
         vehicle_edge = data.get(tc.VAR_ROAD_ID)
         if not vehicle_edge: # None or ""
-            logger.debug(f"get_vehicle_edge: {vehicle_id} is not on a road. It probably didn't spawn yet.")
+            logger.debug("get_vehicle_edge: %s is not on a road. It probably didn't spawn yet.", vehicle_id)
             return None
         return vehicle_edge
         # try:
@@ -319,7 +319,9 @@ class Simulation():
         dist_cs = self._calculate_distance(current_vehicle_edge, cs_edge)
         dist_dest = self._calculate_distance(current_vehicle_edge, destination)
         #TODO: Use subscription (low prio)
-        logger.debug(f"Vehicle {vehicle_id} current route before reroute: {traci.vehicle.getRoute(vehicle_id)}, destination: {self.get_vehicle_destination(vehicle_id)}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Vehicle %s current route before reroute: %s, destination: %s",
+                         vehicle_id, traci.vehicle.getRoute(vehicle_id), self.get_vehicle_destination(vehicle_id))
 
         if dist_cs is None or dist_dest is None:
             raise ImpossibleRoutingError(f"Cannot calculate route: vehicle_id={vehicle_id}, cs_id={cs_id}, dist_cs={dist_cs}, dist_dest={dist_dest}.")
@@ -334,7 +336,7 @@ class Simulation():
             if not route_from_cs or not route_from_cs.edges:
                 raise ImpossibleRoutingError(f"No route found from cs {cs_edge} to destination {destination} for vehicle {vehicle_id}.")
             new_route = route_to_cs.edges + route_from_cs.edges[1:]
-            logger.debug(f"Rerouting {vehicle_id} to charging station {cs_id} via route: {new_route}")
+            logger.debug("Rerouting %s to charging station %s via route: %s", vehicle_id, cs_id, new_route)
             try:
                 traci.vehicle.setRoute(vehicle_id, new_route)
             except traci.exceptions.TraCIException as e:
@@ -358,7 +360,7 @@ class Simulation():
         try:
             traci.vehicle.replaceStop(vehicle_id, nextStopIndex=0, edgeID="")
         except traci.exceptions.TraCIException:
-            logger.debug(f"{vehicle_id}: No charging stop to remove")
+            logger.debug("%s: No charging stop to remove", vehicle_id)
 
     def get_stops(self, vehicle_id):
         """
@@ -449,13 +451,13 @@ class Simulation():
             if segment_distance >= DISTANCE_THRESHOLD and segment_consumed > 0:
                 consumption = segment_consumed / segment_distance
                 remaining_range_m = remaining_soc / consumption
-                logger.debug(f"Remaining range of {vehicle_id}: {remaining_range_m:.0f} m "
-                             f"(measured {consumption:.4f} Wh/m over {segment_distance:.0f} m)")
+                logger.debug("Remaining range of %s: %.0f m (measured %.4f Wh/m over %.0f m)",
+                             vehicle_id, remaining_range_m, consumption, segment_distance)
                 return remaining_range_m
 
         # Fallback: not enough driving data yet, or SOC temporarily above baseline after charging
         remaining_range_m = remaining_soc / CONSUMPTION_DEFAULT
-        logger.debug(f"Remaining range of {vehicle_id}: {remaining_range_m:.0f} m (default rate)")
+        logger.debug("Remaining range of %s: %.0f m (default rate)", vehicle_id, remaining_range_m)
         return remaining_range_m
 
     def get_max_battery_capacity(self, vehicle_id):
@@ -571,12 +573,12 @@ class Simulation():
             distance = float(data.get(tc.VAR_DISTANCE, 0))
             if soc_data and soc_data[0] == "device.battery.actualBatteryCapacity":
                 self.driving_segment_baseline[vid] = (float(soc_data[1]), distance)
-                logger.debug(f"Driving segment baseline reset for {vid}: soc={soc_data[1]} Wh, dist={distance:.0f} m")
+                logger.debug("Driving segment baseline reset for %s: soc=%s Wh, dist=%.0f m", vid, soc_data[1], distance)
         sim_time = self.simulation_data.get(tc.VAR_TIME)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_STARTING_VEHICLES_IDS, []):
-            logger.warning(f"Teleport start: {vid} at t={sim_time}")
+            logger.warning("Teleport start: %s at t=%s", vid, sim_time)
         for vid in self.simulation_data.get(tc.VAR_TELEPORT_ENDING_VEHICLES_IDS, []):
-            logger.warning(f"Teleport end: {vid} at t={sim_time}")
+            logger.warning("Teleport end: %s at t=%s", vid, sim_time)
 
     def active_vehicles_exist(self):
         expected_vehicles = self.simulation_data.get(tc.VAR_MIN_EXPECTED_VEHICLES, 0)
@@ -755,7 +757,7 @@ class Simulation():
         """
         if vehicle_id in self.just_removed_vehicle_ids:
             return
-        logger.info(f"Battery empty, vehicle {vehicle_id} will be removed from simulation")
+        logger.info("Battery empty, vehicle %s will be removed from simulation", vehicle_id)
         traci.vehicle.unsubscribe(vehicle_id)
         traci.vehicle.remove(vehicle_id)
         self.just_removed_vehicle_ids.add(vehicle_id)
@@ -814,7 +816,7 @@ class Simulation():
         """
         data = self.vehicle_data.get(vehicle_id)
         if data is None:
-            logger.debug(f"get_battery_soc(): {vehicle_id} not found in simulation. It probably reached its destination already (or was removed).")
+            logger.debug("get_battery_soc(): %s not found in simulation. It probably reached its destination already (or was removed).", vehicle_id)
             return None
         parameter_data = data.get(tc.VAR_PARAMETER_WITH_KEY, {})
         return float(parameter_data[1]) if parameter_data[0] == "device.battery.actualBatteryCapacity" else None

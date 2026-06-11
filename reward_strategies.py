@@ -33,7 +33,7 @@ def congestion_penalty(vehicle, context, congestion_threshold_m, congestion_pena
         if dist_other is None:
             continue
         if arrive_concurrently(dist_self, dist_other, congestion_threshold_m):
-            logger.info(f"Vehicle {vehicle.vehicle_id}: congestion penalty for routing to {target_cs} (conflict with {other.vehicle_id})")
+            logger.info("Vehicle %s: congestion penalty for routing to %s (conflict with %s)", vehicle.vehicle_id, target_cs, other.vehicle_id)
             penalty -= congestion_penalty
     return penalty
 
@@ -42,7 +42,7 @@ def destination_reward(vehicle, newly_arrived_ids, max_allowed_ttt):
     if not (vehicle.arrived and newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids):
         return 0
     reward = max_allowed_ttt - vehicle.get_total_travel_time()
-    logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward k-TTT)")
+    logger.info("Vehicle %s JUST reached destination (reward k-TTT)", vehicle.vehicle_id)
     # Normalize with the same value as the end of episode reward to keep the same scale and make it easier for the agent to learn
     reward /= 3000
     # Make smaller than end of episode reward
@@ -63,7 +63,7 @@ def relative_destination_reward(vehicle, newly_arrived_ids, scale_s):
     if ideal is None:
         return 0
     overhead = vehicle.get_total_travel_time() - ideal
-    logger.info(f"Vehicle {vehicle.vehicle_id} arrived: overhead={overhead:.0f}s, reward={-overhead/scale_s:.4f}")
+    logger.info("Vehicle %s arrived: overhead=%.0fs, reward=%.4f", vehicle.vehicle_id, overhead, -overhead / scale_s)
     return -overhead / scale_s
 
 
@@ -77,7 +77,7 @@ def battery_penalty(vehicle, newly_emptied_ids, penalty=1.0):
     """
     if vehicle.vehicle_id not in newly_emptied_ids:
         return 0
-    logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (penalty -{penalty})")
+    logger.info("Vehicle %s JUST died (penalty -%s)", vehicle.vehicle_id, penalty)
     return -penalty
 
 
@@ -89,7 +89,7 @@ def illegal_action_penalty(vehicle, context):
     if context.get('charging_stop_already_planned', False):
         return 0
     if context.get('rerouting_exception_occurred', False):
-        logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -0.01)")
+        logger.info("Vehicle %s: illegal charging action (penalty -0.01)", vehicle.vehicle_id)
         return -0.01
     return 0
 
@@ -100,7 +100,7 @@ def charging_reward(vehicle, charging_ids):
         return 0
     if vehicle.is_remaining_range_sufficient(buffer=0):
         return 0
-    logger.info(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+    logger.info("Vehicle %s is charging with insufficient range (+1 reward)", vehicle.vehicle_id)
     return 0.01
 
 class RewardStrategy:
@@ -180,10 +180,10 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             vehicle_has_just_reached_destination = vehicle_is_at_destination and (newly_arrived_ids and vehicle.vehicle_id in newly_arrived_ids)
 
             if vehicle.vehicle_id in newly_emptied_ids:
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST died (reward -1)")
+                logger.info("Vehicle %s JUST died (reward -1)", vehicle.vehicle_id)
                 reward += -1
             elif vehicle_has_just_reached_destination:
-                logger.info(f"Vehicle {vehicle.vehicle_id} JUST reached destination (reward +10)")
+                logger.info("Vehicle %s JUST reached destination (reward +10)", vehicle.vehicle_id)
                 reward += 10
 
             if vehicle.vehicle_id in charging_ids:
@@ -191,7 +191,7 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
                 # TODO: This may be a bit much. Maybe reduce the reward to 0.1 or 0.01 as it is played out per second
                 remaining_range_is_sufficient = vehicle.is_remaining_range_sufficient(buffer=0)
                 if not remaining_range_is_sufficient:
-                    logger.debug(f"Vehicle {vehicle.vehicle_id} is charging with insufficient range (+1 reward)")
+                    logger.debug("Vehicle %s is charging with insufficient range (+1 reward)", vehicle.vehicle_id)
                     reward += 1
 
         return reward
@@ -207,11 +207,11 @@ class NoTimeComponentRewardStrategy(RewardStrategy):
             if context.get('charging_stop_already_planned', False):
                 return 0
             if context.get('sufficient_range', False):
-                logger.info(f"Vehicle {vehicle.vehicle_id}: was asked to charge but has sufficient range (penalty -0.01)")
+                logger.info("Vehicle %s: was asked to charge but has sufficient range (penalty -0.01)", vehicle.vehicle_id)
                 return -0.01
             if context.get('rerouting_exception_occurred', False):
                 # penalize the agent for trying to take an illegal action (e.g. vehicle doesn't exist anymore or is past the charging station)
-                logger.info(f"Vehicle {vehicle.vehicle_id}: illegal charging action (penalty -0.01)")
+                logger.info("Vehicle %s: illegal charging action (penalty -0.01)", vehicle.vehicle_id)
                 return -0.01
         return 0 # if action is "do nothing"
 

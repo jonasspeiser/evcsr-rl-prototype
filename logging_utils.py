@@ -175,7 +175,7 @@ class CustomTensorboardCallback(BaseCallback):
         if self.wandb_run is not None:
             self.wandb_run.log({f"eval/{k}": v for k, v in metrics.items()}, step=step)
 
-        self.logger_rl.debug(f"Logged evaluation metrics at step {step}")
+        self.logger_rl.debug("Logged evaluation metrics at step %s", step)
         # For further use of logged values
         return metrics
 

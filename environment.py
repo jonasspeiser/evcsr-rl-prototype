@@ -94,7 +94,7 @@ class CustomEnv(gym.Env):
         #   None or active vehicle has no distances yet. Normalized to [0, 1] by max_vehicles (shape (4,))
         self.simulation.add_vehicles(self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
-        logger.debug(f"Initial vehicle_ids: {self.vehicle_ids}")
+        logger.debug("Initial vehicle_ids: %s", self.vehicle_ids)
 
         self.obs_features = frozenset(obs_features) if obs_features is not None else frozenset()
 
@@ -312,7 +312,7 @@ class CustomEnv(gym.Env):
             1 for vehicle in self.vehicles.values()
             if vehicle.empty
         )
-        logger.debug(f"empty_vehicles_per_episode: {self.empty_vehicles_per_episode}")
+        logger.debug("empty_vehicles_per_episode: %s", self.empty_vehicles_per_episode)
 
     def _set_arrival_soc_stats(self):
         """Mean SOC and remaining range (Wh / m) across vehicles that arrived at their destination."""
@@ -504,14 +504,14 @@ class CustomEnv(gym.Env):
                 vehicle.departure_time = current_time
                 just_spawned.append(vehicle_id)
         if just_spawned:
-            logger.info(f"{len(just_spawned)} vehicle(s) spawned at time {current_time}")
-            logger.debug(f"Spawned vehicle IDs: {just_spawned}")
+            logger.info("%s vehicle(s) spawned at time %s", len(just_spawned), current_time)
+            logger.debug("Spawned vehicle IDs: %s", just_spawned)
         for vehicle_id in newly_arrived_ids or []:
             vehicle = self.vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.arrival_time = current_time
                 vehicle.arrived = True
-                logger.info(f"{vehicle_id} arrived at time {current_time}")
+                logger.info("%s arrived at time %s", vehicle_id, current_time)
 
     def _check_for_charging_request(self, newly_spawned_ids, newly_despawned_ids=None):
         """
@@ -529,14 +529,14 @@ class CustomEnv(gym.Env):
         # Find out if there are vehicles that just finished charging
         just_charged_ids = self.simulation.get_charging_stop_ending_vehicle_ids()
         for vid in just_charged_ids:
-            logger.info(f"{vid}: just finished charging")
+            logger.info("%s: just finished charging", vid)
         # Find out if there are vehicles that just entered low battery status
         new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
         # Find vehicles that missed their recommended charging station (BadTimingRoutingError)
         missed_station_ids = {vid for vid, v in self.vehicles.items() if v.had_bad_timing_error}
         for vid in missed_station_ids:
             self.vehicles[vid].had_bad_timing_error = False
-            logger.info(f"{vid}: missed charging station, re-queuing charging request")
+            logger.info("%s: missed charging station, re-queuing charging request", vid)
         charging_requests = (newly_spawned_ids or set()) | just_charged_ids | new_low_battery_ids | missed_station_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
         self.charging_stops_per_episode_counter.update(just_charged_ids)
@@ -552,7 +552,7 @@ class CustomEnv(gym.Env):
                     new_queue.append(vid)
             self.charging_request_queue = new_queue
             if removed_ids:
-                logger.debug(f"Removing despawned vehicles from charging request queue: {removed_ids}")
+                logger.debug("Removing despawned vehicles from charging request queue: %s", removed_ids)
                 
             # If the active vehicle just despawned, reset the active vehicle id
             if self.active_charging_request_vehicle_id in newly_despawned_ids:
@@ -562,14 +562,14 @@ class CustomEnv(gym.Env):
 
         # add charging requests to the queue (if any)
         if charging_requests:
-            logger.debug(f"New charging requests: spawned={newly_spawned_ids}, just charged={just_charged_ids}, low battery={new_low_battery_ids}")
+            logger.debug("New charging requests: spawned=%s, just charged=%s, low battery=%s", newly_spawned_ids, just_charged_ids, new_low_battery_ids)
             self.charging_request_queue.extend(sorted(charging_requests))
         
         # set active charging request vehicle id (if any)
         if self.charging_request_queue:
-            logger.debug(f"Charging request queue: {self.charging_request_queue}")
+            logger.debug("Charging request queue: %s", self.charging_request_queue)
             self.active_charging_request_vehicle_id = self.charging_request_queue.popleft()
-            logger.debug(f"Active charging request for: {self.active_charging_request_vehicle_id}")
+            logger.debug("Active charging request for: %s", self.active_charging_request_vehicle_id)
             return True
         
         return False
@@ -594,14 +594,14 @@ class CustomEnv(gym.Env):
                 self.low_battery_ids.remove(vehicle_id)
             # only account for vehicles that just entered the state of low battery. Not the ones that where already low during the last step.
             if vehicle.relative_battery_soc < battery_threshold and vehicle_id not in self.low_battery_ids:
-                logger.info(f"{vehicle_id}: low battery")
+                logger.info("%s: low battery", vehicle_id)
                 new_low_battery_ids.add(vehicle_id)
                 self.low_battery_ids.add(vehicle_id)
         return new_low_battery_ids
     
     def _collect_vehicle_status_updates(self):
         """Collect all vehicle status updates from simulation - POTENTIAL BOTTLENECK."""
-        logger.debug(f"Simulation time step: {self.simulation.get_current_time_step()}")
+        logger.debug("Simulation time step: %s", self.simulation.get_current_time_step())
         
         # Get vehicle status from simulation - these are likely expensive TraCI calls
         newly_spawned_ids = self.simulation.get_spawned_vehicle_ids()
@@ -611,7 +611,7 @@ class CustomEnv(gym.Env):
         charging_ids = self.simulation.get_charging_vehicle_ids()
         
         if newly_despawned_ids:
-            logger.debug(f"Despawining vehicles: arrived={newly_arrived_ids}, removed={newly_removed_ids}")
+            logger.debug("Despawining vehicles: arrived=%s, removed=%s", newly_arrived_ids, newly_removed_ids)
 
         # Update vehicles' battery soc and cache remaining range
         for vid, vehicle in self.vehicles.items():
@@ -625,7 +625,7 @@ class CustomEnv(gym.Env):
         for vid, vehicle in self.vehicles.items():
             if vehicle.battery_just_died():
                 newly_emptied_ids.add(vid)
-                logger.info(f"{vid}: battery empty")
+                logger.info("%s: battery empty", vid)
 
         # Update vehicles' arrival status
         for vid in newly_arrived_ids:
@@ -659,7 +659,7 @@ class CustomEnv(gym.Env):
         """Calculate reward for the current simulation step."""
         temp_reward = self.reward_strategy.calculate_step_reward(
             self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'], vehicle_status['newly_emptied_ids'])
-        logger.debug(f"Step reward from simulation: {temp_reward}")
+        logger.debug("Step reward from simulation: %s", temp_reward)
         return temp_reward
 
     def _check_termination_conditions(self):
@@ -690,7 +690,7 @@ class CustomEnv(gym.Env):
         self._update_accumulated_waiting_times()
         observation = self._update_and_get_observation()
         info = self._get_info()
-        logger.debug(f"Intermediate simulation state: {info}")
+        logger.debug("Intermediate simulation state: %s", info)
         return observation, info
 
     def _handle_episode_termination(self, termination_status):
@@ -713,7 +713,7 @@ class CustomEnv(gym.Env):
         status_str = "terminated" if termination_status['terminated'] else "truncated"
         all_arrived = all(v.arrived for v in self.vehicles.values())
         arrived_str = ", all arrived" if all_arrived else ""
-        logger.info(f"Episode {self.episode_count} ended ({status_str}{arrived_str}): reward = {final_reward:.2f}")
+        logger.info("Episode %s ended (%s%s): reward = %.2f", self.episode_count, status_str, arrived_str, final_reward)
         return final_reward
         
     def get_snapshot(self, *, max_vehicles: int = 200) -> dict:
@@ -797,7 +797,7 @@ class CustomEnv(gym.Env):
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
         self.vehicle_ids = self.simulation.get_all_oev_ids()
         self.episode_count += 1
-        logger.info(f"--- Episode {self.episode_count} started ({len(self.vehicle_ids)} vehicles) ---")
+        logger.info("--- Episode %s started (%s vehicles) ---", self.episode_count, len(self.vehicle_ids))
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
         Vehicle.DISTANCE_NORMALIZATION_VALUE = self.simulation.get_max_possible_distance()
         # Re-create the vehicles dictionary in case new vehicles were spawned.
@@ -830,7 +830,7 @@ class CustomEnv(gym.Env):
         
         observation = self._update_and_get_observation()
         info = self._get_info()
-        logger.debug(f"Reset observation: {observation}")
+        logger.debug("Reset observation: %s", observation)
         return observation, info
 
     def step(self, action):
@@ -894,7 +894,7 @@ class CustomEnv(gym.Env):
         if info is None:
             info = self._get_info()
         
-        logger.debug(f"State: {info}, Step reward: {reward}")
+        logger.debug("State: %s, Step reward: %s", info, reward)
         return observation, reward, termination_status['terminated'], termination_status['truncated'], info
 
     def render(self, mode='human'):

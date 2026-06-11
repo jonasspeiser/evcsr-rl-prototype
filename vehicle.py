@@ -49,7 +49,7 @@ class Vehicle:
             return
         self.battery_soc = self.simulation.update_vehicle_soc(self.vehicle_id)
         if self.battery_soc is None:
-            logger.debug(f"{self.vehicle_id}: battery_soc=None while is_online=True — vehicle likely arrived this step before arrived flag was set.")
+            logger.debug("%s: battery_soc=None while is_online=True — vehicle likely arrived this step before arrived flag was set.", self.vehicle_id)
             return
         self.max_battery_capacity = self.simulation.get_max_battery_capacity(self.vehicle_id)
         self.relative_battery_soc = self.battery_soc / self.max_battery_capacity
@@ -126,7 +126,7 @@ class Vehicle:
             # My evaluation algos return tuples. Only the first value is of interest.
             action = action[0]
         
-        logger.debug(f"{self.vehicle_id}: handling action {action}")
+        logger.debug("%s: handling action %s", self.vehicle_id, action)
         self.last_action = action
 
         # Build a context dictionary with information useful for penalty calculation.
@@ -139,7 +139,7 @@ class Vehicle:
         try:
             next_charging_stop = self.simulation.get_next_charging_stop_id(self.vehicle_id)
         except ValueError as e:
-            logger.error(f"{type(e).__name__}: Handling action {action} for {self.vehicle_id} failed: {e}")
+            logger.error("%s: Handling action %s for %s failed: %s", type(e).__name__, action, self.vehicle_id, e)
             return 0
         
         charging_stop_is_planned = next_charging_stop is not None
@@ -151,26 +151,26 @@ class Vehicle:
             context['next_charging_stop'] = next_charging_stop
 
             if cs_id == next_charging_stop:
-                logger.debug(f"Vehicle {self.vehicle_id}: charging stop {cs_id} is already planned")
+                logger.debug("Vehicle %s: charging stop %s is already planned", self.vehicle_id, cs_id)
                 context['reroute_successful'] = False
                 context['charging_stop_already_planned'] = True
                 return 0
             try:
                 self.simulation.reroute_for_charging(self.vehicle_id, cs_id)
-                logger.debug(f"Vehicle {self.vehicle_id} rerouted for charging at {cs_id}")
+                logger.debug("Vehicle %s rerouted for charging at %s", self.vehicle_id, cs_id)
                 self.target_cs_id = cs_id
                 context.update({
                     'reroute_successful': True,
                     'sufficient_range': self.is_remaining_range_sufficient(buffer=0),
                 })
             except (ImpossibleRoutingError, BadTimingRoutingError) as e:
-                logger.error(f"{type(e).__name__}: {e}")
+                logger.error("%s: %s", type(e).__name__, e)
                 context['reroute_successful'] = False
                 context['rerouting_exception_occurred'] = True
                 if isinstance(e, BadTimingRoutingError):
                     self.had_bad_timing_error = True
             except PointlessRecommendationError as e:
-                logger.error(f"{type(e).__name__}: {e}")
+                logger.error("%s: %s", type(e).__name__, e)
                 context['reroute_successful'] = False
                 context['recommendation_past_destination'] = True
 
@@ -179,7 +179,7 @@ class Vehicle:
             self.target_cs_id = None
             if charging_stop_is_planned:
                 self.simulation.remove_charging_stop(self.vehicle_id)
-                logger.debug(f"Vehicle {self.vehicle_id}: removed planned charging stop")
+                logger.debug("Vehicle %s: removed planned charging stop", self.vehicle_id)
 
         # Delegate penalty calculation to the reward strategy.
         if extra_context:
