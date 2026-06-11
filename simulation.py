@@ -3,13 +3,28 @@ import os
 import sys
 if 'SUMO_HOME' in os.environ:
     sys.path.append(os.path.join(os.environ['SUMO_HOME'], 'tools'))
-import traci
-from traci import constants as tc
 from sumolib import checkBinary
 from collections import Counter
 from oev_scenario_generator import ScenarioGenerator, SameRouteScenario, CustomDistributionScenario, BAStDistributionScenario
 import network_generator 
+traci = None # Backend selection on first Simulation construction.
+tc = None
 
+def _select_backend(gui: bool):
+    """Choose libsumo (fast, headless) or traci (supports sumo-gui). Process-wide."""
+    global traci, tc
+    if traci is not None:
+        if gui and traci.__name__ == "libsumo":
+            raise RuntimeError(
+                "render_mode='human' requires TraCI, but libsumo is already active "
+                "in this process. Run GUI evaluations in a separate process, "
+                "or set USE_LIBSUMO=0."
+            )
+        return
+    use_libsumo = (not gui) and os.environ.get("USE_LIBSUMO", "1") == "1"
+    import importlib
+    traci = importlib.import_module("libsumo" if use_libsumo else "traci")
+    tc = traci.constants
 
 # configure logging
 import logging
@@ -96,6 +111,7 @@ def construct_scenario_generator(scenario_generator, random_seed=None):
 class Simulation():
 
     def __init__(self, scenario_generator, gui:bool=False, random_seed = None, sumo_log_path = None, street_network = DEFAULT_STREET_NETWORK, start_soc_bounds = None):
+        _select_backend(gui)
         self.sumo_config_stub = f"./street-networks/{street_network}/{street_network}"
         self.start_soc_bounds = start_soc_bounds
 
@@ -113,11 +129,14 @@ class Simulation():
         sumoCmd = [
             sumoBinary, 
             "-c", config_file, # start sumo with supplied config-file
-            '--delay', '100', # delay between each sim step 100ms
-            '--start', # start simulation immediately
             '--device.battery.probability', '1', # sets all vehicles to be EVs instead of combustion engine
             # '--device.stationfinder.probability', '1' # remove vehicle if it runs out of battery
             '--time-to-teleport', '-1', # disable teleporting of vehicles that are stuck in traffic, we want queues to form at charging stations
+            ]
+        if self.gui:
+            sumoCmd += [
+                '--delay', '100',   # slow down playback so the GUI is watchable
+                '--start',          # open and immediately begin the simulation
             ]
         if random_seed is not None:
             sumoCmd += ['--seed', str(random_seed)]

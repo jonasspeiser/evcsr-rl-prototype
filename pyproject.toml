@@ -5,6 +5,7 @@ requires-python = "==3.11.*"
 dependencies = [
     "traci==1.26.*",
     "sumolib==1.26.*",
+    "libsumo==1.26.*",
     
     "torch>=2,<3",
     "stable-baselines3>=2,<3",
