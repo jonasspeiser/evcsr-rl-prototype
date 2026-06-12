@@ -1,31 +1,38 @@
+import logging
 import pandas as pd
 import random
 
-CSV_PATH="datasets/obelis_data/df_lv.csv"
-FEATHER_PATH="datasets/obelis_data/df_lv.feather"
+CSV_PATH = "datasets/obelis_data/df_lv.csv"
+FEATHER_PATH = "datasets/obelis_data/df_lv.feather"
+
+logger = logging.getLogger(__name__)
+
 
 class Data_Provider():
     """Abstract class to allow implementation of different data provider strategies, providing the datasets for non observable vehicle spawns and despawns."""
-    def get_non_observable_vehicle_data(self):
+    def get_non_observable_vehicle_data(self, weekday=None):
         raise NotImplementedError
+
 
 class Obelis_Data_Provider(Data_Provider):
     """
     Providing the OBELIS dataset (from Germany) to supply the data for non observable vehicle spawns and despawns.
+    Sessions are pooled per weekday (Monday=0 … Sunday=6) at init time and sampled on each call.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, target_session_count, seed=None):
         self.lp_ids = ['6804_shuffled', '6973_shuffled', '16564_shuffled', '6326_shuffled']
-        # self.df = pd.read_csv(CSV_PATH, delimiter=";", parse_dates=["beginn", "ende"])
-        self.df = pd.read_feather(FEATHER_PATH)
+        self.target_session_count = target_session_count
+        self.rng = random.Random(seed)
 
-    
-    def __prepare_dataframe(self, dataframe, filter_date):
-        # include only the lp_ids specified in self.lp_ids
-        df_filtered = dataframe[dataframe["lp_id"].isin(self.lp_ids)]
-        # include only the day in question
-        df_filtered = df_filtered[df_filtered["beginn"].dt.date == pd.to_datetime(filter_date).date()]
-        return df_filtered
+        df = pd.read_feather(FEATHER_PATH)
+        df = df[df["lp_id"].isin(self.lp_ids)]
+
+        self.pools_by_weekday = {}
+        for wd in range(7):
+            df_wd = df[df["beginn"].dt.dayofweek == wd]
+            self.pools_by_weekday[wd] = self.extract_non_observable_vehicle_data(df_wd)
+            logger.info("Weekday %d pool: %s sessions", wd, len(self.pools_by_weekday[wd]))
 
     def __match_cs(self, lp_id):
         cs_matching_dict = {
@@ -35,7 +42,7 @@ class Obelis_Data_Provider(Data_Provider):
             self.lp_ids[3]: "cs_4"
         }
         return cs_matching_dict[lp_id]
-    
+
     def __convert_to_depart_time(self, charge_begin_datetime):
         hours = charge_begin_datetime.hour
         minutes = charge_begin_datetime.minute
@@ -48,10 +55,10 @@ class Obelis_Data_Provider(Data_Provider):
         result_dict = {
             "cs_id": cs_id,
             "charge_begin_seconds": charge_begin_seconds,
-            "charge_duration": charge_duration
+            "charge_duration": charge_duration,
         }
         return result_dict
-    
+
     def extract_non_observable_vehicle_data(self, dataframe):
         vehicle_data = []
         for row in dataframe.itertuples(index=False):
@@ -59,13 +66,23 @@ class Obelis_Data_Provider(Data_Provider):
             vehicle_data.append(result_dict)
         return vehicle_data
 
-    def get_non_observable_vehicle_data(self):
-        filter_date = '2023-03-05'
-        df = self.df
-        df_filtered = self.__prepare_dataframe(df, filter_date)
-        vehicle_data = self.extract_non_observable_vehicle_data(df_filtered)
-        return vehicle_data
-    
+    def get_non_observable_vehicle_data(self, weekday):
+        if weekday is None:
+            weekday = self.rng.randint(0, 6)
+            logger.debug("No episode date available; using random weekday %d for NOEV sampling.", weekday)
+        pool = self.pools_by_weekday[weekday]
+        if not pool:
+            logger.warning("Weekday %d has no NOEV sessions in pool; returning empty list.", weekday)
+            return []
+        if len(pool) >= self.target_session_count:
+            return self.rng.sample(pool, self.target_session_count)
+        logger.warning(
+            "Weekday %d pool has %s sessions, fewer than target %s; using all available.",
+            weekday, len(pool), self.target_session_count,
+        )
+        return list(pool)
+
+
 class Random_Data_Provider(Data_Provider):
     """
     Providing random data to supply the data for non observable vehicle spawns and despawns.
@@ -81,23 +98,23 @@ class Random_Data_Provider(Data_Provider):
         self.max_simulation_time = max_simulation_time
         super().__init__()
 
-    def get_non_observable_vehicle_data(self):
+    def get_non_observable_vehicle_data(self, weekday=None):
         vehicle_data = []
         for i in range(self.n_noevs):
             cs_id = f"cs_{self.rng.randint(1, self.n_cs)}"  # station IDs are 1-based (cs_1..cs_n)
-            begin = self.rng .randint(0, self.max_simulation_time)# spawn time in seconds after simulation start
-            duration = self.rng .randint(10, 200) # charge duration in seconds
+            begin = self.rng.randint(0, self.max_simulation_time)  # spawn time in seconds after simulation start
+            duration = self.rng.randint(10, 200)  # charge duration in seconds
             entry_dict = {
                 "cs_id": cs_id,
                 "charge_begin_seconds": begin,
-                "charge_duration": duration
+                "charge_duration": duration,
             }
-            vehicle_data.append (entry_dict)
+            vehicle_data.append(entry_dict)
         return vehicle_data
 
 
 if __name__ == "__main__":
-    data_provider = Obelis_Data_Provider()
-    # data_provider = Random_Data_Provider(5, 4, 3000)
-    vehicle_data = data_provider.get_non_observable_vehicle_data()
+    logging.basicConfig(level=logging.INFO)
+    data_provider = Obelis_Data_Provider(target_session_count=5, seed=42)
+    vehicle_data = data_provider.get_non_observable_vehicle_data(weekday=0)  # Monday
     print(vehicle_data)

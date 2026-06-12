@@ -233,6 +233,7 @@ class BAStDistributionScenario(CustomDistributionScenario):
         """ Constructs a list of departure times based on the BASt distribution data. If no scenario_id is provided, a random date in 2022 is used to select the distribution. """
         if scenario_id is None:
             date = self._random_date(2022, 2022)
+            self.last_episode_date = date
             year = (date.year)
             month = (date.month)
             day = (date.day)

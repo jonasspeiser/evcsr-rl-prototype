@@ -21,7 +21,7 @@ class CustomEnv(gym.Env):
     OPTIONAL_OBS_FEATURES = frozenset({"simulation_time", "station_assignment_counts"})
 
     def __init__(self, scenario_generator, render_mode=None, reward_strategy="basic", vehicles_to_spawn=1,
-                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_kwargs=None, start_soc_bounds=None, obs_features=None):
+                 max_vehicles=None, observation_sampling_rate=30, longest_route_duration=7200, non_observable_vehicles=None, noev_provider="obelis", random_seed=None, sumo_log_path=None, street_network="straight_100km", reward_kwargs=None, start_soc_bounds=None, obs_features=None):
         """
         Initialize the environment and simulation. Define self.observation_space and self.action_space.
 
@@ -65,8 +65,16 @@ class CustomEnv(gym.Env):
 
         self.non_observable_vehicles = non_observable_vehicles
         if non_observable_vehicles:
-            # self.noev_data_provider = Obelis_Data_Provider()
-            self.noev_data_provider = Random_Data_Provider(n_noevs=self.non_observable_vehicles, n_cs=4, max_simulation_time=self.truncate_after_n_simulation_steps, seed=random_seed)
+            if noev_provider == "obelis":
+                self.noev_data_provider = Obelis_Data_Provider(
+                    target_session_count=non_observable_vehicles,
+                    seed=random_seed)
+            else:
+                self.noev_data_provider = Random_Data_Provider(
+                    n_noevs=self.non_observable_vehicles,
+                    n_cs=4,
+                    max_simulation_time=self.truncate_after_n_simulation_steps,
+                    seed=random_seed)
 
         # # Create Vehicle instances for each vehicle id
         # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
@@ -374,7 +382,10 @@ class CustomEnv(gym.Env):
         Adds non-observable vehicles to the simulation using the data provider.
         """
         self.simulation.add_non_observable_routes()
-        vehicle_data = self.noev_data_provider.get_non_observable_vehicle_data()
+        weekday = None
+        if hasattr(self.simulation.scenario_generator, 'last_episode_date'):
+            weekday = self.simulation.scenario_generator.last_episode_date.weekday()
+        vehicle_data = self.noev_data_provider.get_non_observable_vehicle_data(weekday=weekday)
         for entry in vehicle_data:
             self.simulation.add_non_observable_vehicle(cs_id=entry["cs_id"],
                                                    depart_time=entry["charge_begin_seconds"],
