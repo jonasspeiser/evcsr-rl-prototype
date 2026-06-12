@@ -105,8 +105,9 @@ class CustomTensorboardCallback(BaseCallback):
         }
         self.logger_rl = logging.getLogger("rl")
         self.writer = writer
-        self.wandb_run = wandb_run  
+        self.wandb_run = wandb_run
         self.wandb_prefix = wandb_prefix
+        self._episode_count = 0
 
     def get_metrics(self, env):
         metrics = {}
@@ -131,6 +132,7 @@ class CustomTensorboardCallback(BaseCallback):
         self.logger_rl.debug("Agent Step {}".format(self.num_timesteps))
 
         if self.locals['dones'][0]:  # If an episode ended ("done")
+            self._episode_count += 1
             # Read episode metrics from infos[0] (injected by CustomEnv.step() before
             # returning, so they survive the VecEnv auto-reset that fires before this callback).
             ep_metrics = self.locals.get('infos', [{}])[0].get('_episode_metrics', {})
@@ -454,6 +456,17 @@ def _record_to_dict(record: logging.LogRecord) -> Dict[str, Any]:
             d[k] = repr(v)
 
     return d
+
+def _find_tb_callback(callback) -> "CustomTensorboardCallback | None":
+    """Return the first CustomTensorboardCallback found in a callback or CallbackList."""
+    if isinstance(callback, CustomTensorboardCallback):
+        return callback
+    if hasattr(callback, 'callbacks'):
+        for cb in callback.callbacks:
+            result = _find_tb_callback(cb)
+            if result is not None:
+                return result
+    return None
 
 def setup_run_logging(
     *,

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 import json
 import os
 import time
-from logging_utils import RunLogging, setup_run_logging
+from logging_utils import RunLogging, setup_run_logging, _find_tb_callback
 import subprocess
 
 _STATION_CAPACITY = 2
@@ -292,6 +292,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     model = algorithm_class(policy, env, seed=random_seed, verbose=1, tensorboard_log=log.run_dir, **algo_kwargs)
     model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps)
 
+    tb_cb = _find_tb_callback(log.callback)
     _save_run_config(log.run_dir, {
         "version_tag": version_tag,
         "mode": "training",
@@ -315,6 +316,9 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "use_custom_extractor": use_custom_extractor,
         "max_training_hours": max_training_hours,
         "training_duration_s": round(duration_s),
+        "actual_steps": model.num_timesteps,
+        "total_episodes": tb_cb._episode_count if tb_cb is not None else None,
+        "training_end_timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
     return model_path
@@ -375,11 +379,13 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
+    initial_steps = model.num_timesteps
     model_path, duration_s = _run_training(env=env, log=log, model=model, n_steps=n_steps, reset_num_timesteps=False)
 
     # Save alongside the new model file (not in run_dir root, to avoid overwriting the original run_config.json).
     # base_config nests the previous run's config, so the full training history is preserved for chains of
     # train_model -> further_train_model -> further_train_model -> ...
+    tb_cb = _find_tb_callback(log.callback)
     _dump_to_file({
         "version_tag": version_tag,
         "mode": "training_continued",
@@ -402,6 +408,9 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "use_custom_extractor": use_custom_extractor,
         "max_training_hours": max_training_hours,
         "training_duration_s": round(duration_s),
+        "actual_steps": model.num_timesteps - initial_steps,
+        "total_episodes": tb_cb._episode_count if tb_cb is not None else None,
+        "training_end_timestamp": datetime.now(timezone.utc).isoformat(),
         "continued_from": model_load_path,
         "base_config": config,
     }, log.model_save_path.replace(".zip", "_config.json"))
@@ -639,17 +648,18 @@ if __name__ == "__main__":
 
     # train_model(
     #     algorithm="PPO",
-    #     reward_strategy="basicCongestion",
+    #     reward_strategy="relativeDestination",
     #     policy="MultiInputPolicy",
     #     version_tag=get_git_version(),
-    #     scenario="all_random",
+    #     scenario="bast",
     #     street_network="straight_120km",
     #     obs_features={"simulation_time", "station_assignment_counts"},
     #     reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 0.1, "battery_penalty_value": 10},
     #     use_custom_extractor=True,
-    #     n_vehicles=50,
+    #     n_vehicles=600,
+    #     max_vehicles=600,
     #     n_noevs=0,
-    #     max_training_hours=0.1,
+    #     max_training_hours=0.05,
     #     n_training_units=10_000_000,
     #     ent_coef=0.1,
     #     use_wandb=False,
@@ -665,16 +675,16 @@ if __name__ == "__main__":
     #     execution_context="local"
     # )
 
-    # evaluate_model_with_config(
-    #     model_load_path=get_latest_model(),
-    #     # model_load_path="runs/2026-05-21_22-25-31_pid2503478_v1.3.2-4-g31239cf_basic_all_random_straight_120km_PPO/checkpoint_605940_steps.zip",
-    #     n_episodes=10,
-    #     # longest_route_duration=6_000,
-    #     execution_context="local",
-    #     # render_mode="human",
-    #     random_seed=54321,
-    #     deterministic=True,
-    # )
+    evaluate_model_with_config(
+        # model_load_path=get_latest_model(),
+        model_load_path="runs/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO.zip",
+        n_episodes=10,
+        # longest_route_duration=6_000,
+        execution_context="local",
+        # render_mode="human",
+        random_seed=54321,
+        deterministic=True,
+    )
     
     # evaluate_model(
     #     scenario="bast",
@@ -693,5 +703,6 @@ if __name__ == "__main__":
     #     random_seed=54321,
     # )
 
-    for path in get_models_from_folder("runs/_runs_20260610_1759"):
-        evaluate_model_with_config(model_load_path=path, n_episodes=10, random_seed=54321)
+    # EVALUATE FROM FOLDER:
+    # for path in get_models_from_folder("runs/_runs_20260610_1759"):
+    #     evaluate_model_with_config(model_load_path=path, n_episodes=10, random_seed=54321)
