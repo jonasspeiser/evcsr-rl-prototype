@@ -90,7 +90,9 @@ class ScenarioGenerator():
     def generate_vehicles(self, n_vehicles, routes_list, start_soc_bounds=(DEFAULT_BATTERY_MIN, DEFAULT_BATTERY_MAX), scenario_id=None):
         """
         Params:
-            n_vehicles (int): The amount of vehicles that should be generated
+            n_vehicles (int): The amount of vehicles that should be generated.
+                For BASt/custom-distribution scenarios this is the daily maximum; the actual count
+                equals len(_get_depart_time_list(...)) and may be lower on low-volume days.
             routes_list (List): A list including all available route ids
             start_soc_bounds (Tuple): Optional. Outer bounds for the start soc value in the shape (MIN_VALUE, MAX_VALUE)
             scenario_id (str): Optional. Scenario ID to reproduce a certain scenario.
@@ -164,11 +166,17 @@ class CustomDistributionScenario(ScenarioGenerator):
         raise NotImplementedError("This method should be implemented in subclasses.")
 
     def _construct_depart_time_list_from_distribution(self, daily_rel_depart_time_distribution_dict, n_vehicles):
-        """ 
-        Constructs a list of departure times from the given dictionary of vehicle distributions over one day. 
+        """
+        Constructs a list of departure times from the given dictionary of vehicle distributions over one day.
 
         Parameters:
-            daily_rel_depart_time_distribution_dict (dict): A dictionary mapping the relative amount of vehicles departing to each hour in a day (relative to the max. expected number of vehicles per day). The keys should be in the range [0, 24).
+            daily_rel_depart_time_distribution_dict (dict): A dictionary mapping the relative amount of vehicles
+                departing to each hour in a day (relative to the max. expected number of vehicles per day).
+                The keys should be in the range [0, 24). All values must be in [0, 1].
+            n_vehicles (int): The daily maximum vehicle count. The actual count for this day is
+                round(sum(weights) * n_vehicles), floored at MIN_VEHICLES_PER_DAY.
+        Raises:
+            ValueError: If the distribution is empty or has zero total weight.
         """
 
         if not daily_rel_depart_time_distribution_dict:
@@ -230,7 +238,12 @@ class BAStDistributionScenario(CustomDistributionScenario):
         return start_date + datetime.timedelta(days=random_days)
 
     def _get_depart_time_list(self, n_vehicles, scenario_id=None):
-        """ Constructs a list of departure times based on the BASt distribution data. If no scenario_id is provided, a random date in 2022 is used to select the distribution. """
+        """Constructs a list of departure times based on the BASt distribution data.
+
+        If no scenario_id is provided, a random date in 2022 is selected and stored as
+        self.last_episode_date (a datetime.date), making it available to the environment
+        for weekday-aware NOEV injection.
+        """
         if scenario_id is None:
             date = self._random_date(2022, 2022)
             self.last_episode_date = date

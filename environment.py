@@ -32,7 +32,10 @@ class CustomEnv(gym.Env):
             vehicles_to_spawn (int, optional): The number of vehicles to spawn in the simulation. This is the number of observable vehicles (OEVs) that the agent can observe and control. Specifies either the total amount per simulation run or the daily maximum, depending on the scenario_generator.
             observation_sampling_rate (int, optional): The rate at which the observation is sampled (i.e. every x simulation steps).
             longest_route_duration (int, optional): The maximum duration of a route in seconds. Used for some reward strategies and episode truncation in scenarios with random data generation. If an episode in a random data scenario exceeds this duration, the episode is truncated.
-            non_observable_vehicles (int, optional): The number of non-observable vehicles (i.e. not observable by the agent) to spawn in the simulation.
+            non_observable_vehicles (int, optional): The target number of non-observable vehicle charging sessions
+                to inject per episode.
+            noev_provider (str, optional): Which NOEV data provider to use. "obelis" uses the real OBELIS
+                dataset pooled by weekday; any other value uses Random_Data_Provider. Default: "obelis".
             random_seed (int, optional): The seed for the random number generator. Used for reproducibility of the environment.
             reward_kwargs (dict, optional): Scalar parameters forwarded to the reward strategy and
                 observation logic. Supported keys:
