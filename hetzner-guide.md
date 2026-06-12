@@ -53,9 +53,36 @@ File browser: **Cloud Console → Storage → Storage Boxes → File Browser**
 ## Useful Commands
 
 ```bash
-tmux attach -t training   # reattach to running session
-history -c                # clear shell history (after git clone with token)
+tmux new -s training           # new session
+tmux attach -t training        # reattach to running session
+tmux kill-session -t training  # delete session
+# Ctrl+B, D                    # detach (session keeps running)
+# Ctrl+B, [                    # scroll mode (arrow keys / Page Up/Down, Q to exit)
+history -c                     # clear shell history (after git clone with token)
+ssh-keygen -R <server-ip>      # fix "host key changed" warning on new server
+
+# Upload files/folders to server
+scp file.txt root@<server-ip>:/root/repo/
+scp -r folder1 folder2 root@<server-ip>:/root/repo/
+
+# Download files from server
+scp root@<server-ip>:/root/repo/file.txt ./
 ```
+
+---
+
+## TensorBoard
+
+```bash
+# On your local machine – open SSH tunnel:
+ssh -L 6006:localhost:6006 root@<server-ip>
+
+# On the server – open a second tmux window (Ctrl+B, C):
+source .venv/bin/activate
+tensorboard --logdir ./runs/
+```
+
+Then open **http://localhost:6006** in your browser.
 
 ---
 
@@ -69,6 +96,7 @@ history -c                # clear shell history (after git clone with token)
 | SUMO repo already exists | Add `--overwrite` to `dnf config-manager` |
 | Storage box password lost | Robot Panel → Storage Box → **Reset Password** |
 | Reset storage box SSH keys | Cloud Console → Storage → Storage Boxes → SSH Keys |
+| WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED | `ssh-keygen -R <server-ip>` |
 
 ---
 

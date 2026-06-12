@@ -5,7 +5,7 @@ set -e  # Stop on any error
 
 echo "=== Installing SUMO ==="
 sudo dnf config-manager addrepo --overwrite --from-repofile=https://download.opensuse.org/repositories/science:dlr/Fedora_43/science:dlr.repo
-sudo dnf install -y sumo
+sudo dnf install -y sumo libatomic
 
 echo "=== Installing uv ==="
 curl -LsSf https://astral.sh/uv/install.sh | sh
