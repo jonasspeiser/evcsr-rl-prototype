@@ -105,16 +105,51 @@ EVALS = [
     partial(BASE_EVAL, algorithm="RANDOM"),
 ]
 
+# --- Experiment 4: NOEV partial-observability evaluation sweep ---
+# Evaluation-first design: Exp 3 trained agents evaluated across NOEV session counts.
+# NOEV counts chosen from realized-participation probes (GREEDY, 3 eps each):
+#   40 -> rho ~0.75 | 160 -> rho ~0.43 | 320 -> rho ~0.20  (0 = full-observability anchor)
+# 480 was probed and rejected: realized rho collapses to ~0.10 because station
+# congestion suppresses OEV charging stops (rho numerator), overshooting the
+# intended ~0.25 low-participation band.
+# Paired comparison: identical random_seed across all algorithms at each NOEV level.
+
+_EXP4_MODELS = {
+    "basic": "runs/2026-06-12_00-10-03_pid2420664_v1.4.1-18-g88057f4_basic_bast_straight_120km_PPO/2026-06-12_00-10-03_pid2420664_v1.4.1-18-g88057f4_basic_bast_straight_120km_PPO.zip",
+    "basicCongestion": "runs/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO.zip",
+    "basicRelativeDestination": "runs/2026-06-12_00-10-04_pid2420666_v1.4.1-18-g88057f4_basicRelativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420666_v1.4.1-18-g88057f4_basicRelativeDestination_bast_straight_120km_PPO.zip",
+    "relativeDestination": "runs/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO.zip",
+}
+
+_EXP4_NOEV_COUNTS = [0, 40, 160, 320]
+_EXP4_N_EPISODES = 50
+
+EVALS_EXP4 = [
+    partial(BASE_EVAL, algorithm="PPO", model_load_path=path, reward_strategy=strategy,
+            n_noevs=n_noevs, noev_provider="obelis", n_episodes=_EXP4_N_EPISODES)
+    for strategy, path in _EXP4_MODELS.items()
+    for n_noevs in _EXP4_NOEV_COUNTS
+] + [
+    partial(BASE_EVAL, algorithm=baseline,
+            n_noevs=n_noevs, noev_provider="obelis", n_episodes=_EXP4_N_EPISODES)
+    for baseline in ("GREEDY", "BEST_GUESS", "RANDOM")
+    for n_noevs in _EXP4_NOEV_COUNTS
+]
+
 
 
 if __name__ == "__main__":
     import time
     start_time = time.perf_counter()
 
-    def run_parallel(run_list):
+    def run_parallel(run_list, stagger_s=0):
+        """Start all runs in parallel. stagger_s spaces out process starts to
+        avoid simultaneous OBELIS feather loads (transient ~GBs per process)."""
         processes = [Process(target=run) for run in run_list]
         for p in processes:
             p.start()
+            if stagger_s:
+                time.sleep(stagger_s)
         for p in processes:
             p.join()
 
@@ -123,16 +158,21 @@ if __name__ == "__main__":
         subprocess.run(["systemctl", "suspend"])
 
     # run_parallel(TRAININGS)
-    
+
     # run_parallel(EVALS)
 
-    run_parallel(FURTHER_TRAININGS)
+    # run_parallel(FURTHER_TRAININGS)
 
-    MODEL_EVALS = [
-        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=_N_VEHICLES, random_seed=54321)
-        for path in get_latest_n_models(4)
-    ]
-    run_parallel(MODEL_EVALS)
+    # MODEL_EVALS = [
+    #     partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=_N_VEHICLES, random_seed=54321)
+    #     for path in get_latest_n_models(4)
+    # ]
+    # run_parallel(MODEL_EVALS)
+
+    # Experiment 4: NOEV partial-observability sweep (28 conditions, ~50 eps each).
+    # Stagger 45s so 28 processes don't load the 852MB OBELIS feather simultaneously
+    # (30GB RAM machine); steady-state per-process memory is small (weekday pools only).
+    run_parallel(EVALS_EXP4, stagger_s=45)
 
     # run_parallel(FURTHER_TRAININGS_FOLDER)
 
