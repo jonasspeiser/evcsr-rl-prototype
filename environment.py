@@ -136,6 +136,7 @@ class CustomEnv(gym.Env):
         self.observation_space = spaces.Dict(obs_space_dict)
 
         self.episode_count = 0
+        self.noev_sessions_injected = 0
         self.congestion_threshold_m = (reward_kwargs or {}).get('congestion_threshold_m')
 
         # Instantiate the reward strategy based on reward_strategy.
@@ -222,6 +223,22 @@ class CustomEnv(gym.Env):
         total = sum(self.charging_stops_per_episode_counter.values())
         count = len(self.charging_stops_per_episode_counter) if self.charging_stops_per_episode_counter else 1
         self.charging_stops_per_episode_mean = total / count
+
+    def _set_realized_participation_rate(self):
+        """
+        Computes the realized participation rate for the episode:
+        rho = OEV_sessions / (OEV_sessions + NOEV_sessions).
+        OEV sessions = total charging stops across all vehicles this episode.
+        NOEV sessions = injected NOEV session count (logged in _add_non_observable_vehicles).
+        If both are zero (no charging occurred), sets rate to None so it is excluded from logging.
+        """
+        oev_sessions = sum(self.charging_stops_per_episode_counter.values())
+        noev_sessions = self.noev_sessions_injected
+        total = oev_sessions + noev_sessions
+        if total == 0:
+            self.realized_participation_rate = None
+        else:
+            self.realized_participation_rate = oev_sessions / total
 
     def _update_accumulated_waiting_times(self):
         """
@@ -371,6 +388,8 @@ class CustomEnv(gym.Env):
         """
         names = [
             "charging_stops_per_episode_mean",
+            "noev_sessions_injected",
+            "realized_participation_rate",
             "global_ttt", "global_ttt_only_terminated",
             "ttt_per_ev_mean", "ttt_per_ev_mean_only_terminated",
             "cumulated_waiting_time", "cwt_per_ev_mean", "cumulated_waiting_time_only_terminated",
@@ -393,6 +412,7 @@ class CustomEnv(gym.Env):
             self.simulation.add_non_observable_vehicle(cs_id=entry["cs_id"],
                                                    depart_time=entry["charge_begin_seconds"],
                                                    charge_duration=entry["charge_duration"])
+        self.noev_sessions_injected = len(vehicle_data)
 
     def _build_vehicle_observations(self):
         """Update vehicle states from simulation and build the per-vehicle observation arrays.
@@ -716,6 +736,7 @@ class CustomEnv(gym.Env):
             self._set_global_ttt_only_terminated(simulation_time)
             
         self._set_charging_stops_per_episode_mean()
+        self._set_realized_participation_rate()
         self._set_empty_vehicles_per_episode()
         self._set_cumulated_waiting_time_per_episode()
         self._set_final_simulation_time(simulation_time)
@@ -828,6 +849,7 @@ class CustomEnv(gym.Env):
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
         self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
         self.low_battery_ids = set()
+        self.noev_sessions_injected = 0
         self.arrival_soc_wh_mean = None
         self.arrival_range_m_mean = None
         self.charging_start_soc_wh_mean = None

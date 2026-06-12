@@ -80,6 +80,8 @@ class CustomTensorboardCallback(BaseCallback):
 
     METRIC_NAMES = [
         "charging_stops_per_episode_mean",
+        "noev_sessions_injected",
+        "realized_participation_rate",
         "global_ttt",
         "global_ttt_only_terminated",
         "ttt_per_ev_mean",
