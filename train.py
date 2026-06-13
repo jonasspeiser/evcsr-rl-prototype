@@ -74,6 +74,22 @@ TRAININGS = [
     partial(BASE_TRAINING, reward_strategy="relativeDestination"),
 ]
 
+# Exp 3b: dense per-arrival reward + a congestion penalty that actually bites at scale.
+# Diagnosis (Exp 3 evals at 600 veh): relativeDestination has NO congestion penalty and
+# queues ~10x more than GREEDY (CWT 3245 vs 318); basicCongestion's penalty is normalized
+# to ~0.00017/conflict (congestion_penalty / vehicles_to_spawn = 0.1/600), three orders of
+# magnitude below a single charge event (~0.5), so it is effectively absent.
+# Here congestion_penalty=60 -> 60/600 = 0.1 per conflicting vehicle post-normalization,
+# comparable to the delayed queue-wait cost it proxies. battery_penalty=10 keeps the
+# empty(-10) << congested-charge << normal-charge(-0.5) ordering, so a biting penalty
+# cannot push the agent into stranding vehicles to dodge it.
+TRAININGS_EXP3B = [
+    partial(BASE_TRAINING,
+            reward_strategy="relativeDestinationCongestion",
+            reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 60, "battery_penalty_value": 10},
+            obs_features={"simulation_time", "station_assignment_counts"}),
+]
+
 # --- Define your FURTHER TRAINING RUNS here ---
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
@@ -142,16 +158,28 @@ if __name__ == "__main__":
     import time
     start_time = time.perf_counter()
 
-    def run_parallel(run_list, stagger_s=0):
-        """Start all runs in parallel. stagger_s spaces out process starts to
-        avoid simultaneous OBELIS feather loads (transient ~GBs per process)."""
-        processes = [Process(target=run) for run in run_list]
-        for p in processes:
-            p.start()
-            if stagger_s:
-                time.sleep(stagger_s)
-        for p in processes:
-            p.join()
+    def run_parallel(run_list, max_workers=None, stagger_s=0):
+        """Run all jobs with at most max_workers running concurrently.
+
+        max_workers=None means unbounded (legacy behaviour). On this machine the Exp 4
+        sweep MUST cap concurrency: 28 unbounded processes each running a 600-vehicle SUMO
+        + loading the OBELIS feather saturated 12 cores / 30 GB and completed 0 conditions.
+        stagger_s spaces out the start of each new worker to smooth the OBELIS load spike.
+        """
+        run_queue = list(run_list)
+        cap = max_workers or len(run_queue)
+        running = []
+        while run_queue or running:
+            while run_queue and len(running) < cap:
+                p = Process(target=run_queue.pop(0))
+                p.start()
+                running.append(p)
+                if stagger_s:
+                    time.sleep(stagger_s)
+            for p in running[:]:
+                p.join(timeout=1)          # reap finished workers, free their slot
+                if not p.is_alive():
+                    running.remove(p)
 
     def suspend_system():
         import subprocess
@@ -169,10 +197,13 @@ if __name__ == "__main__":
     # ]
     # run_parallel(MODEL_EVALS)
 
+    # Exp 3b: single training run, calibrated congestion penalty (see TRAININGS_EXP3B).
+    run_parallel(TRAININGS_EXP3B)
+
     # Experiment 4: NOEV partial-observability sweep (28 conditions, ~50 eps each).
-    # Stagger 45s so 28 processes don't load the 852MB OBELIS feather simultaneously
-    # (30GB RAM machine); steady-state per-process memory is small (weekday pools only).
-    run_parallel(EVALS_EXP4, stagger_s=45)
+    # CAP at 3 workers: 28 unbounded 600-vehicle SUMO + OBELIS processes saturated the
+    # machine and completed 0/28 last time. ~10 h wall at cap=3; relaunch once Exp 3b lands.
+    # run_parallel(EVALS_EXP4, max_workers=3, stagger_s=20)
 
     # run_parallel(FURTHER_TRAININGS_FOLDER)
 
