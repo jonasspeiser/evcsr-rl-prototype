@@ -31,7 +31,6 @@ from plotting_utils import (  # noqa: E402
     get_all_metrics_files_from_folder,
     build_sweep_cells,
     plot_reliability_vs_congestion,
-    DOCUMENT_DISPLAY_LABELS,
     SWEEP_METHOD_ORDER,
 )
 
@@ -102,12 +101,16 @@ def main():
     # Reliability vs congestion scatter at full observability (NOEV=0), the companion
     # to the Exp 4 NOEV=320 figure. Reuses the shared plotting_utils helper for identical
     # styling; the 0-NOEV arm of the same sweep provides all six methods.
+    # Zoom to the GREEDY/3b/3c/BEST_GUESS cluster; relativeDestination (high wait) and
+    # RANDOM (high stranding) fall outside and are drawn clamped to the edges with their
+    # true values, so the cluster is readable without the outliers compressing the scale.
     cells = build_sweep_cells(get_all_metrics_files_from_folder(SWEEP_DIR))
     rel_path = plot_reliability_vs_congestion(
         cells,
         level=0,
         order=SWEEP_METHOD_ORDER,
-        display_labels=DOCUMENT_DISPLAY_LABELS,
+        xlim=(0, 10),
+        ylim=(0, 500),
         save_path=os.path.join(OUT, "exp3_reliability_vs_congestion.png"),
         title="Reliability vs congestion at full observability (NOEV=0)",
     )

@@ -20,7 +20,6 @@ from plotting_utils import (  # noqa: E402
     build_sweep_cells,
     plot_sweep_degradation,
     plot_reliability_vs_congestion,
-    DOCUMENT_DISPLAY_LABELS,
     SWEEP_METHOD_ORDER,
 )
 
@@ -35,7 +34,6 @@ def main():
     f1 = plot_sweep_degradation(
         cells,
         order=SWEEP_METHOD_ORDER,
-        display_labels=DOCUMENT_DISPLAY_LABELS,
         highlight=["PPO_relativeDestinationCongestionIllegal"],
         save_path=os.path.join(OUT, "exp4_ttt_degradation.png"),
     )
@@ -43,7 +41,6 @@ def main():
         cells,
         level=320,
         order=SWEEP_METHOD_ORDER,
-        display_labels=DOCUMENT_DISPLAY_LABELS,
         save_path=os.path.join(OUT, "exp4_reliability_vs_congestion.png"),
         title="Reliability vs congestion at heavy partial obs (NOEV=320)",
     )
