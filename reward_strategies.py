@@ -81,16 +81,21 @@ def battery_penalty(vehicle, newly_emptied_ids, penalty=1.0):
     return -penalty
 
 
-def illegal_action_penalty(vehicle, context):
-    """Return a penalty if the agent recommended an unreachable charging station, 0 otherwise."""
+def illegal_action_penalty(vehicle, context, penalty=0.01):
+    """Return a penalty if the agent recommended an unreachable charging station, 0 otherwise.
+
+    `penalty` is the magnitude applied per illegal recommendation. The legacy default of 0.01
+    is negligible relative to a charge event (~0.5); size it up (e.g. 0.1-0.2) to actually
+    deter recommending already-passed stations.
+    """
     action = context.get('action')
     if action not in (1, 2, 3, 4):
         return 0
     if context.get('charging_stop_already_planned', False):
         return 0
     if context.get('rerouting_exception_occurred', False):
-        logger.info("Vehicle %s: illegal charging action (penalty -0.01)", vehicle.vehicle_id)
-        return -0.01
+        logger.info("Vehicle %s: illegal charging action (penalty -%.3f)", vehicle.vehicle_id, penalty)
+        return -penalty
     return 0
 
 
@@ -565,3 +570,31 @@ class RelativeDestinationWithCongestionStrategy(RelativeDestinationStrategy):
 
     def calculate_action_penalty(self, vehicle, context):
         return congestion_penalty(vehicle, context, self.congestion_threshold_m, self.congestion_penalty_value)
+
+
+class RelativeDestinationWithCongestionAndIllegalPenaltyStrategy(RelativeDestinationWithCongestionStrategy):
+    """
+    Extends RelativeDestinationWithCongestionStrategy with a penalty for recommending an
+    unreachable / already-passed charging station.
+
+    Motivation: under the congestion-only reward, recommending a passed station carries no
+    cost, so at scale the agent does it ~5400x/episode (BadTimingRoutingError -> re-queue),
+    wasting steps and occasionally stranding vehicles. Adding a sized illegal penalty closes
+    the remaining travel-time gap to the greedy baseline.
+
+    Action penalties: congestion_penalty (inherited) + illegal_action_penalty.
+
+    Args:
+        illegal_penalty_value: Penalty per illegal (unreachable/passed) recommendation. Sized
+            up from the legacy 0.01 so it exceeds the do-nothing alternative (0). Default 0.1.
+    """
+    def __init__(self, scale_s=3000, battery_penalty_value=3.0, congestion_threshold_m=36000,
+                 congestion_penalty_value=1.0, illegal_penalty_value=0.1):
+        super().__init__(scale_s=scale_s, battery_penalty_value=battery_penalty_value,
+                         congestion_threshold_m=congestion_threshold_m,
+                         congestion_penalty_value=congestion_penalty_value)
+        self.illegal_penalty_value = illegal_penalty_value
+
+    def calculate_action_penalty(self, vehicle, context):
+        return (super().calculate_action_penalty(vehicle, context)
+                + illegal_action_penalty(vehicle, context, self.illegal_penalty_value))

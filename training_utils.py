@@ -77,10 +77,15 @@ def _load_run_config(model_load_path):
     if os.path.exists(model_config_path):
         with open(model_config_path, 'r') as f:
             return json.load(f)
-    run_dir = os.path.dirname(os.path.abspath(model_load_path))
-    config_path = os.path.join(run_dir, "run_config.json")
-    with open(config_path, 'r') as f:
-        return json.load(f)
+    # run_config.json lives in the run dir. The model may sit in the run dir itself
+    # (final model) or in a checkpoints/ subdir (SB3 CheckpointCallback), so walk up.
+    model_dir = os.path.dirname(os.path.abspath(model_load_path))
+    for run_dir in (model_dir, os.path.dirname(model_dir)):
+        config_path = os.path.join(run_dir, "run_config.json")
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
+    raise FileNotFoundError(f"run_config.json not found near {model_load_path}")
 
 def _run_training(*, env, log: RunLogging, model, n_steps, reset_num_timesteps=True):
     try:
@@ -218,7 +223,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, noev_provider="obelis", max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -278,7 +283,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, non_observable_vehicles=n_noevs, noev_provider=noev_provider, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Train the agent
     algorithm_class = SB3_ALGOS.get(algorithm)
@@ -303,6 +308,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_noevs": n_noevs,
+        "noev_provider": noev_provider,
         "n_training_units": n_training_units,
         "n_steps": n_steps,
         "random_seed": random_seed,
@@ -343,6 +349,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     street_network = config["street_network"]
     n_vehicles = config["n_vehicles"]
     n_noevs = config.get("n_noevs")
+    noev_provider = config.get("noev_provider", "obelis")
     ent_coef = config.get("ent_coef", 0.0)
     max_vehicles = config.get("max_vehicles")
     longest_route_duration = config.get("longest_route_duration") or get_episode_truncation_limit(street_network, n_vehicles)
@@ -375,7 +382,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
     )
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=None, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, non_observable_vehicles=n_noevs, noev_provider=noev_provider, random_seed=None, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Train the agent
     model = _load_model(model_load_path, algorithm, env)
@@ -396,6 +403,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_noevs": n_noevs,
+        "noev_provider": noev_provider,
         "n_training_units": n_training_units,
         "n_steps": n_steps,
         "ent_coef": ent_coef,
@@ -417,7 +425,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
 
     return model_path
 
-def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None, start_soc_bounds=None, deterministic=True):
+def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_network, n_vehicles, n_episodes, model_load_path=None, n_noevs=None, noev_provider="obelis", execution_context="local", render_mode=None, random_seed=None, longest_route_duration=None, use_wandb=False, wandb_entity=None, start_soc_bounds=None, deterministic=True):
     """
     Evaluates a trained model or baseline algorithm in the specified environment configuration and logs the evaluation metrics.
 
@@ -495,6 +503,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         "street_network": street_network,
         "n_vehicles": n_vehicles,
         "n_noevs": n_noevs,
+        "noev_provider": noev_provider,
         "n_episodes": n_episodes,
         "random_seed": random_seed,
         "model_load_path": model_load_path,
@@ -505,7 +514,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
     }, f"{log.run_dir}/evaluation/run_config_{current_time}.json")
 
     # initiate environment
-    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
+    env = CustomEnv(scenario_generator=scenario, render_mode=render_mode, reward_strategy=reward_strategy, vehicles_to_spawn=n_vehicles, max_vehicles=max_vehicles, non_observable_vehicles=n_noevs, noev_provider=noev_provider, random_seed=random_seed, sumo_log_path=log.py_log_path.replace('.jsonl', '.sumo.log'), street_network=street_network, longest_route_duration=longest_route_duration, reward_kwargs=reward_kwargs, start_soc_bounds=start_soc_bounds, obs_features=obs_features)
 
     # Load saved model or evaluation algorithm
     model = _load_model(model_load_path, algorithm, env)
@@ -541,6 +550,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, ran
         street_network=config["street_network"],
         n_vehicles=n_vehicles if n_vehicles is not None else config["n_vehicles"],
         n_noevs=config.get("n_noevs"),
+        noev_provider=config.get("noev_provider", "obelis"),
         n_episodes=n_episodes,
         model_load_path=model_load_path,
         render_mode=render_mode,

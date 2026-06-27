@@ -1,5 +1,6 @@
 import ast
 import re
+import statistics
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -54,6 +55,22 @@ def get_metrics_files_from_folder(folder_path):
         if metrics:
             metrics_files.append(sorted(metrics)[-1])
     return metrics_files
+
+
+def get_all_metrics_files_from_folder(folder_path):
+    """Return *every* metrics file under folder_path (recursively), not just the latest per run.
+
+    Companion to :func:`get_metrics_files_from_folder`. Required for NOEV participation
+    sweeps, where a single run directory stores one metrics file per participation level
+    (so keeping only the latest would silently drop the other levels).
+
+    Args:
+        folder_path (str or Path): folder containing run directories.
+
+    Returns:
+        Sorted list of Path objects for all ``metrics*.json`` files found below it.
+    """
+    return sorted(Path(folder_path).glob("**/metrics*.json"))
 
 
 def make_violinplot(data_df, metric_name, save_path=None):
@@ -283,6 +300,26 @@ def _build_display_label(row) -> str:
     return f"{algo}_{reward}{obs_tag}{extractor_tag}{pid_tag}"
 
 
+def _build_document_label(row) -> str:
+    """Derive a short, thesis-ready plot label from a metrics row.
+
+    Unlike :func:`_build_display_label` (which appends obs features, extractor flag
+    and PID to disambiguate parallel single-run evaluations), this keeps only the
+    information that is meaningful in the written document: the reward strategy for
+    trained models, and the bare name for rule-based baselines.
+
+    Examples:
+        PPO          + relativeDestinationCongestionIllegal -> "PPO_relativeDestinationCongestionIllegal"
+        GREEDY / BEST_GUESS / RANDOM / PERFECT              -> unchanged
+    """
+    algo = row.get("algorithm", "?")
+    trained_algos = {"PPO", "A2C", "DQN"}
+    if algo not in trained_algos:
+        return algo
+    reward = row.get("reward_strategy", "")
+    return f"{algo}_{reward}" if reward else algo
+
+
 def get_algorithm_labels(filepath_list):
     """Return the display labels that plot_results would assign to each run.
 
@@ -402,6 +439,72 @@ def plot_results(filepath_list, metrics_to_plot="all", save_figure=False, algori
         pprint(run_configs)
 
 
+def plot_for_document(filepath_list, metrics_to_plot, save_directory=None,
+                      algorithms_to_include=None, order=None, noev_filter=None,
+                      filename_prefix=""):
+    """Render thesis-ready figures with short, document-friendly algorithm labels.
+
+    This is the document-facing counterpart to :func:`plot_results`. It is identical
+    in rendering but uses :func:`_build_document_label` (e.g.
+    ``PPO_relativeDestinationCongestionIllegal`` / ``GREEDY``) instead of the verbose
+    single-run labels, and adds two conveniences needed for the experiment write-ups:
+    a participation/NOEV filter and explicit method ordering.
+
+    Args:
+        filepath_list (list): paths to evaluation ``metrics*.json`` files.
+        metrics_to_plot (list): metric names, same vocabulary as :func:`plot_results`
+            (e.g. ``["env/ttt_per_ev_mean", "action_distribution"]``).
+        save_directory (str or None): directory to write PNGs into (created if missing).
+            Unlike :func:`plot_results`, no timestamped subfolder is added, so figures
+            land exactly where requested (e.g. ``thesis/figures``). If None, figures are
+            only shown, not saved.
+        algorithms_to_include (list or None): keep only these document labels.
+        order (list or None): document labels in the desired left-to-right plot order.
+            Acts as an inclusion filter as well, so passing ``order`` alone is enough.
+        noev_filter (int or None): if set, keep only episodes whose
+            ``env/noev_sessions_injected`` equals this value. Use ``0`` to extract the
+            full-observability arm from a mixed-level NOEV sweep file.
+        filename_prefix (str): prefix for saved PNG filenames (e.g. ``"exp3_"``).
+    """
+    data_list = []
+    for filepath in filepath_list:
+        with open(filepath) as file:
+            rows = json.load(file)
+        run_dir = Path(filepath).parent.parent.name
+        for row in rows:
+            row["_run_dir"] = run_dir
+        data_list.extend(rows)
+
+    df = pd.DataFrame(data_list)
+
+    if noev_filter is not None:
+        if "env/noev_sessions_injected" not in df.columns:
+            raise ValueError("noev_filter requested but 'env/noev_sessions_injected' is "
+                             "absent from the metrics — these runs predate NOEV logging.")
+        df = df[df["env/noev_sessions_injected"] == noev_filter]
+
+    df["algorithm"] = df.apply(_build_document_label, axis=1)
+
+    if algorithms_to_include is not None:
+        df = df[df["algorithm"].isin(algorithms_to_include)]
+
+    if order is not None:
+        rank = {name: i for i, name in enumerate(order)}
+        df = df[df["algorithm"].isin(rank)]
+        df = df.sort_values(by="algorithm", key=lambda s: s.map(rank), kind="stable")
+
+    if df.empty:
+        raise ValueError("No episodes left to plot after filtering. Check "
+                         "algorithms_to_include / order / noev_filter against the inputs.")
+
+    if save_directory:
+        os.makedirs(save_directory, exist_ok=True)
+        with open(f"{save_directory}/{filename_prefix}source_files.json", "w") as f:
+            json.dump({"source_files": [str(fp) for fp in filepath_list]}, f, indent=2)
+
+    _run_plots(df, metrics_to_plot, save_directory, filename_prefix=filename_prefix)
+
+
 def plot_results_from_csv(csv_path, metrics_to_plot="all", save_figure=False, algorithms_to_include=None):
     """Re-generate plots from a previously saved data_raw.csv without re-running evaluation.
 
@@ -452,8 +555,13 @@ def plot_results_from_csv(csv_path, metrics_to_plot="all", save_figure=False, al
     _run_plots(df, metrics_to_plot, save_directory)
 
 
-def _run_plots(df, metrics_to_plot, save_directory):
-    """Build df_melted and render all requested plots. Used by both plot_results and plot_results_from_csv."""
+def _run_plots(df, metrics_to_plot, save_directory, filename_prefix=""):
+    """Build df_melted and render all requested plots. Used by both plot_results and plot_results_from_csv.
+
+    Args:
+        filename_prefix (str): optional prefix prepended to every saved PNG filename
+            (e.g. "exp3_") so figures from different experiments can share a directory.
+    """
     # Melt the DataFrame to long format.
     # Special-case metrics are not plain scalar columns; map them to their backing columns so
     # they still end up in data_melted.csv and can be reproduced without re-running evaluation.
@@ -476,29 +584,29 @@ def _run_plots(df, metrics_to_plot, save_directory):
                         value_name="Value")
 
     if save_directory:
-        df.to_csv(f"{save_directory}/data_raw.csv", index=False)
-        df_melted.to_csv(f"{save_directory}/data_melted.csv", index=False)
+        df.to_csv(f"{save_directory}/{filename_prefix}data_raw.csv", index=False)
+        df_melted.to_csv(f"{save_directory}/{filename_prefix}data_melted.csv", index=False)
 
     for metric in metrics_to_plot:
         if metric == "action_distribution":
-            save_path = f"{save_directory}/action_distribution.png" if save_directory else None
+            save_path = f"{save_directory}/{filename_prefix}action_distribution.png" if save_directory else None
             plot_action_distribution(df, save_path=save_path)
         elif metric == "action_counts_absolute":
-            save_path = f"{save_directory}/action_counts_absolute.png" if save_directory else None
+            save_path = f"{save_directory}/{filename_prefix}action_counts_absolute.png" if save_directory else None
             plot_action_counts_absolute(df, save_path=save_path)
         elif metric == "termination_status":
-            save_path = f"{save_directory}/termination_status.png" if save_directory else None
+            save_path = f"{save_directory}/{filename_prefix}termination_status.png" if save_directory else None
             plot_termination_status(df, save_path=save_path)
         elif metric == "arrival_stats":
-            save_path = f"{save_directory}/arrival_stats.png" if save_directory else None
+            save_path = f"{save_directory}/{filename_prefix}arrival_stats.png" if save_directory else None
             plot_soc_at_arrival(df, save_path=save_path)
         elif metric == "charging_start_stats":
-            save_path = f"{save_directory}/charging_start_stats.png" if save_directory else None
+            save_path = f"{save_directory}/{filename_prefix}charging_start_stats.png" if save_directory else None
             plot_soc_at_charging_start(df, save_path=save_path)
         else:
             df_filtered = df_melted[df_melted["Metric"] == metric]
             metric_display_name = metric[4:] if metric.startswith("env/") else metric
-            figure_save_path = f"{save_directory}/{metric_display_name}.png" if save_directory else None
+            figure_save_path = f"{save_directory}/{filename_prefix}{metric_display_name}.png" if save_directory else None
             make_violinplot(data_df=df_filtered, metric_name=metric_display_name, save_path=figure_save_path)
 
 
@@ -629,3 +737,216 @@ def plot_soc_history(soc_history: dict[str, list[float]], max_capacity_wh: float
     ax.legend(fontsize=7, ncol=4, loc="upper right")
     plt.tight_layout()
     plt.show()
+
+
+# ---------------------------------------------------------------------------
+# NOEV participation-sweep figures (degradation curves + reliability scatter)
+# ---------------------------------------------------------------------------
+# These aggregate evaluation episodes by (method, NOEV level) and render the two
+# partial-observability figures used in the Experiment 3/4 write-ups. They are kept
+# here so every plotting helper lives in one place; the thin drivers in dev_helpers/
+# only supply run-directory paths and output locations.
+
+DEFAULT_NOEV_LEVELS = (0, 40, 160, 320)
+
+# Default left-to-right / legend order for the sweep figures. Labels follow the
+# document convention produced by _build_document_label (PPO_<reward> / GREEDY / ...),
+# matching the violin, action-distribution and table naming used elsewhere in the chapter.
+SWEEP_METHOD_ORDER = [
+    "PPO_relativeDestinationCongestionIllegal",
+    "PPO_relativeDestinationCongestion",
+    "PPO_relativeDestination",
+    "GREEDY",
+    "BEST_GUESS",
+    "RANDOM",
+]
+
+
+def _nearest_level(value, levels):
+    return min(levels, key=lambda n: abs(n - value))
+
+
+def _cell_mean(eps, key):
+    vals = [e[key] for e in eps if key in e and e[key] is not None]
+    return statistics.mean(vals) if vals else None
+
+
+def _cell_std(eps, key):
+    vals = [e[key] for e in eps if key in e and e[key] is not None]
+    return statistics.pstdev(vals) if vals else None
+
+
+def build_sweep_cells(filepath_list, levels=DEFAULT_NOEV_LEVELS, label_fn=_build_document_label):
+    """Aggregate sweep evaluation files into ``{(label, noev_level): [episodes]}``.
+
+    Each metrics file is assigned to the nearest NOEV level by the mean of its
+    per-episode ``env/noev_sessions_injected`` values, so single-level and mixed-level
+    files are handled alike. Files that map to the same (label, level) are concatenated.
+
+    Args:
+        filepath_list: metrics files, e.g. from :func:`get_all_metrics_files_from_folder`.
+        levels: candidate NOEV levels episodes are snapped to.
+        label_fn: maps a metrics row to its label (default: short document label).
+    """
+    cells = {}
+    for mf in filepath_list:
+        with open(mf) as f:
+            eps = json.load(f)
+        if not isinstance(eps, list) or not eps:
+            continue
+        label = label_fn(eps[0])
+        injected = [e["env/noev_sessions_injected"] for e in eps if "env/noev_sessions_injected" in e]
+        level = _nearest_level(statistics.mean(injected), levels) if injected else levels[0]
+        cells.setdefault((label, level), []).extend(eps)
+    return cells
+
+
+def plot_sweep_degradation(cells, levels=DEFAULT_NOEV_LEVELS, metric="env/ttt_per_ev_mean",
+                           order=None, display_labels=None, highlight=None, save_path=None,
+                           title="Travel-time degradation under partial observability",
+                           xlabel="Injected NOEV charging sessions  (lower participation →)",
+                           ylabel="Mean travel time per vehicle (s)"):
+    """Line plot of ``metric`` vs NOEV level, one line (mean ± std) per method.
+
+    Args:
+        cells: output of :func:`build_sweep_cells`.
+        levels: NOEV levels on the x-axis.
+        metric: per-episode metric key aggregated as mean ± std across episodes.
+        order: method labels to draw, in order (defaults to all present, sorted).
+        display_labels: optional ``{label: pretty_name}`` for the legend.
+        highlight: labels drawn with a thicker line.
+        save_path: if given, the figure is saved here at 150 dpi.
+    """
+    order = order or sorted({lab for (lab, _) in cells})
+    display_labels = display_labels or {}
+    highlight = set(highlight or [])
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for label in order:
+        xs, ys, es = [], [], []
+        for n in levels:
+            eps = cells.get((label, n))
+            if not eps:
+                continue
+            m = _cell_mean(eps, metric)
+            if m is None:
+                continue
+            xs.append(n); ys.append(m); es.append(_cell_std(eps, metric) or 0.0)
+        if not xs:
+            continue
+        ax.errorbar(xs, ys, yerr=es, marker="o", capsize=3,
+                    label=display_labels.get(label, label),
+                    linewidth=2 if label in highlight else 1.3)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.set_xticks(list(levels))
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    return save_path
+
+
+def plot_reliability_vs_congestion(cells, level, order=None, display_labels=None,
+                                   x_metric="env/empty_vehicles_per_episode",
+                                   y_metric="env/cwt_per_ev_mean", save_path=None, title=None,
+                                   xlabel="Stranded vehicles / episode  (reliability → better left)",
+                                   ylabel="Charging wait time / vehicle (s)  (congestion → better down)",
+                                   xlim=None, ylim=None):
+    """Scatter of reliability (x: stranded/ep) vs congestion (y: wait/ev) at one NOEV level.
+
+    Lower-left is better on both axes. Each method is a coloured point identified via a
+    legend, so labels follow the document naming convention used elsewhere in the chapter
+    rather than being annotated inline (which overlaps for clustered methods).
+
+    If ``xlim`` and/or ``ylim`` are given, the axes zoom to that window and any method
+    falling outside it is drawn as a triangle clamped to the corresponding edge and
+    annotated with its true (x, y) value — so off-scale outliers stay visible with their
+    numbers without compressing the remaining methods.
+
+    Args:
+        cells: output of :func:`build_sweep_cells`.
+        level: NOEV level to plot.
+        order: method labels to include, in order (defaults to all present at ``level``).
+        display_labels: optional ``{label: pretty_name}`` for the legend (default: identity).
+        x_metric / y_metric: per-episode metrics averaged for each method.
+        save_path: if given, the figure is saved here at 150 dpi (clip-safe).
+        title: defaults to ``"Reliability vs congestion (NOEV=<level>)"``.
+        xlim / ylim: optional ``(min, max)`` zoom windows enabling outlier clamping.
+    """
+    order = order or sorted({lab for (lab, n) in cells if n == level})
+    display_labels = display_labels or {}
+    if title is None:
+        title = f"Reliability vs congestion (NOEV={level})"
+
+    points = []
+    for label in order:
+        eps = cells.get((label, level))
+        if not eps:
+            continue
+        x = _cell_mean(eps, x_metric)
+        y = _cell_mean(eps, y_metric)
+        if x is not None and y is not None:
+            points.append((label, x, y))
+
+    palette = sns.color_palette("muted", n_colors=len(points))
+    colors = {lab: palette[i] for i, (lab, _, _) in enumerate(points)}
+
+    xmin, xmax = xlim if xlim else (None, None)
+    ymin, ymax = ylim if ylim else (None, None)
+
+    mid_x = (xmin + xmax) / 2 if (xmin is not None and xmax is not None) else None
+
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+    for label, x, y in points:
+        c = colors[label]
+        name = display_labels.get(label, label)
+        above = ymax is not None and y > ymax
+        below = ymin is not None and y < ymin
+        right = xmax is not None and x > xmax
+        left = xmin is not None and x < xmin
+        if not (above or below or right or left):
+            # In-window point: label sits next to it, on whichever side has more room.
+            ax.scatter(x, y, s=70, color=c, zorder=3)
+            if mid_x is not None and x > mid_x:
+                ax.annotate(name, (x, y), fontsize=8, xytext=(-7, 0),
+                            textcoords="offset points", ha="right", va="center", zorder=4)
+            else:
+                ax.annotate(name, (x, y), fontsize=8, xytext=(7, 0),
+                            textcoords="offset points", ha="left", va="center", zorder=4)
+            continue
+        # Off-scale: clamp to the edge, point a triangle outward, label with the true value.
+        cx = min(max(x, xmin if xmin is not None else x), xmax if xmax is not None else x)
+        cy = min(max(y, ymin if ymin is not None else y), ymax if ymax is not None else y)
+        text = f"{name}\n({x:.0f}, {y:.0f})"
+        right_half = mid_x is not None and cx > mid_x
+        if above:
+            marker = "^"
+            off, ha, va = ((-4, -13), "right", "top") if right_half else ((4, -13), "left", "top")
+        elif below:
+            marker = "v"
+            off, ha, va = ((-4, 13), "right", "bottom") if right_half else ((4, 13), "left", "bottom")
+        elif right:
+            marker, off, ha, va = ">", (-11, 0), "right", "center"
+        else:
+            marker, off, ha, va = "<", (11, 0), "left", "center"
+        ax.scatter(cx, cy, s=95, color=c, marker=marker, zorder=3,
+                   edgecolors="black", linewidths=0.5)
+        ax.annotate(text, (cx, cy), fontsize=8, xytext=off,
+                    textcoords="offset points", ha=ha, va=va, zorder=4)
+
+    if xlim:
+        ax.set_xlim(*xlim)
+    if ylim:
+        ax.set_ylim(*ylim)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.grid(alpha=0.3)
+    plt.show()
+    if save_path:
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    return save_path

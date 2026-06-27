@@ -74,6 +74,36 @@ TRAININGS = [
     partial(BASE_TRAINING, reward_strategy="relativeDestination"),
 ]
 
+# Exp 3b: dense per-arrival reward + a congestion penalty that actually bites at scale.
+# Diagnosis (Exp 3 evals at 600 veh): relativeDestination has NO congestion penalty and
+# queues ~10x more than GREEDY (CWT 3245 vs 318); basicCongestion's penalty is normalized
+# to ~0.00017/conflict (congestion_penalty / vehicles_to_spawn = 0.1/600), three orders of
+# magnitude below a single charge event (~0.5), so it is effectively absent.
+# Here congestion_penalty=60 -> 60/600 = 0.1 per conflicting vehicle post-normalization,
+# comparable to the delayed queue-wait cost it proxies. battery_penalty=10 keeps the
+# empty(-10) << congested-charge << normal-charge(-0.5) ordering, so a biting penalty
+# cannot push the agent into stranding vehicles to dodge it.
+TRAININGS_EXP3B = [
+    partial(BASE_TRAINING,
+            reward_strategy="relativeDestinationCongestion",
+            reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 60, "battery_penalty_value": 10},
+            obs_features={"simulation_time", "station_assignment_counts"}),
+]
+
+# Exp 3c: same as 3b (dense reward + calibrated congestion) PLUS a sized illegal-action
+# penalty. Diagnosis of the 3b model: under congestion-only reward, recommending an
+# already-passed station is unpenalized, so the agent does it ~5400x/episode (BadTimingRouting
+# -> re-queue), wasting steps and stranding ~0.5 extra vehicles vs greedy. The legacy illegal
+# penalty was 0.01 (negligible); here illegal_penalty_value=0.2 makes a passed-station pick
+# clearly worse than do-nothing (0). Everything else identical to 3b to isolate the effect
+# and serve as a clean reward-formulation ablation rung (RQ2.1).
+TRAININGS_EXP3C = [
+    partial(BASE_TRAINING,
+            reward_strategy="relativeDestinationCongestionIllegal",
+            reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 60, "battery_penalty_value": 10, "illegal_penalty_value": 0.2},
+            obs_features={"simulation_time", "station_assignment_counts"}),
+]
+
 # --- Define your FURTHER TRAINING RUNS here ---
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
@@ -105,34 +135,97 @@ EVALS = [
     partial(BASE_EVAL, algorithm="RANDOM"),
 ]
 
+# --- Experiment 4: NOEV partial-observability evaluation sweep ---
+# Evaluation-first design: Exp 3 trained agents evaluated across NOEV session counts.
+# NOEV counts chosen from realized-participation probes (GREEDY, 3 eps each):
+#   40 -> rho ~0.75 | 160 -> rho ~0.43 | 320 -> rho ~0.20  (0 = full-observability anchor)
+# 480 was probed and rejected: realized rho collapses to ~0.10 because station
+# congestion suppresses OEV charging stops (rho numerator), overshooting the
+# intended ~0.25 low-participation band.
+# Paired comparison: identical random_seed across all algorithms at each NOEV level.
+
+# Trimmed to the scientifically load-bearing set (Day 4): the new congestion variant
+# (centerpiece), the dense variant WITHOUT a congestion penalty (the RQ2.1 contrast that
+# isolates the penalty's effect under partial observability), and the three baselines.
+# The basic/basicCongestion/basicRelativeDestination full-observability failures are kept
+# out of the sweep; their 10-episode numbers already feed the Exp 3 ablation table.
+_EXP4_MODELS = {
+    "relativeDestinationCongestion": "runs/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO.zip",
+    "relativeDestination": "runs/_runs_20260612_1004 (bast 600)/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO.zip",
+}
+
+_EXP4_NOEV_COUNTS = [0, 40, 160, 320]
+_EXP4_N_EPISODES = 50
+
+EVALS_EXP4 = [
+    partial(BASE_EVAL, algorithm="PPO", model_load_path=path, reward_strategy=strategy,
+            n_noevs=n_noevs, noev_provider="obelis", n_episodes=_EXP4_N_EPISODES)
+    for strategy, path in _EXP4_MODELS.items()
+    for n_noevs in _EXP4_NOEV_COUNTS
+] + [
+    partial(BASE_EVAL, algorithm=baseline,
+            n_noevs=n_noevs, noev_provider="obelis", n_episodes=_EXP4_N_EPISODES)
+    for baseline in ("GREEDY", "BEST_GUESS", "RANDOM")
+    for n_noevs in _EXP4_NOEV_COUNTS
+]
+
 
 
 if __name__ == "__main__":
     import time
     start_time = time.perf_counter()
 
-    def run_parallel(run_list):
-        processes = [Process(target=run) for run in run_list]
-        for p in processes:
-            p.start()
-        for p in processes:
-            p.join()
+    def run_parallel(run_list, max_workers=None, stagger_s=0):
+        """Run all jobs with at most max_workers running concurrently.
+
+        max_workers=None means unbounded (legacy behaviour). On this machine the Exp 4
+        sweep MUST cap concurrency: 28 unbounded processes each running a 600-vehicle SUMO
+        + loading the OBELIS feather saturated 12 cores / 30 GB and completed 0 conditions.
+        stagger_s spaces out the start of each new worker to smooth the OBELIS load spike.
+        """
+        run_queue = list(run_list)
+        cap = max_workers or len(run_queue)
+        running = []
+        while run_queue or running:
+            while run_queue and len(running) < cap:
+                p = Process(target=run_queue.pop(0))
+                p.start()
+                running.append(p)
+                if stagger_s:
+                    time.sleep(stagger_s)
+            for p in running[:]:
+                p.join(timeout=1)          # reap finished workers, free their slot
+                if not p.is_alive():
+                    running.remove(p)
 
     def suspend_system():
         import subprocess
         subprocess.run(["systemctl", "suspend"])
 
     # run_parallel(TRAININGS)
-    
+
     # run_parallel(EVALS)
 
-    run_parallel(FURTHER_TRAININGS)
+    # run_parallel(FURTHER_TRAININGS)
 
-    MODEL_EVALS = [
-        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=_N_VEHICLES, random_seed=54321)
-        for path in get_latest_n_models(4)
-    ]
-    run_parallel(MODEL_EVALS)
+    # MODEL_EVALS = [
+    #     partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, n_vehicles=_N_VEHICLES, random_seed=54321)
+    #     for path in get_latest_n_models(4)
+    # ]
+    # run_parallel(MODEL_EVALS)
+
+    # Exp 3b: single training run, calibrated congestion penalty (see TRAININGS_EXP3B). DONE.
+    # run_parallel(TRAININGS_EXP3B)
+
+    # Exp 3c: dense + calibrated congestion + sized illegal penalty (see TRAININGS_EXP3C).
+    # Already running as a separate process (do NOT start a second training here).
+    # run_parallel(TRAININGS_EXP3C)
+
+    # Experiment 4: NOEV partial-observability sweep (20 conditions: {relativeDestination,
+    # relativeDestinationCongestion} x {0,40,160,320} NOEV + GREEDY/BEST_GUESS/RANDOM x 4).
+    # CAP at 3: the Exp 3c training already holds 1 SUMO instance, so 3 sweep workers + 1
+    # training = 4 SUMO total = the machine's stated safe max. Stagger smooths OBELIS loads.
+    run_parallel(EVALS_EXP4, max_workers=3, stagger_s=20)
 
     # run_parallel(FURTHER_TRAININGS_FOLDER)
 

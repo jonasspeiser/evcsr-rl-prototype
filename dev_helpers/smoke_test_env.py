@@ -8,7 +8,8 @@ Part 1 (this file): exercises everything EXCEPT the neural network:
   - BASt scenario: random 2022 date, departure-time distribution, 24h truncation
   - Cross-N: vehicles_to_spawn < max_vehicles, variable spawn counts across episodes
   - Observation shapes, padding, vehicle_mask consistency, value ranges
-  - NOEV injection via Random_Data_Provider (Exp 4 plumbing)
+  - NOEV injection via Random_Data_Provider (fast path, no OBELIS load)
+  - NOEV injection via Obelis_Data_Provider + BASt scenario (Exp 4 full path)
 
 Run:  python smoke_test_env.py
 Requires SUMO (SUMO_HOME set or eclipse-sumo pip package), no torch needed.
@@ -50,6 +51,27 @@ def run_episode(env, policy="random", max_steps=20000, rng=None):
     return dict(steps=n_steps, terminated=terminated, truncated=truncated,
                 max_active=max(mask_counts) if mask_counts else 0,
                 sim_time_final=sim_times[-1] if sim_times else None)
+
+def run_episode_with_metrics(env, policy="random", max_steps=20000, rng=None):
+    """Like run_episode but also returns the final _episode_metrics from info."""
+    rng = rng or np.random.default_rng(0)
+    obs, info = env.reset()
+    n_steps, terminated, truncated = 0, False, False
+    mask_counts, sim_times = [], []
+    episode_metrics = {}
+    while not (terminated or truncated) and n_steps < max_steps:
+        action = 0 if policy == "noop" else int(rng.integers(0, env.action_space.n))
+        obs, reward, terminated, truncated, info = env.step(action)
+        if terminated or truncated:
+            episode_metrics = info.get("_episode_metrics", {})
+        if "simulation_time" in obs:
+            sim_times.append(float(obs["simulation_time"][0]))
+        mask_counts.append(int(obs["vehicle_mask"].sum()))
+        n_steps += 1
+    return dict(steps=n_steps, terminated=terminated, truncated=truncated,
+                max_active=max(mask_counts) if mask_counts else 0,
+                sim_time_final=sim_times[-1] if sim_times else None,
+                episode_metrics=episode_metrics)
 
 def main():
     from environment import CustomEnv
@@ -94,13 +116,14 @@ def main():
             except Exception: pass
 
     # ----------------------------------------------------------------------
-    print("\n=== Test 2: NOEV plumbing via Random_Data_Provider (Experiment 4 path) ===")
+    print("\n=== Test 2: NOEV plumbing via Random_Data_Provider (fast path) ===")
     env = None
     try:
         env = CustomEnv(
             scenario_generator="all_random",
             vehicles_to_spawn=3,
             non_observable_vehicles=5,
+            noev_provider="random",     # explicit: avoid loading 852MB OBELIS file here
             obs_features={"simulation_time"},
             street_network="straight_100km",
             random_seed=7,
@@ -113,6 +136,74 @@ def main():
     except Exception as e:
         traceback.print_exc()
         check("Test 2 ran without exception", False, e)
+    finally:
+        if env is not None:
+            try: env.close()
+            except Exception: pass
+
+    # ----------------------------------------------------------------------
+    print("\n=== Test 3: BASt + OBELIS provider (Experiment 4 full path) ===")
+    print("  (loading OBELIS feather ~852 MB — may take 30–60 s)")
+    env = None
+    try:
+        TARGET_SESSIONS = 50  # high-end proxy; actual sweep values determined later
+
+        env = CustomEnv(
+            scenario_generator="bast",
+            vehicles_to_spawn=8,
+            max_vehicles=15,
+            non_observable_vehicles=TARGET_SESSIONS,
+            noev_provider="obelis",
+            obs_features={"simulation_time"},
+            street_network="straight_100km",
+            random_seed=42,
+        )
+        check("env constructed (BASt + OBELIS)", True)
+
+        # --- Duration realism: sample Monday pool directly ---
+        sample = env.noev_data_provider.get_non_observable_vehicle_data(weekday=0)
+        check("OBELIS Monday pool non-empty", len(sample) > 0, len(sample))
+        if sample:
+            mean_dur = sum(e["charge_duration"] for e in sample) / len(sample)
+            min_dur  = min(e["charge_duration"] for e in sample)
+            check(
+                "OBELIS session durations realistic (mean > 300 s / 5 min)",
+                mean_dur > 300,
+                f"mean={mean_dur:.0f}s  min={min_dur:.0f}s"
+            )
+            print(f"  OBELIS duration sample: mean={mean_dur:.0f}s  min={min_dur:.0f}s  n={len(sample)}")
+
+        # --- Run two episodes, capture metrics and episode dates ---
+        dates = []
+        for ep in range(2):
+            stats = run_episode_with_metrics(env, policy="random",
+                                             rng=np.random.default_rng(ep))
+            ep_metrics = stats["episode_metrics"]
+            injected = ep_metrics.get("noev_sessions_injected", 0)
+            rpr = ep_metrics.get("realized_participation_rate")
+            date = getattr(env.simulation.scenario_generator, "last_episode_date", None)
+            dates.append(date)
+
+            rpr_str = f"{rpr:.3f}" if rpr is not None else "None"
+            print(f"  episode {ep}: steps={stats['steps']} date={date} "
+                  f"noev_injected={injected} realized_participation_rate={rpr_str} "
+                  f"terminated={stats['terminated']} truncated={stats['truncated']}")
+
+            check(f"ep{ep} completed", stats["terminated"] or stats["truncated"])
+            check(f"ep{ep} noev_sessions_injected > 0", injected > 0, injected)
+            check(f"ep{ep} realized_participation_rate non-None", rpr is not None, rpr)
+
+        # --- Consecutive resets select different episode dates ---
+        if len(dates) == 2 and all(d is not None for d in dates):
+            check("consecutive resets give different episode dates",
+                  dates[0] != dates[1], f"{dates[0]} vs {dates[1]}")
+        else:
+            check("last_episode_date attribute available", False,
+                  f"dates={dates}")
+
+    except Exception as e:
+        traceback.print_exc()
+        check("Test 3 ran without exception", False, e)
     finally:
         if env is not None:
             try: env.close()
