@@ -86,21 +86,23 @@ All dependencies are locked via `uv.lock` for reproducibility.
 
 ```
 evcsr-rl-prototype/
+├── train.py                # Experiment driver — defines & launches parallel train/eval runs
 ├── environment.py          # Gymnasium env (CustomEnv) — main RL loop
 ├── simulation.py           # SUMO/TraCI wrapper — vehicle & battery management
 ├── vehicle.py              # Per-vehicle state, observation generation
 ├── reward_strategies.py    # Pluggable reward functions
 ├── oev_scenario_generator.py  # Vehicle spawning scenarios
-├── evaluation_algorithms.py   # Baseline algorithms (Greedy, Random, Fixed)
+├── evaluation_algorithms.py   # Baseline algorithms (Greedy, Best-guess, Random, Fixed)
 ├── feature_extractor.py    # Deep Sets feature extractor for the policy
 ├── training_utils.py       # High-level train/evaluate API
 ├── network_generator.py    # SUMO network generation & route extraction
 ├── logging_utils.py        # Custom logging, run management, crash bundles
 ├── plotting_utils.py       # Violin plots and evaluation visualization
 ├── noev_data_provider.py   # Background traffic (NOEV) data providers
-├── test.py                 # git bisect tests (returns 0/1/125)
 ├── training.ipynb          # Interactive training notebook
 ├── visualization.ipynb     # Results visualization notebook
+├── dev_helpers/            # Tests, smoke/validation, and experiment (sweep/plotting) scripts
+├── docs/                   # Architecture notes & figures
 ├── street-networks/        # SUMO network files (see Street Networks)
 │   ├── circle/
 │   ├── straight_100km/
@@ -185,20 +187,38 @@ Charging stations are numbered `cs_1` through `cs_4` (1-indexed). Routing to a s
 
 ### Reward Strategies
 
-Configured via the `reward_strategy` parameter. Three strategies are available:
+Configured via the `reward_strategy` string parameter, resolved to a strategy class in
+`CustomEnv.__init__` ([environment.py](environment.py)) and implemented in
+[reward_strategies.py](reward_strategies.py). Magnitudes are tunable per run via `reward_kwargs`.
+Strategies marked **★** are the ones used in the thesis experiments.
 
-| Strategy | Step Reward | Terminal Reward | Notes |
-|----------|-------------|-----------------|-------|
-| `"basic"` | 0 | −mean_travel_time | Pure TTT minimization |
-| `"noTime"` | −100 on death, +10 on arrival | 0 | No time component |
-| `"shaping"` | −100 on death, +(MAX_TTT − travel_time) on arrival | −mean_travel_time | Hybrid |
+**Relative-overhead family** (dense, per-arrival) — the thesis centerpiece. The reward per
+arriving vehicle is `−(actual_ttt − ideal_ttt) / scale`, where `ideal_ttt` is the no-stop route
+time returned by the routing API at spawn; an empty battery incurs `battery_penalty`.
 
-All strategies apply a penalty for unnecessary or illegal charging actions (routing to an already-passed station, or routing when the vehicle has sufficient range to reach the destination).
+| Key | Behaviour (on top of `relativeDestination`) |
+|-----|---------------------------------------------|
+| `relativeDestination` ★ | base dense overhead reward; no action penalty |
+| `basicRelativeDestination` ★ | + terminal −mean TTT |
+| `relativeDestinationCongestion` ★ | + per-conflict congestion penalty |
+| `relativeDestinationCongestionIllegal` ★ | + congestion **and** illegal-action penalty (Exp 3c) |
+| `relativeDestinationCharging` | + dense per-step charging reward |
+| `relativeDestinationIllegal` | + illegal-action penalty only |
 
-**Key constants** (defined in `reward_strategies.py`):
-- Death penalty: `−100` per vehicle
-- Arrival bonus (shaping): `MAX_ALLOWED_TTT − travel_time` (MAX_ALLOWED_TTT = 100 s)
-- Action penalty: `−1` for pointless/illegal actions
+**Time-based family** (sparse terminal reward)
+
+| Key | Step Reward | Terminal Reward |
+|-----|-------------|-----------------|
+| `basic` ★ | 0 | −mean TTT (scaled ÷3000) |
+| `basicCongestion` ★ | 0 | −mean TTT, plus a per-conflict congestion action penalty |
+| `noTime` | −1 on death, +10 on arrival, + charging | 0 |
+| `shaping` | destination + charging shaping | −mean TTT |
+| `basicDestination`, `basicCharging`, `basicShaping`, `basicShapingIllegal` | `basic` + various shaping terms | −mean TTT |
+| `destination`, `destinationBattery`, `destinationBatteryCongestion` | per-arrival destination reward + optional battery/congestion penalties | 0 |
+
+Action penalties (congestion, illegal / already-passed station, unnecessary charging) are applied
+at recommendation time. See the per-class docstrings in [reward_strategies.py](reward_strategies.py)
+for exact magnitudes and the `reward_kwargs` each strategy accepts.
 
 ### Scenarios
 
@@ -304,6 +324,7 @@ Defined in `evaluation_algorithms.py`:
 | Do-nothing | `"ACTION0"` | Always action 0 (never charges) |
 | Random | `"RANDOM"` | Uniformly random action each step |
 | Greedy | `"GREEDY"` | If normalized SOC > 0.15 (~40 km range): do nothing. Otherwise route to nearest reachable station ahead of destination. |
+| Best-guess | `"BEST_GUESS"` | If remaining range reaches the destination: do nothing. Otherwise route to the **least-congested** reachable station (fewest currently assigned vehicles). |
 | Fixed action N | `"ACTION1"` … `"ACTION4"` | Always chooses station N |
 
 The greedy threshold of 0.15 normalized SOC corresponds to ~9,600 Wh ≈ 40 km of range (well above the 25 km maximum station gap in the straight networks).
@@ -368,9 +389,9 @@ Key metrics:
 
 ## Testing & Debugging
 
-### git bisect tests (`test.py`)
+### git bisect tests (`dev_helpers/test.py`)
 
-`test.py` is designed for `git bisect`. It returns:
+`dev_helpers/test.py` is designed for `git bisect`. It returns:
 - `0` — good commit
 - `1` — bad commit
 - `125` — skip (untestable commit)
@@ -379,7 +400,7 @@ Key metrics:
 git bisect start
 git bisect bad HEAD
 git bisect good <known-good-sha>
-git bisect run uv run python test.py
+git bisect run uv run python dev_helpers/test.py
 ```
 
 **test_remaining_range_calculation**: Verifies that `simulation.get_remaining_range()` produces a physically plausible implied consumption rate of 0.10–0.80 Wh/m. Bad commits using `VAR_ELECTRICITYCONSUMPTION` produce ~3.78–5.33 Wh/m (inflated by 15×).

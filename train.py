@@ -151,7 +151,7 @@ EVALS = [
 # out of the sweep; their 10-episode numbers already feed the Exp 3 ablation table.
 _EXP4_MODELS = {
     "relativeDestinationCongestion": "runs/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO.zip",
-    "relativeDestination": "runs/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO.zip",
+    "relativeDestination": "runs/_runs_20260612_1004 (bast 600)/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO.zip",
 }
 
 _EXP4_NOEV_COUNTS = [0, 40, 160, 320]
@@ -218,12 +218,14 @@ if __name__ == "__main__":
     # run_parallel(TRAININGS_EXP3B)
 
     # Exp 3c: dense + calibrated congestion + sized illegal penalty (see TRAININGS_EXP3C).
-    run_parallel(TRAININGS_EXP3C)
+    # Already running as a separate process (do NOT start a second training here).
+    # run_parallel(TRAININGS_EXP3C)
 
-    # Experiment 4: NOEV partial-observability sweep (28 conditions, ~50 eps each).
-    # CAP at 3 workers: 28 unbounded 600-vehicle SUMO + OBELIS processes saturated the
-    # machine and completed 0/28 last time. ~10 h wall at cap=3; relaunch once Exp 3b lands.
-    # run_parallel(EVALS_EXP4, max_workers=3, stagger_s=20)
+    # Experiment 4: NOEV partial-observability sweep (20 conditions: {relativeDestination,
+    # relativeDestinationCongestion} x {0,40,160,320} NOEV + GREEDY/BEST_GUESS/RANDOM x 4).
+    # CAP at 3: the Exp 3c training already holds 1 SUMO instance, so 3 sweep workers + 1
+    # training = 4 SUMO total = the machine's stated safe max. Stagger smooths OBELIS loads.
+    run_parallel(EVALS_EXP4, max_workers=3, stagger_s=20)
 
     # run_parallel(FURTHER_TRAININGS_FOLDER)
 

@@ -14,7 +14,8 @@ This data was only used for comparison purposes as its resolution is not high en
 ## BASt data
 
 **Source**: Bundesanstalt für Straßenwesen, Deutschland  
-**Link**: https://www.bast.de/DE/Verkehrstechnik/Fachthemen/v2-verkehrszaehlung/Stundenwerte.html
+**Link**: https://www.bast.de/DE/Verkehrstechnik/Fachthemen/v2-verkehrszaehlung/Stundenwerte.html  
+**Link neu**: https://www.bast.de/DE/Themen/Digitales/HF_1/Massnahmen/verkehrszaehlung/Stundenwerte.html?nn=414410
 
 **Description**:  
 Public data from highway traffic counts in Germany for the year 2022. Granularity: number of vehicles per hour.
