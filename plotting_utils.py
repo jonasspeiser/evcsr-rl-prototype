@@ -749,18 +749,9 @@ def plot_soc_history(soc_history: dict[str, list[float]], max_capacity_wh: float
 
 DEFAULT_NOEV_LEVELS = (0, 40, 160, 320)
 
-# Compact, document-ready names for the legend / scatter annotations, keyed by the
-# short label that _build_document_label produces. Override per call if needed.
-DOCUMENT_DISPLAY_LABELS = {
-    "PPO_relativeDestinationCongestionIllegal": "PPO (congestion+illegal)",
-    "PPO_relativeDestinationCongestion": "PPO (congestion)",
-    "PPO_relativeDestination": "PPO (no congestion)",
-    "GREEDY": "GREEDY",
-    "BEST_GUESS": "BEST_GUESS",
-    "RANDOM": "RANDOM",
-}
-
-# Default left-to-right / legend order for the sweep figures.
+# Default left-to-right / legend order for the sweep figures. Labels follow the
+# document convention produced by _build_document_label (PPO_<reward> / GREEDY / ...),
+# matching the violin, action-distribution and table naming used elsewhere in the chapter.
 SWEEP_METHOD_ORDER = [
     "PPO_relativeDestinationCongestionIllegal",
     "PPO_relativeDestinationCongestion",
@@ -855,7 +846,7 @@ def plot_sweep_degradation(cells, levels=DEFAULT_NOEV_LEVELS, metric="env/ttt_pe
     plt.tight_layout()
     plt.show()
     if save_path:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return save_path
 
 
@@ -863,43 +854,99 @@ def plot_reliability_vs_congestion(cells, level, order=None, display_labels=None
                                    x_metric="env/empty_vehicles_per_episode",
                                    y_metric="env/cwt_per_ev_mean", save_path=None, title=None,
                                    xlabel="Stranded vehicles / episode  (reliability → better left)",
-                                   ylabel="Charging wait time / vehicle (s)  (congestion → better down)"):
+                                   ylabel="Charging wait time / vehicle (s)  (congestion → better down)",
+                                   xlim=None, ylim=None):
     """Scatter of reliability (x: stranded/ep) vs congestion (y: wait/ev) at one NOEV level.
 
-    Lower-left is better on both axes; one annotated point per method.
+    Lower-left is better on both axes. Each method is a coloured point identified via a
+    legend, so labels follow the document naming convention used elsewhere in the chapter
+    rather than being annotated inline (which overlaps for clustered methods).
+
+    If ``xlim`` and/or ``ylim`` are given, the axes zoom to that window and any method
+    falling outside it is drawn as a triangle clamped to the corresponding edge and
+    annotated with its true (x, y) value — so off-scale outliers stay visible with their
+    numbers without compressing the remaining methods.
 
     Args:
         cells: output of :func:`build_sweep_cells`.
         level: NOEV level to plot.
         order: method labels to include, in order (defaults to all present at ``level``).
-        display_labels: optional ``{label: pretty_name}`` for point annotations.
+        display_labels: optional ``{label: pretty_name}`` for the legend (default: identity).
         x_metric / y_metric: per-episode metrics averaged for each method.
-        save_path: if given, the figure is saved here at 150 dpi.
+        save_path: if given, the figure is saved here at 150 dpi (clip-safe).
         title: defaults to ``"Reliability vs congestion (NOEV=<level>)"``.
+        xlim / ylim: optional ``(min, max)`` zoom windows enabling outlier clamping.
     """
     order = order or sorted({lab for (lab, n) in cells if n == level})
     display_labels = display_labels or {}
     if title is None:
         title = f"Reliability vs congestion (NOEV={level})"
 
-    fig, ax = plt.subplots(figsize=(6, 4.5))
+    points = []
     for label in order:
         eps = cells.get((label, level))
         if not eps:
             continue
         x = _cell_mean(eps, x_metric)
         y = _cell_mean(eps, y_metric)
-        if x is None or y is None:
+        if x is not None and y is not None:
+            points.append((label, x, y))
+
+    palette = sns.color_palette("muted", n_colors=len(points))
+    colors = {lab: palette[i] for i, (lab, _, _) in enumerate(points)}
+
+    xmin, xmax = xlim if xlim else (None, None)
+    ymin, ymax = ylim if ylim else (None, None)
+
+    mid_x = (xmin + xmax) / 2 if (xmin is not None and xmax is not None) else None
+
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+    for label, x, y in points:
+        c = colors[label]
+        name = display_labels.get(label, label)
+        above = ymax is not None and y > ymax
+        below = ymin is not None and y < ymin
+        right = xmax is not None and x > xmax
+        left = xmin is not None and x < xmin
+        if not (above or below or right or left):
+            # In-window point: label sits next to it, on whichever side has more room.
+            ax.scatter(x, y, s=70, color=c, zorder=3)
+            if mid_x is not None and x > mid_x:
+                ax.annotate(name, (x, y), fontsize=8, xytext=(-7, 0),
+                            textcoords="offset points", ha="right", va="center", zorder=4)
+            else:
+                ax.annotate(name, (x, y), fontsize=8, xytext=(7, 0),
+                            textcoords="offset points", ha="left", va="center", zorder=4)
             continue
-        ax.scatter(x, y, s=60)
-        ax.annotate(display_labels.get(label, label), (x, y), fontsize=8,
-                    xytext=(5, 4), textcoords="offset points")
+        # Off-scale: clamp to the edge, point a triangle outward, label with the true value.
+        cx = min(max(x, xmin if xmin is not None else x), xmax if xmax is not None else x)
+        cy = min(max(y, ymin if ymin is not None else y), ymax if ymax is not None else y)
+        text = f"{name}\n({x:.0f}, {y:.0f})"
+        right_half = mid_x is not None and cx > mid_x
+        if above:
+            marker = "^"
+            off, ha, va = ((-4, -13), "right", "top") if right_half else ((4, -13), "left", "top")
+        elif below:
+            marker = "v"
+            off, ha, va = ((-4, 13), "right", "bottom") if right_half else ((4, 13), "left", "bottom")
+        elif right:
+            marker, off, ha, va = ">", (-11, 0), "right", "center"
+        else:
+            marker, off, ha, va = "<", (11, 0), "left", "center"
+        ax.scatter(cx, cy, s=95, color=c, marker=marker, zorder=3,
+                   edgecolors="black", linewidths=0.5)
+        ax.annotate(text, (cx, cy), fontsize=8, xytext=off,
+                    textcoords="offset points", ha=ha, va=va, zorder=4)
+
+    if xlim:
+        ax.set_xlim(*xlim)
+    if ylim:
+        ax.set_ylim(*ylim)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.grid(alpha=0.3)
-    plt.tight_layout()
     plt.show()
     if save_path:
-        fig.savefig(save_path, dpi=150)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
     return save_path
