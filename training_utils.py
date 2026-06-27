@@ -77,10 +77,15 @@ def _load_run_config(model_load_path):
     if os.path.exists(model_config_path):
         with open(model_config_path, 'r') as f:
             return json.load(f)
-    run_dir = os.path.dirname(os.path.abspath(model_load_path))
-    config_path = os.path.join(run_dir, "run_config.json")
-    with open(config_path, 'r') as f:
-        return json.load(f)
+    # run_config.json lives in the run dir. The model may sit in the run dir itself
+    # (final model) or in a checkpoints/ subdir (SB3 CheckpointCallback), so walk up.
+    model_dir = os.path.dirname(os.path.abspath(model_load_path))
+    for run_dir in (model_dir, os.path.dirname(model_dir)):
+        config_path = os.path.join(run_dir, "run_config.json")
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
+    raise FileNotFoundError(f"run_config.json not found near {model_load_path}")
 
 def _run_training(*, env, log: RunLogging, model, n_steps, reset_num_timesteps=True):
     try:

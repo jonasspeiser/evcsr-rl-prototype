@@ -4,7 +4,7 @@ import numpy as np
 from collections import deque, Counter
 from simulation import Simulation
 from vehicle import Vehicle
-from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, BasicWithDestinationRewardStrategy, BasicWithChargingRewardStrategy, BasicWithShapingStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, RelativeDestinationStrategy, BasicRelativeDestinationStrategy, RelativeDestinationWithChargingStrategy, RelativeDestinationWithIllegalPenaltyStrategy, RelativeDestinationWithCongestionStrategy, BasicWithShapingAndIllegalPenaltyStrategy, DestinationRewardStrategy, DestinationWithBatteryPenaltyStrategy, DestinationWithBatteryCongestionStrategy, arrive_concurrently
+from reward_strategies import BasicRewardStrategy, BasicWithCongestionPenaltyStrategy, BasicWithDestinationRewardStrategy, BasicWithChargingRewardStrategy, BasicWithShapingStrategy, NoTimeComponentRewardStrategy, RewardShapingStrategy, RelativeDestinationStrategy, BasicRelativeDestinationStrategy, RelativeDestinationWithChargingStrategy, RelativeDestinationWithIllegalPenaltyStrategy, RelativeDestinationWithCongestionStrategy, RelativeDestinationWithCongestionAndIllegalPenaltyStrategy, BasicWithShapingAndIllegalPenaltyStrategy, DestinationRewardStrategy, DestinationWithBatteryPenaltyStrategy, DestinationWithBatteryCongestionStrategy, arrive_concurrently
 from noev_data_provider import Obelis_Data_Provider, Random_Data_Provider
 import os
 
@@ -204,6 +204,14 @@ class CustomEnv(gym.Env):
                 battery_penalty_value=kwargs.get("battery_penalty_value", 3.0),
                 congestion_threshold_m=kwargs.get("congestion_threshold_m", 36000),
                 congestion_penalty_value=raw_penalty / self.vehicles_to_spawn,
+            )
+        elif reward_strategy == "relativeDestinationCongestionIllegal":
+            raw_penalty = kwargs.get("congestion_penalty", 1.0)
+            self.reward_strategy = RelativeDestinationWithCongestionAndIllegalPenaltyStrategy(
+                battery_penalty_value=kwargs.get("battery_penalty_value", 3.0),
+                congestion_threshold_m=kwargs.get("congestion_threshold_m", 36000),
+                congestion_penalty_value=raw_penalty / self.vehicles_to_spawn,
+                illegal_penalty_value=kwargs.get("illegal_penalty_value", 0.1),
             )
         elif reward_strategy == "shaping":
             # longest_route_duration doubles as the reward upper bound: since episodes are truncated

@@ -90,6 +90,20 @@ TRAININGS_EXP3B = [
             obs_features={"simulation_time", "station_assignment_counts"}),
 ]
 
+# Exp 3c: same as 3b (dense reward + calibrated congestion) PLUS a sized illegal-action
+# penalty. Diagnosis of the 3b model: under congestion-only reward, recommending an
+# already-passed station is unpenalized, so the agent does it ~5400x/episode (BadTimingRouting
+# -> re-queue), wasting steps and stranding ~0.5 extra vehicles vs greedy. The legacy illegal
+# penalty was 0.01 (negligible); here illegal_penalty_value=0.2 makes a passed-station pick
+# clearly worse than do-nothing (0). Everything else identical to 3b to isolate the effect
+# and serve as a clean reward-formulation ablation rung (RQ2.1).
+TRAININGS_EXP3C = [
+    partial(BASE_TRAINING,
+            reward_strategy="relativeDestinationCongestionIllegal",
+            reward_kwargs={"congestion_threshold_m": 36000, "congestion_penalty": 60, "battery_penalty_value": 10, "illegal_penalty_value": 0.2},
+            obs_features={"simulation_time", "station_assignment_counts"}),
+]
+
 # --- Define your FURTHER TRAINING RUNS here ---
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
@@ -130,10 +144,13 @@ EVALS = [
 # intended ~0.25 low-participation band.
 # Paired comparison: identical random_seed across all algorithms at each NOEV level.
 
+# Trimmed to the scientifically load-bearing set (Day 4): the new congestion variant
+# (centerpiece), the dense variant WITHOUT a congestion penalty (the RQ2.1 contrast that
+# isolates the penalty's effect under partial observability), and the three baselines.
+# The basic/basicCongestion/basicRelativeDestination full-observability failures are kept
+# out of the sweep; their 10-episode numbers already feed the Exp 3 ablation table.
 _EXP4_MODELS = {
-    "basic": "runs/2026-06-12_00-10-03_pid2420664_v1.4.1-18-g88057f4_basic_bast_straight_120km_PPO/2026-06-12_00-10-03_pid2420664_v1.4.1-18-g88057f4_basic_bast_straight_120km_PPO.zip",
-    "basicCongestion": "runs/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO/2026-06-12_00-10-03_pid2420665_v1.4.1-18-g88057f4_basicCongestion_bast_straight_120km_PPO.zip",
-    "basicRelativeDestination": "runs/2026-06-12_00-10-04_pid2420666_v1.4.1-18-g88057f4_basicRelativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420666_v1.4.1-18-g88057f4_basicRelativeDestination_bast_straight_120km_PPO.zip",
+    "relativeDestinationCongestion": "runs/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO/2026-06-13_14-46-59_pid942615_v1.4.1-28-gf1bf83d_relativeDestinationCongestion_bast_straight_120km_PPO.zip",
     "relativeDestination": "runs/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO/2026-06-12_00-10-04_pid2420667_v1.4.1-18-g88057f4_relativeDestination_bast_straight_120km_PPO.zip",
 }
 
@@ -197,8 +214,11 @@ if __name__ == "__main__":
     # ]
     # run_parallel(MODEL_EVALS)
 
-    # Exp 3b: single training run, calibrated congestion penalty (see TRAININGS_EXP3B).
-    run_parallel(TRAININGS_EXP3B)
+    # Exp 3b: single training run, calibrated congestion penalty (see TRAININGS_EXP3B). DONE.
+    # run_parallel(TRAININGS_EXP3B)
+
+    # Exp 3c: dense + calibrated congestion + sized illegal penalty (see TRAININGS_EXP3C).
+    run_parallel(TRAININGS_EXP3C)
 
     # Experiment 4: NOEV partial-observability sweep (28 conditions, ~50 eps each).
     # CAP at 3 workers: 28 unbounded 600-vehicle SUMO + OBELIS processes saturated the
