@@ -30,4 +30,4 @@ sudo dnf install -y tmux
 
 echo "=== Setup complete! Next steps: ==="
 echo "1. tmux new -s training"
-echo "2. bash run_on_hetzner.sh"
+echo "2. bash run_on_hetzner.sh train.py"
