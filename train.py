@@ -14,9 +14,8 @@ Each process gets its own PID -> own SUMO instance -> own state file. No port ma
 """
 
 from functools import partial
-from multiprocessing import Process
 
-from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, get_models_from_folder, training_units_to_steps
+from training_utils import get_git_version, train_model, evaluate_model, evaluate_model_with_config, further_train_model, get_latest_n_models, get_models_from_folder, training_units_to_steps, run_parallel
 
 _N_VEHICLES = 600
 _MAX_TRAINING_HOURS = 16 # Training duration by wall clock time. Set to None to disable time-based stopping.
@@ -174,29 +173,6 @@ EVALS_EXP4 = [
 if __name__ == "__main__":
     import time
     start_time = time.perf_counter()
-
-    def run_parallel(run_list, max_workers=None, stagger_s=0):
-        """Run all jobs with at most max_workers running concurrently.
-
-        max_workers=None means unbounded (legacy behaviour). On this machine the Exp 4
-        sweep MUST cap concurrency: 28 unbounded processes each running a 600-vehicle SUMO
-        + loading the OBELIS feather saturated 12 cores / 30 GB and completed 0 conditions.
-        stagger_s spaces out the start of each new worker to smooth the OBELIS load spike.
-        """
-        run_queue = list(run_list)
-        cap = max_workers or len(run_queue)
-        running = []
-        while run_queue or running:
-            while run_queue and len(running) < cap:
-                p = Process(target=run_queue.pop(0))
-                p.start()
-                running.append(p)
-                if stagger_s:
-                    time.sleep(stagger_s)
-            for p in running[:]:
-                p.join(timeout=1)          # reap finished workers, free their slot
-                if not p.is_alive():
-                    running.remove(p)
 
     def suspend_system():
         import subprocess

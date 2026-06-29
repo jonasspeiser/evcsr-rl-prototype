@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import json
 import os
 import time
+from multiprocessing import Process
 from logging_utils import RunLogging, setup_run_logging, _find_tb_callback
 import subprocess
 
@@ -633,6 +634,31 @@ def train_and_evaluate(scenario, algorithm, policy, version_tag, reward_strategy
     greedy_evaluation_path = evaluate_model(scenario, "GREEDY", version_tag, reward_strategy, street_network, n_vehicles, n_noevs=n_noevs, n_episodes=eval_episodes, model_load_path=None, execution_context=execution_context, render_mode=None, random_seed=random_seed_eval, longest_route_duration=longest_route_duration)
     eval_metrics_filepath_list = [nocharge_evaluation_path, random_evaluation_path, greedy_evaluation_path, model_evaluation_path]
     return model_path, eval_metrics_filepath_list
+
+
+def run_parallel(run_list, max_workers=None, stagger_s=0):
+    """Run all jobs with at most max_workers running concurrently.
+
+    max_workers=None means unbounded (legacy behaviour). On this machine the Exp 4
+    sweep MUST cap concurrency: 28 unbounded processes each running a 600-vehicle SUMO
+    + loading the OBELIS feather saturated 12 cores / 30 GB and completed 0 conditions.
+    stagger_s spaces out the start of each new worker to smooth the OBELIS load spike.
+    """
+    run_queue = list(run_list)
+    cap = max_workers or len(run_queue)
+    running = []
+    while run_queue or running:
+        while run_queue and len(running) < cap:
+            p = Process(target=run_queue.pop(0))
+            p.start()
+            running.append(p)
+            if stagger_s:
+                time.sleep(stagger_s)
+        for p in running[:]:
+            p.join(timeout=1)          # reap finished workers, free their slot
+            if not p.is_alive():
+                running.remove(p)
+
 
 if __name__ == "__main__":
     
