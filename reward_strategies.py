@@ -24,7 +24,7 @@ def congestion_penalty(vehicle, context, congestion_threshold_m, congestion_pena
     if dist_self is None:
         return 0
     penalty = 0
-    for other in context['all_vehicles'].values():
+    for other in context['observable_vehicles'].values():
         if other.vehicle_id == vehicle.vehicle_id or not other.is_online:
             continue
         if other.target_cs_id != target_cs:

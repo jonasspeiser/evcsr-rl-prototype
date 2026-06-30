@@ -693,7 +693,7 @@ class CustomEnv(gym.Env):
         """Process the action for the active charging request vehicle."""
         if self.active_charging_request_vehicle_id in self.observable_vehicles:
             vehicle = self.observable_vehicles[self.active_charging_request_vehicle_id]
-            action_penalty = vehicle.handle_action(action, self.reward_strategy, extra_context={'all_vehicles': self.observable_vehicles})
+            action_penalty = vehicle.handle_action(action, self.reward_strategy, extra_context={'observable_vehicles': self.observable_vehicles})
             return action_penalty
         return 0
 
