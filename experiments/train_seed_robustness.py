@@ -13,7 +13,7 @@ Run all four seeds in parallel (one subprocess each, same machinery as train.py)
     python train_seed_robustness.py
 
 Or via the Hetzner launcher (uploads results + self-destructs the server):
-    bash run_on_hetzner.sh train_seed_robustness.py
+    bash hetzner_run.sh train_seed_robustness.py
 
 Do NOT modify reward_kwargs, obs_features, or any other parameter — this is
 a seed-robustness sweep, not a hyperparameter search.

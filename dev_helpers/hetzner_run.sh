@@ -3,7 +3,7 @@ set -e
 
 # Train file to execute (defaults to train.py). Pass any train.py-style
 # experiment file as the first argument, e.g.:
-#     bash run_on_hetzner.sh train_seed_robustness.py
+#     bash hetzner_run.sh train_seed_robustness.py
 TRAIN_FILE="${1:-train.py}"
 
 if [ ! -f "$TRAIN_FILE" ]; then
