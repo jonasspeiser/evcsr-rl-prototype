@@ -536,7 +536,7 @@ def evaluate_model(scenario, algorithm, version_tag, reward_strategy, street_net
         env.close()
         log.close()
 
-def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None, deterministic=True):
+def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, n_noevs=None, random_seed=None, render_mode=None, execution_context="local", use_wandb=False, wandb_entity=None, deterministic=True):
     """Evaluate a trained model, loading scenario/algorithm/etc. from its run_config.json.
 
     Returns:
@@ -550,7 +550,7 @@ def evaluate_model_with_config(model_load_path, n_episodes, n_vehicles=None, ran
         reward_strategy=config["reward_strategy"],
         street_network=config["street_network"],
         n_vehicles=n_vehicles if n_vehicles is not None else config["n_vehicles"],
-        n_noevs=config.get("n_noevs"),
+        n_noevs=n_noevs if n_noevs is not None else config.get("n_noevs"),
         noev_provider=config.get("noev_provider", "obelis"),
         n_episodes=n_episodes,
         model_load_path=model_load_path,
