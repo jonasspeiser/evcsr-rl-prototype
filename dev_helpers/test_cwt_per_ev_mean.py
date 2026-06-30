@@ -50,7 +50,7 @@ while not (terminated or truncated):
 
 cwt = env.cwt_per_ev_mean
 cumulated = env.cumulated_waiting_time
-n = len(env.vehicle_ids)
+n = len(env.oev_ids)
 env.close()
 
 print(f"  cumulated_waiting_time : {cumulated:.1f} s")
@@ -92,7 +92,7 @@ while not (terminated or truncated):
 
 cwt5 = env.cwt_per_ev_mean
 cumulated5 = env.cumulated_waiting_time
-n5 = len(env.vehicle_ids)
+n5 = len(env.oev_ids)
 env.close()
 
 print(f"  cumulated_waiting_time : {cumulated5:.1f} s")

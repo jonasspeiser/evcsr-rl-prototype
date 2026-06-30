@@ -181,7 +181,7 @@ class BestGuessAlgorithm(EvaluationAlgorithm):
         cs_distances = [active_vehicle[2 + station_index] * dist_norm for station_index in range(len(cs_ids))]
 
         assignment_counts = {
-            cs_id: sum(1 for v in self.env.vehicles.values() if v.target_cs_id == cs_id and v.is_online)
+            cs_id: sum(1 for v in self.env.observable_vehicles.values() if v.target_cs_id == cs_id and v.is_online)
             for cs_id in cs_ids
         }
 

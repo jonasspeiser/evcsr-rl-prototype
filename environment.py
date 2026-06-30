@@ -80,7 +80,7 @@ class CustomEnv(gym.Env):
                     seed=random_seed)
 
         # # Create Vehicle instances for each vehicle id
-        # self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
+        # self.observable_vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.oev_ids}
 
         # --- Define action space ---        
         # We have 5 actions for each vehicle: do nothing (0), send charging to cs_1 (1), send charging to cs_2 (2), ...
@@ -104,8 +104,8 @@ class CustomEnv(gym.Env):
         #   will arrive at roughly the same time). Falls back to raw assigned count if threshold is
         #   None or active vehicle has no distances yet. Normalized to [0, 1] by max_vehicles (shape (4,))
         self.simulation.add_vehicles(self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_oev_ids()
-        logger.debug("Initial vehicle_ids: %s", self.vehicle_ids)
+        self.oev_ids = self.simulation.get_all_oev_ids()
+        logger.debug("Initial vehicle_ids: %s", self.oev_ids)
 
         self.obs_features = frozenset(obs_features) if obs_features is not None else frozenset()
 
@@ -255,7 +255,7 @@ class CustomEnv(gym.Env):
         This is only possible as long as a vehicle is still online.
         """
         for vehicle_id in self.simulation.get_online_vehicle_ids():
-            vehicle = self.vehicles.get(vehicle_id)
+            vehicle = self.observable_vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.waiting_time = self.simulation.get_vehicle_waiting_time(vehicle_id)
     
@@ -265,8 +265,8 @@ class CustomEnv(gym.Env):
 
         Used for tensorboard logging.
         """
-        self.cumulated_waiting_time = sum(v.waiting_time for v in self.vehicles.values())
-        n_vehicles = len(self.vehicle_ids)
+        self.cumulated_waiting_time = sum(v.waiting_time for v in self.observable_vehicles.values())
+        n_vehicles = len(self.oev_ids)
         self.cwt_per_ev_mean = self.cumulated_waiting_time / n_vehicles if n_vehicles > 0 else 0
     
     def _set_cumulated_waiting_time_per_episode_terminated(self):
@@ -275,7 +275,7 @@ class CustomEnv(gym.Env):
 
         Only tracks terminated episodes (not truncated ones). Used for tensorboard logging.
         """
-        self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.vehicles.values() if v.arrived)
+        self.cumulated_waiting_time_only_terminated = sum(v.waiting_time for v in self.observable_vehicles.values() if v.arrived)
 
     def _set_final_simulation_time(self, current_time):
         """
@@ -296,7 +296,7 @@ class CustomEnv(gym.Env):
             current_time (float): The current simulation time.
         """
         global_ttt = 0
-        for vehicle in self.vehicles.values():
+        for vehicle in self.observable_vehicles.values():
             if vehicle.departure_time is None:
                 continue
             if vehicle.arrival_time is None:
@@ -309,10 +309,10 @@ class CustomEnv(gym.Env):
                     vehicle.arrival_time = current_time
             global_ttt += vehicle.get_total_travel_time()
         self.global_ttt = global_ttt
-        if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
+        if len(self.oev_ids) == 0: # if no vehicles where spawned, avoid division by zero
             self.ttt_per_ev_mean = 0
         else:
-            self.ttt_per_ev_mean = global_ttt / len(self.vehicle_ids)
+            self.ttt_per_ev_mean = global_ttt / len(self.oev_ids)
 
     def _set_global_ttt_only_terminated(self, current_time):
         """
@@ -323,7 +323,7 @@ class CustomEnv(gym.Env):
             current_time (float): The current simulation time.
         """
         global_ttt_only_terminated = 0
-        for vehicle in self.vehicles.values():
+        for vehicle in self.observable_vehicles.values():
             if vehicle.departure_time is None:
                 continue
             if vehicle.arrival_time is None:
@@ -335,17 +335,17 @@ class CustomEnv(gym.Env):
                     vehicle.arrival_time = current_time
             global_ttt_only_terminated += vehicle.get_total_travel_time()
         self.global_ttt_only_terminated = global_ttt_only_terminated
-        if len(self.vehicle_ids) == 0: # if no vehicles where spawned, avoid division by zero
+        if len(self.oev_ids) == 0: # if no vehicles where spawned, avoid division by zero
             self.ttt_per_ev_mean_only_terminated = 0
         else:
-            self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.vehicle_ids)
+            self.ttt_per_ev_mean_only_terminated = global_ttt_only_terminated / len(self.oev_ids)
 
     def _set_empty_vehicles_per_episode(self):
         """
         Calculates the number of empty vehicles per episode.
         """
         self.empty_vehicles_per_episode = sum(
-            1 for vehicle in self.vehicles.values()
+            1 for vehicle in self.observable_vehicles.values()
             if vehicle.empty
         )
         logger.debug("empty_vehicles_per_episode: %s", self.empty_vehicles_per_episode)
@@ -354,7 +354,7 @@ class CustomEnv(gym.Env):
         """Mean SOC and remaining range (Wh / m) across vehicles that arrived at their destination."""
         arrived = [
             (self.simulation.soc_history[vid][-1], self.vehicle_range_cache.get(vid))
-            for vid, v in self.vehicles.items()
+            for vid, v in self.observable_vehicles.items()
             if v.arrived and self.simulation.soc_history.get(vid)
         ]
         if arrived:
@@ -432,7 +432,7 @@ class CustomEnv(gym.Env):
         other_vehicles_obs = np.zeros((self.max_vehicles, 12), dtype=np.float32)
         vehicle_mask = np.zeros(self.max_vehicles, dtype=np.float32)
         other_idx = 0
-        for vehicle_id, vehicle in self.vehicles.items():
+        for vehicle_id, vehicle in self.observable_vehicles.items():
             if not vehicle.arrived and not vehicle.empty:
                 vehicle_state = self.simulation.get_vehicle_state(vehicle_id)
                 vehicle.update_from_state(vehicle_state)
@@ -469,12 +469,12 @@ class CustomEnv(gym.Env):
         """
         cs_ids = self.simulation.get_all_charging_station_ids()
         threshold = self.congestion_threshold_m
-        active_vehicle = self.vehicles.get(self.active_charging_request_vehicle_id)
+        active_vehicle = self.observable_vehicles.get(self.active_charging_request_vehicle_id)
         active_dists = active_vehicle.distance_to_cs_dict if (active_vehicle and active_vehicle.distance_to_cs_dict) else None
         station_counts = np.zeros(len(cs_ids), dtype=np.float32)
         for i, cs_id in enumerate(cs_ids):
             active_dist = active_dists.get(cs_id) if active_dists else None
-            for vehicle in self.vehicles.values():
+            for vehicle in self.observable_vehicles.values():
                 if vehicle.vehicle_id == self.active_charging_request_vehicle_id:
                     continue
                 if not vehicle.is_online:
@@ -520,7 +520,7 @@ class CustomEnv(gym.Env):
             dict: Additional info for each vehicle.
         """
         info = {}
-        for vehicle_id, vehicle in self.vehicles.items():
+        for vehicle_id, vehicle in self.observable_vehicles.items():
             info[vehicle_id] = vehicle.get_info()
         return info
 
@@ -541,7 +541,7 @@ class CustomEnv(gym.Env):
         current_time = self.simulation.get_current_time_step()
         just_spawned = []
         for vehicle_id in newly_spawned_ids or []:
-            vehicle = self.vehicles.get(vehicle_id)
+            vehicle = self.observable_vehicles.get(vehicle_id)
             if vehicle and vehicle.departure_time is None:
                 vehicle.departure_time = current_time
                 just_spawned.append(vehicle_id)
@@ -549,7 +549,7 @@ class CustomEnv(gym.Env):
             logger.info("%s vehicle(s) spawned at time %s", len(just_spawned), current_time)
             logger.debug("Spawned vehicle IDs: %s", just_spawned)
         for vehicle_id in newly_arrived_ids or []:
-            vehicle = self.vehicles.get(vehicle_id)
+            vehicle = self.observable_vehicles.get(vehicle_id)
             if vehicle:
                 vehicle.arrival_time = current_time
                 vehicle.arrived = True
@@ -575,9 +575,9 @@ class CustomEnv(gym.Env):
         # Find out if there are vehicles that just entered low battery status
         new_low_battery_ids = self._get_new_low_battery_ids(just_charged_ids)
         # Find vehicles that missed their recommended charging station (BadTimingRoutingError)
-        missed_station_ids = {vid for vid, v in self.vehicles.items() if v.had_bad_timing_error}
+        missed_station_ids = {vid for vid, v in self.observable_vehicles.items() if v.had_bad_timing_error}
         for vid in missed_station_ids:
-            self.vehicles[vid].had_bad_timing_error = False
+            self.observable_vehicles[vid].had_bad_timing_error = False
             logger.info("%s: missed charging station, re-queuing charging request", vid)
         charging_requests = (newly_spawned_ids or set()) | just_charged_ids | new_low_battery_ids | missed_station_ids
         # (this value is only used for logging) increase the counters for each vehicle that just stopped charging by one
@@ -628,7 +628,7 @@ class CustomEnv(gym.Env):
         """
         battery_threshold = 0.2 # the value under which the battery soc should be considered low
         new_low_battery_ids = set()
-        for vehicle_id, vehicle in self.vehicles.items():
+        for vehicle_id, vehicle in self.observable_vehicles.items():
             # Ignore if the vehicle did not spawn in the simulation yet or despawned already
             if not vehicle.is_online:
                 continue
@@ -656,7 +656,7 @@ class CustomEnv(gym.Env):
             logger.debug("Despawining vehicles: arrived=%s, removed=%s", newly_arrived_ids, newly_removed_ids)
 
         # Update vehicles' battery soc and cache remaining range
-        for vid, vehicle in self.vehicles.items():
+        for vid, vehicle in self.observable_vehicles.items():
             if vehicle.is_online:
                 vehicle.fetch_and_update_battery_values()
                 self.vehicle_range_cache[vid] = self.simulation.get_remaining_range(vid)
@@ -664,15 +664,15 @@ class CustomEnv(gym.Env):
         # Mark vehicles whose battery just died — must run after SOC update and before reward/termination checks.
         # Centralised here so reward strategies don't need to call battery_just_died() for state management.
         newly_emptied_ids = set()
-        for vid, vehicle in self.vehicles.items():
+        for vid, vehicle in self.observable_vehicles.items():
             if vehicle.battery_just_died():
                 newly_emptied_ids.add(vid)
                 logger.info("%s: battery empty", vid)
 
         # Update vehicles' arrival status
         for vid in newly_arrived_ids:
-            if vid in self.vehicles:
-                self.vehicles[vid].arrived = True
+            if vid in self.observable_vehicles:
+                self.observable_vehicles[vid].arrived = True
 
         # Update vehicle times if needed
         if newly_spawned_ids or newly_arrived_ids:
@@ -691,16 +691,16 @@ class CustomEnv(gym.Env):
 
     def _process_initial_action(self, action):
         """Process the action for the active charging request vehicle."""
-        if self.active_charging_request_vehicle_id in self.vehicles:
-            vehicle = self.vehicles[self.active_charging_request_vehicle_id]
-            action_penalty = vehicle.handle_action(action, self.reward_strategy, extra_context={'all_vehicles': self.vehicles})
+        if self.active_charging_request_vehicle_id in self.observable_vehicles:
+            vehicle = self.observable_vehicles[self.active_charging_request_vehicle_id]
+            action_penalty = vehicle.handle_action(action, self.reward_strategy, extra_context={'all_vehicles': self.observable_vehicles})
             return action_penalty
         return 0
 
     def _calculate_step_reward(self, vehicle_status):
         """Calculate reward for the current simulation step."""
         temp_reward = self.reward_strategy.calculate_step_reward(
-            self.vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'], vehicle_status['newly_emptied_ids'])
+            self.observable_vehicles, vehicle_status['newly_arrived_ids'], vehicle_status['charging_ids'], vehicle_status['newly_emptied_ids'])
         logger.debug("Step reward from simulation: %s", temp_reward)
         return temp_reward
 
@@ -709,7 +709,7 @@ class CustomEnv(gym.Env):
         # Episode terminates when every vehicle has either arrived or gone empty.
         # Empty vehicles are considered done because they can no longer make progress;
         # their TTT penalty is handled separately in _set_global_ttt(set to departure_time + truncation_limit).
-        all_vehicles_despawned = all(vehicle.arrived or vehicle.empty for vehicle in self.vehicles.values())
+        all_vehicles_despawned = all(vehicle.arrived or vehicle.empty for vehicle in self.observable_vehicles.values())
         terminated = all_vehicles_despawned
         truncated = self._reached_max_simulation_steps()
 
@@ -754,7 +754,7 @@ class CustomEnv(gym.Env):
         
         final_reward = self.reward_strategy.calculate_final_reward(self.ttt_per_ev_mean)
         status_str = "terminated" if termination_status['terminated'] else "truncated"
-        all_arrived = all(v.arrived for v in self.vehicles.values())
+        all_arrived = all(v.arrived for v in self.observable_vehicles.values())
         arrived_str = ", all arrived" if all_arrived else ""
         logger.info("Episode %s ended (%s%s): reward = %.2f", self.episode_count, status_str, arrived_str, final_reward)
         return final_reward
@@ -772,7 +772,7 @@ class CustomEnv(gym.Env):
 
         vehicles_summary = {}
         try:
-            items = list(self.vehicles.items())[:max_vehicles]
+            items = list(self.observable_vehicles.items())[:max_vehicles]
             for vid, v in items:
                 vehicles_summary[str(vid)] = {
                     "spawned": bool(getattr(v, "spawned", False)),
@@ -838,24 +838,24 @@ class CustomEnv(gym.Env):
             self.action_space.seed(seed) # for deterministic results when using env.actions_space.sample()
         self.simulation.reset()
         self.simulation.add_vehicles(amount=self.vehicles_to_spawn)
-        self.vehicle_ids = self.simulation.get_all_oev_ids()
-        if len(self.vehicle_ids) > self.max_vehicles:
+        self.oev_ids = self.simulation.get_all_oev_ids()
+        if len(self.oev_ids) > self.max_vehicles:
             raise ValueError(
                 "Episode generated %d vehicles but max_vehicles=%d; the observation space "
                 "cannot hold this many vehicles. Increase max_vehicles in your training config."
-                % (len(self.vehicle_ids), self.max_vehicles)
+                % (len(self.oev_ids), self.max_vehicles)
             )
         self.episode_count += 1
-        logger.info("--- Episode %s started (%s vehicles) ---", self.episode_count, len(self.vehicle_ids))
+        logger.info("--- Episode %s started (%s vehicles) ---", self.episode_count, len(self.oev_ids))
         # Set the maximum possible distance according to the currently loaded network (used for normalizing distances in the observation space).
         Vehicle.DISTANCE_NORMALIZATION_VALUE = self.simulation.get_max_possible_distance()
         # Re-create the vehicles dictionary in case new vehicles were spawned.
-        self.vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.vehicle_ids}
+        self.observable_vehicles = {vid: Vehicle(vid, self.simulation) for vid in self.oev_ids}
 
         # Additional attributes for managing charging requests and logging
         self.charging_request_queue = deque()
         self.active_charging_request_vehicle_id = None #the vehicle_id for which the agent has to select an action in the current step
-        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.vehicle_ids})
+        self.charging_stops_per_episode_counter = Counter({vid: 0 for vid in self.oev_ids})
         self.low_battery_ids = set()
         self.noev_sessions_injected = 0
         self.arrival_soc_wh_mean = None
