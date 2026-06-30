@@ -10,7 +10,7 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Deque, Dict, Optional, Literal
 from dataclasses import dataclass
-from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback, StopTrainingOnMaxEpisodes
 
 
 class JsonlFileHandler(logging.Handler):
@@ -487,6 +487,7 @@ def setup_run_logging(
     wandb_entity: str | None = None,
     checkpoint_freq: int | None = None,
     max_training_hours: float | None = None,
+    max_training_episodes: int | None = None,
 ):
     # path + python logging setup
     run_dir, model_save_path, py_log_path, ring = _setup_logging(
@@ -539,6 +540,10 @@ def setup_run_logging(
     # time limit callback (optional, training only)
     if max_training_hours is not None and mode == "training":
         callback = CallbackList([callback, TimeLimitCallback(max_seconds=max_training_hours * 3600)])
+
+    # episode limit callback (optional, training only)
+    if max_training_episodes is not None and mode == "training":
+        callback = CallbackList([callback, StopTrainingOnMaxEpisodes(max_episodes=max_training_episodes)])
 
     return RunLogging(
         run_dir=run_dir,

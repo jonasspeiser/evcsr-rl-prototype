@@ -19,8 +19,9 @@ from training_utils import get_git_version, train_model, evaluate_model, evaluat
 
 _N_VEHICLES = 600
 _MAX_TRAINING_HOURS = 16 # Training duration by wall clock time. Set to None to disable time-based stopping.
+_MAX_TRAINING_EPISODES = None # Training duration by completed episodes. Set to None to disable episode-based stopping.
 _CHECKPOINT_FREQ = 20_000 # how often the model should be saved during training (in training steps)
-_N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS, set this value close to infinite (e.g. 10_000_000)
+_N_TRAINING_UNITS = 10_000_000 # Training duration by training steps. if you use MAX_TRAINING_HOURS or MAX_TRAINING_EPISODES, set this value close to infinite (e.g. 10_000_000)
 _N_CHECKPOINTS = 2 # how often the model should be saved during training (does NOT work in combination with MAX_TRAINING_HOURS)
 
 BASE_TRAINING = partial(train_model,
@@ -39,6 +40,7 @@ BASE_TRAINING = partial(train_model,
     max_vehicles=600, # obs padded beyond spawn count to allow for all vehicles to be present at once
     n_noevs=0,
     max_training_hours=_MAX_TRAINING_HOURS,
+    max_training_episodes=_MAX_TRAINING_EPISODES,
     n_training_units=_N_TRAINING_UNITS,
     ent_coef=0.1,
     use_wandb=False,
@@ -78,8 +80,9 @@ TRAININGS = [
 # get_latest_n_models(4) returns the 4 most recently created model paths
 
 FURTHER_TRAININGS = [
-    partial(further_train_model, model_load_path=path, 
+    partial(further_train_model, model_load_path=path,
             max_training_hours=_MAX_TRAINING_HOURS,
+            max_training_episodes=_MAX_TRAINING_EPISODES,
             n_training_units=_N_TRAINING_UNITS,
             # checkpoint_freq=training_units_to_steps(_N_TRAINING_UNITS // _N_CHECKPOINTS, _N_VEHICLES), 
             checkpoint_freq=_CHECKPOINT_FREQ,
@@ -87,14 +90,15 @@ FURTHER_TRAININGS = [
     for path in get_latest_n_models(4)
 ]
 
-# FURTHER_TRAININGS_FOLDER = [
-#     partial(further_train_model, model_load_path=path,
-#             max_training_hours=_MAX_TRAINING_HOURS,
-#             n_training_units=_N_TRAINING_UNITS,
-#             checkpoint_freq=_CHECKPOINT_FREQ,
-#             )
-#     for path in get_models_from_folder("runs/_runs_20260610_1759")
-# ]
+FURTHER_TRAININGS_FOLDER = [
+    partial(further_train_model, model_load_path=path,
+            max_training_hours=None,  # stop by episode count, not wall clock
+            max_training_episodes=130,
+            n_training_units=_N_TRAINING_UNITS,
+            checkpoint_freq=_CHECKPOINT_FREQ,
+            )
+    for path in get_models_from_folder("runs/_runs_train_seed_robustness_20260630_0432")
+]
 
 # --- Define your EVALUATION RUNS here ---
 # (given parameters override the ones in the base evaluation configuration)
@@ -126,15 +130,22 @@ if __name__ == "__main__":
     # ]
     # run_parallel(MODEL_EVALS)
 
-    # run_parallel(FURTHER_TRAININGS_FOLDER)
+    run_parallel(FURTHER_TRAININGS_FOLDER)
 
     # get_models_from_folder returns the newest .zip per run dir, which is now the further-trained model
     FOLDER_MODEL_EVALS = [
-        partial(evaluate_model_with_config, model_load_path=path, n_episodes=10, random_seed=54321)
-        for path in get_models_from_folder("runs/_runs_20260610_1759")
+        partial(evaluate_model_with_config, model_load_path=path, n_episodes=50, n_noevs=0, random_seed=54321)
+        for path in get_models_from_folder("runs/_runs_train_seed_robustness_20260630_0432")
     ]
 
     run_parallel(FOLDER_MODEL_EVALS)
+
+    FOLDER_MODEL_EVALS2 = [
+        partial(evaluate_model_with_config, model_load_path=path, n_episodes=50, n_noevs=320, random_seed=54321)
+        for path in get_models_from_folder("runs/_runs_train_seed_robustness_20260630_0432")
+    ]
+
+    run_parallel(FOLDER_MODEL_EVALS2)
     
     print("All runs done")
 

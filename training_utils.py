@@ -224,7 +224,7 @@ def evaluate_policy(model, env, n_eval_episodes, callback, metadata, random_seed
     
     return metrics_list
 
-def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, noev_provider="obelis", max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None):
+def train_model(scenario, algorithm, policy, version_tag, reward_strategy, street_network, n_vehicles, n_training_units, n_noevs=None, noev_provider="obelis", max_vehicles=None, execution_context="local", random_seed=None, ent_coef=0.0, longest_route_duration=None, use_wandb=False, wandb_entity=None, reward_kwargs=None, start_soc_bounds=None, obs_features=None, use_custom_extractor=False, checkpoint_freq=None, max_training_hours=None, max_training_episodes=None):
     """Trains a reinforcement learning model with the specified configuration and logs the training process.
 
     Args:
@@ -281,6 +281,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         wandb_entity=wandb_entity,
         checkpoint_freq=checkpoint_freq,
         max_training_hours=max_training_hours,
+        max_training_episodes=max_training_episodes,
     )
 
     # initiate environment
@@ -322,6 +323,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
         "max_training_hours": max_training_hours,
+        "max_training_episodes": max_training_episodes,
         "training_duration_s": round(duration_s),
         "actual_steps": model.num_timesteps,
         "total_episodes": tb_cb._episode_count if tb_cb is not None else None,
@@ -330,7 +332,7 @@ def train_model(scenario, algorithm, policy, version_tag, reward_strategy, stree
 
     return model_path
 
-def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None, checkpoint_freq=None, max_training_hours=None):
+def further_train_model(model_load_path, n_training_units, execution_context="local", use_wandb=False, wandb_entity=None, checkpoint_freq=None, max_training_hours=None, max_training_episodes=None):
     """Continue training an existing model, loading scenario/algorithm/etc. from its run_config.json.
 
     Args:
@@ -380,6 +382,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         wandb_entity=wandb_entity,
         checkpoint_freq=checkpoint_freq,
         max_training_hours=max_training_hours,
+        max_training_episodes=max_training_episodes,
     )
 
     # initiate environment
@@ -416,6 +419,7 @@ def further_train_model(model_load_path, n_training_units, execution_context="lo
         "obs_features": list(obs_features) if obs_features is not None else None,
         "use_custom_extractor": use_custom_extractor,
         "max_training_hours": max_training_hours,
+        "max_training_episodes": max_training_episodes,
         "training_duration_s": round(duration_s),
         "actual_steps": model.num_timesteps - initial_steps,
         "total_episodes": tb_cb._episode_count if tb_cb is not None else None,
