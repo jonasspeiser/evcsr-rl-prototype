@@ -12,6 +12,117 @@ from pathlib import Path
 from pprint import pprint
 
 
+# ---------------------------------------------------------------------------
+# Publication styling: display names, axis labels, tick handling
+# ---------------------------------------------------------------------------
+# Internal run labels (built by _build_display_label / _build_document_label) carry
+# obs-feature tags, extractor flags and PIDs so parallel runs stay distinguishable.
+# None of that belongs in a thesis figure, so every rendered label goes through
+# to_display_name() first. "3b"/"3c" are the short names the document defines for
+# relativeDestinationCongestion / relativeDestinationCongestionIllegal from Exp 3 on;
+# the formulations without a short name keep their full name in parentheses.
+
+REWARD_DISPLAY_NAMES = {
+    "basic": "basic",
+    "basicCongestion": "basicCongestion",
+    "relativeDestination": "relativeDestination",
+    "relativeDestinationCongestion": "3b",
+    "relativeDestinationCongestionIllegal": "3c",
+}
+
+BASELINE_DISPLAY_NAMES = {
+    "GREEDY": "Greedy",
+    "BEST_GUESS": "Best Guess",
+    "RANDOM": "Random",
+    "PERFECT": "Perfect",
+}
+
+# Y-axis labels: human-readable metric name plus unit, keyed by the metric name with
+# any "env/" prefix stripped (the form _run_plots passes to the plot helpers).
+METRIC_AXIS_LABELS = {
+    "ttt_per_ev_mean": "Mean travel time per vehicle (s)",
+    "ttt_per_ev_mean_only_terminated": "Mean travel time per vehicle, completed trips (s)",
+    "global_ttt": "Total travel time (s)",
+    "global_ttt_only_terminated": "Total travel time, completed trips (s)",
+    "cwt_per_ev_mean": "Mean waiting time per vehicle (s)",
+    "cumulated_waiting_time": "Cumulated waiting time (s)",
+    "cumulated_waiting_time_only_terminated": "Cumulated waiting time, completed trips (s)",
+    "charging_stops_per_episode_mean": "Charging stops per vehicle",
+    "empty_vehicles_per_episode": "Stranded vehicles per episode",
+    "final_simulation_time": "Episode end time (s)",
+    "episode_length": "Episode length (agent steps)",
+    "reward": "Episode return",
+    "noev_sessions_injected": "Injected NOEV charging sessions",
+    "realized_participation_rate": "Realised participation rate",
+}
+
+# Figures render at roughly full text width in the thesis (10 in wide artwork scaled to
+# ~6.3 in, i.e. ~0.63x), so on-canvas sizes must be ~1.6x the desired print size.
+# 15 pt / 16 pt here land at ~9.5 pt / ~10 pt on the printed page.
+TICK_FONTSIZE = 15
+AXIS_LABEL_FONTSIZE = 16
+
+_METHOD_TOKEN_RE = re.compile(r"^(PPO|A2C|DQN)_([A-Za-z0-9]+)")
+_PID_RE = re.compile(r"_pid\d+")
+
+
+def to_display_name(internal_name: str) -> str:
+    """Map an internal run label to the thesis display name.
+
+    Examples:
+        PPO_basic_pid927830                                        -> "PPO (basic)"
+        PPO_basicCongestion-simulation_time-..._pid1035816         -> "PPO (basicCongestion)"
+        PPO_relativeDestination-simulation_time_pid1760            -> "PPO (relativeDestination)"
+        PPO_relativeDestinationCongestion                          -> "PPO (3b)"
+        PPO_relativeDestinationCongestionIllegal-..._cext_pid1681  -> "PPO (3c)"
+        GREEDY / BEST_GUESS / PERFECT20 / RANDOM                   -> "Greedy" / "Best Guess" / "Perfect" / "Random"
+
+    A PID never survives this function: unrecognised labels still get their
+    ``_pid<digits>`` suffix stripped rather than leaking a process id into a figure.
+    """
+    name = str(internal_name)
+    if name in BASELINE_DISPLAY_NAMES:
+        return BASELINE_DISPLAY_NAMES[name]
+    # PERFECT5 / PERFECT20 / PERFECT<N> are all "Perfect" in the document
+    if name.startswith("PERFECT"):
+        return "Perfect"
+    match = _METHOD_TOKEN_RE.match(name)
+    if match:
+        algo, reward = match.group(1), match.group(2)
+        return f"{algo} ({REWARD_DISPLAY_NAMES.get(reward, reward)})"
+    return _PID_RE.sub("", name)
+
+
+def _ordered_methods(series):
+    """Unique method labels in order of first appearance (the plot's left-to-right order)."""
+    return list(dict.fromkeys(series))
+
+
+def _method_palette(order):
+    """Position-keyed 'muted' colours, so a method keeps its colour across figures."""
+    colors = sns.color_palette("muted", n_colors=len(order))
+    return {label: colors[i] for i, label in enumerate(order)}
+
+
+def _apply_method_xaxis(ax, order, fig=None):
+    """Put display names under each category, rotating them only if they would collide."""
+    labels = [to_display_name(label) for label in order]
+    ax.set_xticks(range(len(labels)))
+
+    fig = fig or ax.get_figure()
+    fig_width_pt = fig.get_size_inches()[0] * 72
+    slot_pt = fig_width_pt / max(len(labels), 1)
+    # ~0.58 em average glyph advance for DejaVu Sans
+    widest_pt = max((len(l) for l in labels), default=0) * TICK_FONTSIZE * 0.58
+
+    if widest_pt > slot_pt * 0.95:
+        ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=TICK_FONTSIZE)
+    else:
+        ax.set_xticklabels(labels, fontsize=TICK_FONTSIZE)
+    ax.set_xlabel("")  # method names are self-explanatory; no "Algorithm" label needed
+    ax.tick_params(axis="y", labelsize=TICK_FONTSIZE)
+
+
 def get_last_x_metrics_files(n_files,runs_dir="runs"):
     runs_path = Path(runs_dir)
 
@@ -73,26 +184,37 @@ def get_all_metrics_files_from_folder(folder_path):
     return sorted(Path(folder_path).glob("**/metrics*.json"))
 
 
-def make_violinplot(data_df, metric_name, save_path=None):
+def make_violinplot(data_df, metric_name, save_path=None, y_label=None, title=None):
+    """Violin plot of one metric per method, styled for the thesis.
+
+    Method display names sit directly under each violin (no numeric codes, no legend)
+    and the y-axis carries the metric name plus unit. Colours are assigned by position
+    from the 'muted' palette, so a given figure keeps the colours it had before.
+
+    Args:
+        data_df: long-format frame with an "algorithm" column and a "Value" column.
+        metric_name: metric key (e.g. "ttt_per_ev_mean") used to look up the y-label
+            in METRIC_AXIS_LABELS, or an already human-readable label.
+        y_label: explicit y-axis label; overrides the METRIC_AXIS_LABELS lookup.
+        title: optional title. Left off by default — the thesis supplies captions.
+    """
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.set_theme(style="whitegrid")
 
-    algorithms = data_df["algorithm"].unique()
-    palette = sns.color_palette("muted", n_colors=len(algorithms))
+    order = _ordered_methods(data_df["algorithm"])
+    palette = _method_palette(order)
 
-    plot = sns.violinplot(x="algorithm", y="Value", data=data_df, palette="muted", cut=0, ax=ax)
+    sns.violinplot(x="algorithm", y="Value", data=data_df, order=order,
+                   hue="algorithm", hue_order=order, palette=palette, legend=False,
+                   cut=0, ax=ax)
     # add in for smaller datasets:
     # sns.stripplot(df_filtered, x="algorithm", y="Value", color=".3", ax=ax)
 
-    # Replace long x-tick labels with numbers; put full names in legend
-    ax.set_xticklabels(range(1, len(algorithms) + 1))
-    legend_patches = [mpatches.Patch(color=palette[i], label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
-    ax.legend(handles=legend_patches)
-
-    ax.set_title(f"Comparison of {metric_name}", fontsize=14)
-    ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Value")
+    _apply_method_xaxis(ax, order, fig)
+    ax.set_ylabel(y_label or METRIC_AXIS_LABELS.get(metric_name, metric_name),
+                  fontsize=AXIS_LABEL_FONTSIZE)
+    if title:
+        ax.set_title(title, fontsize=AXIS_LABEL_FONTSIZE + 1)
     ax.grid(axis="y", linestyle="-", alpha=0.7)
     plt.tight_layout()
 
@@ -101,6 +223,7 @@ def make_violinplot(data_df, metric_name, save_path=None):
 
     if save_path:
         fig.savefig(save_path)
+    plt.close(fig)
 
 
 def plot_action_distribution(df, save_path=None):
@@ -134,28 +257,19 @@ def plot_action_distribution(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = df["algorithm"].unique()
+    order = _ordered_methods(df["algorithm"])
 
-    # Map algorithm names to numbers so the x-axis stays readable
-    algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
-    df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
+    sns.barplot(data=df_agg, x="algorithm", y="fraction", hue="action", palette="Set2",
+                order=order, ax=ax)
 
-    order = [str(i + 1) for i in range(len(algorithms))]
-    sns.barplot(data=df_agg, x="algorithm_num", y="fraction", hue="action", palette="Set2", order=order, ax=ax)
-
-    # Seaborn auto-creates a legend for hue="action"; keep it, place it upper right
+    # Seaborn auto-creates a legend for hue="action"; that is the only legend needed —
+    # method names now sit under the bars instead of in a number-mapping legend.
     action_legend = ax.get_legend()
     action_legend.set_title("Action")
     action_legend.set_bbox_to_anchor((1.0, 1.0))
 
-    # Add a second legend mapping numbers to full algorithm names
-    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
-    algo_legend = ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
-    ax.add_artist(action_legend)  # restore action legend after it was replaced
-
-    ax.set_title("Action Distribution per Algorithm", fontsize=14)
-    ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Mean fraction of steps")
+    _apply_method_xaxis(ax, order, fig)
+    ax.set_ylabel("Mean fraction of steps", fontsize=AXIS_LABEL_FONTSIZE)
     ax.set_ylim(0, 1)
     plt.tight_layout()
     sns.despine(left=True, bottom=True)
@@ -163,6 +277,7 @@ def plot_action_distribution(df, save_path=None):
 
     if save_path:
         fig.savefig(save_path)
+    plt.close(fig)
 
 
 def plot_action_counts_absolute(df, save_path=None):
@@ -191,21 +306,14 @@ def plot_action_counts_absolute(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = df["algorithm"].unique()
+    order = _ordered_methods(df["algorithm"])
 
-    algo_to_num = {alg: i + 1 for i, alg in enumerate(algorithms)}
-    df_agg["algorithm_num"] = df_agg["algorithm"].map(algo_to_num).astype(str)
-
-    order = [str(i + 1) for i in range(len(algorithms))]
-    sns.barplot(data=df_agg, x="algorithm_num", y="count", hue="action", palette="Set2", order=order, ax=ax)
+    sns.barplot(data=df_agg, x="algorithm", y="count", hue="action", palette="Set2",
+                order=order, ax=ax)
 
     action_legend = ax.get_legend()
     action_legend.set_title("Action")
     action_legend.set_bbox_to_anchor((1.0, 1.0))
-
-    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
-    ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
-    ax.add_artist(action_legend)
 
     # Cap y-axis to suppress extreme outliers; mark clipped bars with ▲
     y_max = df_agg["count"].quantile(0.95) * 1.1
@@ -215,15 +323,15 @@ def plot_action_counts_absolute(df, save_path=None):
             ax.annotate("▲", xy=(patch.get_x() + patch.get_width() / 2, y_max),
                         ha="center", va="bottom", fontsize=9, color="black", clip_on=False)
 
-    ax.set_title("Mean Action Counts per Episode per Algorithm", fontsize=14)
-    ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Mean action count per episode")
+    _apply_method_xaxis(ax, order, fig)
+    ax.set_ylabel("Mean action count per episode", fontsize=AXIS_LABEL_FONTSIZE)
     plt.tight_layout()
     sns.despine(left=True, bottom=True)
     plt.show()
 
     if save_path:
         fig.savefig(save_path)
+    plt.close(fig)
 
 
 def plot_termination_status(df, save_path=None):
@@ -246,35 +354,31 @@ def plot_termination_status(df, save_path=None):
     sns.set_theme(style="whitegrid")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    algorithms = df_valid["algorithm"].unique()
-    x = range(len(algorithms))
+    order = _ordered_methods(df_valid["algorithm"])
+    x = range(len(order))
     truncated_fracs = [
         agg.loc[(agg["algorithm"] == alg) & (agg["status"] == "truncated"), "fraction"].sum()
-        for alg in algorithms
+        for alg in order
     ]
     terminated_fracs = [1.0 - f for f in truncated_fracs]
 
     ax.bar(x, terminated_fracs, label="terminated", color=sns.color_palette("muted")[0])
     ax.bar(x, truncated_fracs, bottom=terminated_fracs, label="truncated", color=sns.color_palette("muted")[1])
 
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(range(1, len(algorithms) + 1))
     ax.set_ylim(0, 1)
-    ax.set_title("Episode Termination Status per Algorithm", fontsize=14)
-    ax.set_xlabel("Algorithm")
-    ax.set_ylabel("Fraction of episodes")
+    _apply_method_xaxis(ax, order, fig)
+    ax.set_ylabel("Fraction of episodes", fontsize=AXIS_LABEL_FONTSIZE)
 
-    # Status legend (terminated/truncated) + algorithm number mapping
-    status_legend = ax.legend(loc="upper right")
-    algo_patches = [mpatches.Patch(color="lightgray", label=f"{i + 1}: {alg}") for i, alg in enumerate(algorithms)]
-    ax.legend(handles=algo_patches, title="Algorithm", loc="upper left")
-    ax.add_artist(status_legend)
+    # Only the terminated/truncated legend is needed; method names are on the x-axis.
+    ax.legend(loc="upper right")
 
+    plt.tight_layout()
     sns.despine(left=True, bottom=True)
     plt.show()
 
     if save_path:
         fig.savefig(save_path)
+    plt.close(fig)
 
 
 def _build_display_label(row) -> str:
@@ -835,7 +939,7 @@ def plot_sweep_degradation(cells, levels=DEFAULT_NOEV_LEVELS, metric="env/ttt_pe
         if not xs:
             continue
         ax.errorbar(xs, ys, yerr=es, marker="o", capsize=3,
-                    label=display_labels.get(label, label),
+                    label=display_labels.get(label) or to_display_name(label),
                     linewidth=2 if label in highlight else 1.3)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
@@ -854,7 +958,9 @@ def plot_reliability_vs_congestion(cells, level, order=None, display_labels=None
                                    x_metric="env/empty_vehicles_per_episode",
                                    y_metric="env/cwt_per_ev_mean", save_path=None, title=None,
                                    xlabel="Stranded vehicles / episode  (reliability → better left)",
-                                   ylabel="Charging wait time / vehicle (s)  (congestion → better down)",
+                                   # Wrapped onto two lines: on one line this rotated label needs
+                                   # ~84% of the canvas height and gets clipped at the top.
+                                   ylabel="Charging wait time / vehicle (s)\n(congestion → better down)",
                                    xlim=None, ylim=None):
     """Scatter of reliability (x: stranded/ep) vs congestion (y: wait/ev) at one NOEV level.
 
@@ -903,7 +1009,7 @@ def plot_reliability_vs_congestion(cells, level, order=None, display_labels=None
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
     for label, x, y in points:
         c = colors[label]
-        name = display_labels.get(label, label)
+        name = display_labels.get(label) or to_display_name(label)
         above = ymax is not None and y > ymax
         below = ymin is not None and y < ymin
         right = xmax is not None and x > xmax
@@ -948,5 +1054,8 @@ def plot_reliability_vs_congestion(cells, level, order=None, display_labels=None
     ax.grid(alpha=0.3)
     plt.show()
     if save_path:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        # No bbox_inches="tight" here: the figure already uses constrained_layout, and
+        # the two layout passes disagree — the tight crop cut into the (long) y-axis
+        # label. constrained_layout alone fits every artist inside the canvas.
+        fig.savefig(save_path, dpi=150)
     return save_path
